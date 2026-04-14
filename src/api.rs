@@ -2,6 +2,7 @@ use axum::{extract::State, Json};
 use serde::Serialize;
 use std::sync::Arc;
 use crate::AppState;
+use serde_json::json;
 
 #[derive(Serialize)]
 pub struct Channel {
@@ -27,4 +28,12 @@ pub async fn get_groups(State(_state): State<Arc<AppState>>) -> Json<Vec<Group>>
     Json(vec![
         Group { id: 1, name: "General".into() }
     ])
+}
+
+pub async fn get_system_status() -> Json<serde_json::Value> {
+    Json(json!({
+        "version": "0.22.1", // Match the original version so the UI is happy
+        "status": "ok",
+        "engine": "rust-rs"
+    }))
 }

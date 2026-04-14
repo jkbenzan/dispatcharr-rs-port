@@ -62,8 +62,9 @@ async fn main() {
         .route("/play/:token/:channel_id", get(proxy::handle_proxy))
 		.route("/api/channels", get(api::get_channels))
 		.route("/api/groups", get(api::get_groups))
-		// This tells Rust: "If the URL doesn't match an API, look for a file in the /app/dist folder"
-		.fallback_service(ServeDir::new("dist")) 
+		.route("/api/system/status", get(api::get_system_status))
+    
+		.fallback_service(ServeDir::new("dist"))
 		.layer(CorsLayer::permissive())
 		.with_state(state);
 
