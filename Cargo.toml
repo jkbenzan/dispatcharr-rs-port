@@ -1,0 +1,26 @@
+[package]
+name = "dispatcharr-rs"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Web Server & Async
+axum = "0.7"
+tokio = { version = "1.0", features = ["full"] }
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+
+# Database
+sea-orm = { version = "0.12", features = ["sqlx-sqlite", "runtime-tokio-rustls", "macros"] }
+
+# Networking
+reqwest = { version = "0.11", features = ["stream"] }
+futures-util = "0.3"
+
+# Serialization & Config
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+jsonwebtoken = "9.0"
+dotenvy = "0.15"
+
+# EPG & XML
+quick-xml = "0.31"

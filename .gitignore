@@ -1,0 +1,12 @@
+# Rust
+/target
+Cargo.lock
+
+# Data & Secrets
+.env
+*.db
+*.db-journal
+
+# IDEs
+.vscode/
+.idea/
