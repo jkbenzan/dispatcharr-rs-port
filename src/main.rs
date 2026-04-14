@@ -1,4 +1,4 @@
-use axum::{routing::get, Router, extract::State};
+use axum::{routing::get, Router};
 use sea_orm::{Database, DatabaseConnection, ConnectOptions};
 use std::sync::Arc;
 use std::time::Duration;
@@ -50,7 +50,7 @@ async fn main() {
         loop {
             interval.tick().await;
             println!("🔄 Starting background EPG refresh...");
-            // epg::refresh_all_guides(&epg_state.db).await; 
+             epg::refresh_all_guides(&epg_state.db).await; 
         }
     });
 
