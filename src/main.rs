@@ -1,8 +1,10 @@
+use tower_http::cors::CorsLayer;
+use tower_http::services::ServeDir;
 use axum::{routing::get, Router};
 use sea_orm::{Database, DatabaseConnection, ConnectOptions};
 use std::sync::Arc;
 use std::time::Duration;
-use tower_http::cors::CorsLayer;
+//use tower_http::cors::CorsLayer;
 
 mod proxy;
 mod api;
@@ -58,14 +60,12 @@ async fn main() {
     let app = Router::new()
         // Stream Proxying (Matches legacy Dispatcharr URL structure)
         .route("/play/:token/:channel_id", get(proxy::handle_proxy))
-        
-        // Frontend API Parity
-        .route("/api/channels", get(api::get_channels))
-        .route("/api/groups", get(api::get_groups)) // Placeholder for group logic
-        
-        // Layers
-        .layer(CorsLayer::permissive())
-        .with_state(state);
+		.route("/api/channels", get(api::get_channels))
+		.route("/api/groups", get(api::get_groups))
+		// This tells Rust: "If the URL doesn't match an API, look for a file in the /app/dist folder"
+		.fallback_service(ServeDir::new("dist")) 
+		.layer(CorsLayer::permissive())
+		.with_state(state);
 
     // 5. Start the Server
     let addr = format!("0.0.0.0:{}", port);
