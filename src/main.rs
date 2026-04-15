@@ -26,15 +26,24 @@ async fn logger_middleware(req: Request<Body>, next: Next) -> Response {
     let method = req.method().clone();
     let uri = req.uri().clone();
     let res = next.run(req).await;
-    println!("📡 {} {} -> {}", method, uri, res.status());
+    
+    // If we see a 404 for a .js or .css file, we know the directory mapping is wrong
+    if res.status() == StatusCode::NOT_FOUND {
+        println!("⚠️  404 NOT FOUND: {} {}", method, uri);
+    } else {
+        println!("📡 {} {} -> {}", method, uri, res.status());
+    }
     res
 }
 
-// Fixed: This handles the "Blank Screen on Refresh" by serving index.html for unknown routes
+// Global fallback to ensure React Router works on refresh
 async fn spa_fallback() -> impl IntoResponse {
     let index_content = tokio::fs::read_to_string("dist/index.html")
         .await
-        .unwrap_or_else(|_| "index.html not found".to_string());
+        .unwrap_or_else(|_| {
+            println!("❌ ERROR: dist/index.html not found in container!");
+            "index.html not found".to_string()
+        });
     
     Response::builder()
         .status(StatusCode::OK)
@@ -63,39 +72,34 @@ async fn main() {
     });
 
     let app = Router::new()
-        // Auth
+        // API Routes
         .route("/api/accounts/initialize-superuser/", get(api::check_superuser))
         .route("/api/accounts/users/me/", get(api::get_current_user))
         .route("/api/accounts/token/", post(api::auth_placeholder))
         .route("/api/accounts/token/refresh/", post(api::auth_placeholder))
         .route("/api/accounts/auth/logout/", post(api::auth_placeholder))
-
-        // Core
         .route("/api/core/version/", get(api::get_core_version))
         .route("/api/core/settings/", get(api::get_core_settings))
         .route("/api/core/settings/env/", get(api::get_env_settings))
         .route("/api/core/notifications/", get(api::get_results_stub))
         .route("/api/core/streamprofiles/", get(api::get_results_stub))
         .route("/api/core/useragents/", get(api::get_results_stub))
-
-        // Data
         .route("/api/channels/groups/", get(api::get_results_stub))
         .route("/api/channels/profiles/", get(api::get_results_stub))
         .route("/api/channels/channels/ids/", get(api::get_results_stub))
         .route("/api/m3u/accounts/", get(api::get_results_stub))
         .route("/api/epg/sources/", get(api::get_results_stub))
         .route("/api/epg/epgdata/", get(api::get_results_stub))
-
         .route("/api/config/", get(api::get_config))
-        .route("/api/config", get(api::get_config))
         
         .route("/play/:token/:channel_id", get(proxy::handle_proxy))
 
-        // Static Files
-        .nest_service("/assets", ServeDir::new("dist/assets"))
-        
-        // Fixed: The global fallback now points to our SPA handler
-        .fallback(spa_fallback)
+        // Static File Serving (Revised)
+        // This covers everything: /assets/..., /favicon.ico, etc.
+        .fallback_service(
+            ServeDir::new("dist")
+                .not_found_service(get(spa_fallback))
+        )
         
         .layer(middleware::from_fn(logger_middleware))
         .layer(CorsLayer::permissive())
