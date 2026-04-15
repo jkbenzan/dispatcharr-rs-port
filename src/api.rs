@@ -39,7 +39,6 @@ pub async fn get_core_settings() -> Json<Value> {
         "stream_profiles": [],
         "user_agents": [],
         "notification_types": [],
-        "backend_url": "",
         "version": "0.22.1"
     }))
 }
@@ -48,12 +47,15 @@ pub async fn get_env_settings() -> Json<Value> {
     Json(json!({ "DEBUG": "false", "ENV": "production" }))
 }
 
-// Universal response wrapper to prevent .length and .filter crashes
-pub async fn get_results_stub() -> Json<Value> {
+// Routes failing with ".reduce is not a function" need this
+pub async fn get_raw_array() -> Json<Value> {
+    Json(json!([]))
+}
+
+// Routes failing with "Cannot read properties of undefined (reading 'filter')" need this
+pub async fn get_results_object() -> Json<Value> {
     Json(json!({
         "count": 0,
-        "next": null,
-        "previous": null,
         "results": []
     }))
 }
