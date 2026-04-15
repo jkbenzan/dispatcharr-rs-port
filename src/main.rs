@@ -17,21 +17,33 @@ pub struct AppState {
 
 #[tokio::main]
 async fn main() {
+    // 1. Initialize logging immediately so we can see DB connection errors
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::INFO)
+        .init();
+
     dotenvy::dotenv().ok();
+    
     let db_url = std::env::var("DATABASE_URL")
-        .expect("DATABASE_URL must be set in Unraid variables");
+        .expect("DATABASE_URL must be set in your Unraid Docker template");
     let port = std::env::var("PORT").unwrap_or_else(|_| "8080".to_string());
 
+    println!("Attempting to connect to database...");
+
+    // 2. Database Connection with specific timeouts
     let mut opt = ConnectOptions::new(db_url);
     opt.max_connections(20)
        .min_connections(5)
-       .connect_timeout(Duration::from_secs(8))
+       .connect_timeout(Duration::from_secs(10))
+       .acquire_timeout(Duration::from_secs(10))
        .idle_timeout(Duration::from_secs(8))
        .sqlx_logging(true);
 
     let db = Database::connect(opt)
         .await
-        .expect("Failed to connect to Postgres.");
+        .expect("CRITICAL: Database connection failed. Is Postgres running?");
+
+    println!("✅ Database Connected Successfully!");
 
     let state = Arc::new(AppState {
         db: db.clone(),
@@ -41,31 +53,34 @@ async fn main() {
             .unwrap(),
     });
 
+    // 3. Routing
     let app = Router::new()
-        // API Routes with common aliases
+        // API Endpoints
         .route("/api/system/status", get(api::get_system_status))
-        .route("/api/v1/system/status", get(api::get_system_status)) // Alias 1
-        .route("/system/status", get(api::get_system_status))        // Alias 2
-        
+        .route("/api/v1/system/status", get(api::get_system_status))
         .route("/api/config", get(api::get_config))
-        .route("/api/v1/config", get(api::get_config))
-        
         .route("/api/channels", get(api::get_channels))
         .route("/api/groups", get(api::get_groups))
         
         // Proxy
         .route("/play/:token/:channel_id", get(proxy::handle_proxy))
 
-        // UI Fallback (Must be last)
-        .fallback_service(ServeDir::new("dist"))
+        // UI Serving - Fixed to explicitly serve index.html on root
+        .fallback_service(
+            ServeDir::new("dist").append_index_html_on_directories(true)
+        )
         
         .layer(CorsLayer::permissive())
         .with_state(state);
 
+    // 4. Start Server
     let addr = format!("0.0.0.0:{}", port);
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     
-    println!("🚀 DISPATCHARR-RS IS LIVE ON http://{}", addr);
+    println!("--------------------------------------------------");
+    println!("🚀 DISPATCHARR-RS IS LIVE");
+    println!("📡 URL: http://{}", addr);
+    println!("--------------------------------------------------");
 
     axum::serve(listener, app).await.unwrap();
 }
