@@ -1,4 +1,11 @@
-use axum::{routing::get, Router, http::Request, body::Body};
+use axum::{
+    body::Body,
+    http::Request,
+    middleware::{self, Next},
+    response::Response,
+    routing::get,
+    Router,
+};
 use sea_orm::{Database, ConnectOptions};
 use std::sync::Arc;
 use std::time::Duration;
@@ -15,9 +22,15 @@ pub struct AppState {
     pub http_client: reqwest::Client,
 }
 
+// Custom logging middleware that Axum 0.7 supports easily
+async fn logger_middleware(req: Request<Body>, next: Next) -> Response {
+    println!("📥 INCOMING REQUEST: {} {}", req.method(), req.uri());
+    next.run(req).await
+}
+
 #[tokio::main]
 async fn main() {
-    // 1. Initialize logging with immediate flush
+    // 1. Initialize logging
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
         .init();
@@ -28,18 +41,17 @@ async fn main() {
         .expect("DATABASE_URL must be set in your Unraid Docker template");
     let port = std::env::var("PORT").unwrap_or_else(|_| "8080".to_string());
 
-    // 2. Database Connection with Strict Timeouts
+    // 2. Database Connection with strict 10s timeout
     let mut opt = ConnectOptions::new(db_url.clone());
     opt.max_connections(10)
-       .connect_timeout(Duration::from_secs(10)) // If it can't connect in 10s, fail
+       .connect_timeout(Duration::from_secs(10)) 
        .acquire_timeout(Duration::from_secs(10))
        .sqlx_logging(true);
 
     println!("--------------------------------------------------");
-    println!("🔍 DEBUG: Attempting to connect to: {}", db_url); 
+    println!("🔍 ATTEMPTING DB CONNECTION TO: {}", db_url);
     println!("--------------------------------------------------");
 
-    // We use a match here so the app doesn't just "disappear" on failure
     let db = match Database::connect(opt).await {
         Ok(conn) => {
             println!("✅ DATABASE CONNECTED SUCCESSFULLY");
@@ -47,7 +59,8 @@ async fn main() {
         },
         Err(e) => {
             println!("❌ DATABASE ERROR: {:?}", e);
-            panic!("Could not connect to database. Check your DATABASE_URL in Unraid.");
+            // This panic will now show up in your Unraid logs
+            panic!("Could not connect to database. Check your DATABASE_URL.");
         }
     };
 
@@ -59,6 +72,7 @@ async fn main() {
             .unwrap(),
     });
 
+    // 3. Routing
     let app = Router::new()
         .route("/api/system/status", get(api::get_system_status))
         .route("/api/v1/system/status", get(api::get_system_status))
@@ -71,17 +85,17 @@ async fn main() {
             ServeDir::new("dist").append_index_html_on_directories(true)
         )
         
-        .layer(axum::middleware::map_request(|req: Request<Body>| {
-            println!("📥 REQUEST: {} {}", req.method(), req.uri());
-            req
-        }))
+        // 4. Layers (Fixed the trait error by using from_fn)
+        .layer(middleware::from_fn(logger_middleware))
         .layer(CorsLayer::permissive())
         .with_state(state);
 
     let addr = format!("0.0.0.0:{}", port);
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     
-    println!("🚀 SERVER STARTING ON http://{}", addr);
+    println!("--------------------------------------------------");
+    println!("🚀 SERVER STARTED ON http://{}", addr);
+    println!("--------------------------------------------------");
 
     axum::serve(listener, app).await.unwrap();
 }
