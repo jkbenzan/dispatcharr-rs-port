@@ -43,33 +43,21 @@ async fn spa_fallback() -> impl IntoResponse {
 #[tokio::main]
 async fn main() {
     dotenvy::dotenv().ok();
-    // This will now pull your IP-based URL from the Unraid template
     let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     
     let mut opt = ConnectOptions::new(db_url.clone());
     opt.connect_timeout(Duration::from_secs(10))
-       .acquire_timeout(Duration::from_secs(10))
-       .max_connections(10)
-       .min_connections(2);
+       .max_connections(10);
 
-    println!("--------------------------------------------------");
-    println!("🔍 ATTEMPTING CONNECTION TO: {}", db_url);
-    
     let mut db_conn = None;
     for i in 1..=5 {
-        println!("🔄 Attempt {}/5...", i);
         match Database::connect(opt.clone()).await {
             Ok(conn) => {
-                println!("✅ DATABASE CONNECTED");
                 db_conn = Some(conn);
                 break;
             }
-            Err(e) => {
-                if i == 5 {
-                    eprintln!("❌ FATAL: DB Connection failed: {:?}", e);
-                    std::process::exit(1);
-                }
-                println!("⚠️  Retrying in 5s...");
+            Err(_) => {
+                if i == 5 { std::process::exit(1); }
                 tokio::time::sleep(Duration::from_secs(5)).await;
             }
         }
@@ -81,21 +69,32 @@ async fn main() {
     });
 
     let app = Router::new()
+        // --- Auth & Accounts ---
         .route("/api/accounts/initialize-superuser/", get(api::check_superuser))
         .route("/api/accounts/users/me/", get(api::get_current_user))
         .route("/api/accounts/token/", post(api::auth_placeholder))
         .route("/api/accounts/token/refresh/", post(api::auth_placeholder))
+        .route("/api/accounts/auth/logout/", post(api::logout_stub)) // FIXED: Changed to POST
+
+        // --- Core & Settings ---
         .route("/api/core/version/", get(api::get_core_version))
         .route("/api/core/settings/", get(api::get_core_settings))
-        .route("/api/core/notifications/", get(api::get_flat_list))
+        .route("/api/core/notifications/", get(api::get_flat_list)) // FIXED: Needed for .filter()
+        .route("/api/core/useragents/", get(api::get_flat_list)) // FIXED: Added 404 route
+        .route("/api/core/streamprofiles/", get(api::get_flat_list))
+
+        // --- Channels & Playlists ---
         .route("/api/channels/groups/", get(api::get_flat_list))
-        .route("/api/channels/profiles/", get(api::get_flat_list))
+        .route("/api/channels/profiles/", get(api::get_flat_list)) // FIXED: Added 404 route
         .route("/api/m3u/accounts/", get(api::get_flat_list))
         .route("/api/epg/sources/", get(api::get_flat_list))
         .route("/api/epg/epgdata/", get(api::get_flat_list))
         .route("/api/config/", get(api::get_config))
+
+        // --- Extras ---
         .route("/ws/", get(ws_handler))
         .route("/play/:token/:channel_id", get(proxy::handle_proxy))
+
         .fallback_service(
             ServeDir::new("dist").not_found_service(get(spa_fallback))
         )
@@ -104,7 +103,5 @@ async fn main() {
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await.unwrap();
     println!("🚀 RUNNING ON http://0.0.0.0:8080");
-    println!("--------------------------------------------------");
-
     axum::serve(listener, app).await.unwrap();
 }
