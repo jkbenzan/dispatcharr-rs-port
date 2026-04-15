@@ -8,7 +8,6 @@ edition = "2021"
 axum = "0.7"
 tokio = { version = "1.0", features = ["full"] }
 tower = "0.4"
-# Critical: fs allows serving the dist folder, cors allows UI-API talk
 tower-http = { version = "0.5", features = ["cors", "fs", "trace"] }
 
 # Database (PostgreSQL via SeaORM)
@@ -18,11 +17,11 @@ sea-orm = { version = "0.12", features = [
     "macros"
 ] }
 
-# Serialization (Needed for api.rs JSON responses)
+# Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
-# Networking & Streaming (Fixed for proxy.rs)
+# Networking & Streaming (Fixed: Added 'stream' and 'futures-util')
 reqwest = { version = "0.12", features = ["json", "stream"] }
 futures-util = "0.3"
 
