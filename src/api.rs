@@ -18,21 +18,36 @@ pub struct Group {
     pub name: String,
 }
 
-pub async fn get_system_status() -> Json<Value> {
+// Fixed: This is the exact endpoint the UI was asking for (/api/core/version/)
+pub async fn get_core_version() -> Json<Value> {
     Json(json!({
-        "status": "ok",
         "version": "0.22.1",
-        "api_version": "1.0",
-        "database": "connected"
+        "name": "Dispatcharr",
+        "description": "Rust Backend"
     }))
 }
 
-pub async fn get_config() -> Json<Value> {
+// Fixed: Satisfies /api/accounts/initialize-superuser/
+pub async fn check_superuser() -> Json<Value> {
+    Json(json!({ "initialized": true }))
+}
+
+// Fixed: Satisfies /api/accounts/users/me/
+pub async fn get_current_user() -> Json<Value> {
     Json(json!({
-        "auth_enabled": false,
-        "theme": "dark",
-        "base_url": "/"
+        "id": 1,
+        "username": "admin",
+        "is_superuser": true
     }))
+}
+
+// Fixed: Satisfies /api/accounts/token/ and Logout
+pub async fn auth_placeholder() -> Json<Value> {
+    Json(json!({ "status": "success", "token": "rust_token_placeholder" }))
+}
+
+pub async fn get_config() -> Json<Value> {
+    Json(json!({ "auth_enabled": false, "theme": "dark", "base_url": "/" }))
 }
 
 pub async fn get_channels(State(_state): State<Arc<AppState>>) -> Json<Vec<Channel>> {
@@ -47,7 +62,5 @@ pub async fn get_channels(State(_state): State<Arc<AppState>>) -> Json<Vec<Chann
 }
 
 pub async fn get_groups(State(_state): State<Arc<AppState>>) -> Json<Vec<Group>> {
-    Json(vec![
-        Group { id: 1, name: "General".into() }
-    ])
+    Json(vec![Group { id: 1, name: "General".into() }])
 }

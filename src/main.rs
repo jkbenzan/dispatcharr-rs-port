@@ -3,7 +3,7 @@ use axum::{
     http::Request,
     middleware::{self, Next},
     response::Response,
-    routing::get,
+    routing::{get, post}, // Added post support
     Router,
 };
 use sea_orm::{Database, ConnectOptions};
@@ -26,28 +26,20 @@ async fn logger_middleware(req: Request<Body>, next: Next) -> Response {
     let method = req.method().clone();
     let uri = req.uri().clone();
     let res = next.run(req).await;
-    
-    // Log the request AND the result (so we see the 404s)
     println!("📡 {} {} -> {}", method, uri, res.status());
     res
 }
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::INFO)
-        .init();
-
+    tracing_subscriber::fmt().with_max_level(tracing::Level::INFO).init();
     dotenvy::dotenv().ok();
     
-    let db_url = std::env::var("DATABASE_URL")
-        .expect("DATABASE_URL must be set");
+    let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL missing");
     let port = std::env::var("PORT").unwrap_or_else(|_| "8080".to_string());
 
     let mut opt = ConnectOptions::new(db_url);
-    opt.max_connections(10)
-       .connect_timeout(Duration::from_secs(10)) 
-       .sqlx_logging(true);
+    opt.connect_timeout(Duration::from_secs(10));
 
     let db = Database::connect(opt).await.expect("DB Failure");
     println!("✅ DATABASE CONNECTED");
@@ -58,15 +50,23 @@ async fn main() {
     });
 
     let app = Router::new()
-        // API routes
-        .route("/api/system/status", get(api::get_system_status))
-        .route("/api/v1/system/status", get(api::get_system_status))
-        .route("/api/config", get(api::get_config))
-        .route("/api/channels", get(api::get_channels))
-        .route("/api/groups", get(api::get_groups))
+        // --- Core Endpoints ---
+        .route("/api/core/version/", get(api::get_core_version))
+        
+        // --- Account Endpoints (Based on your logs) ---
+        .route("/api/accounts/initialize-superuser/", get(api::check_superuser))
+        .route("/api/accounts/users/me/", get(api::get_current_user))
+        .route("/api/accounts/token/", post(api::auth_placeholder))
+        .route("/api/accounts/auth/logout/", post(api::auth_placeholder))
+
+        // --- Data Endpoints ---
+        .route("/api/config/", get(api::get_config))
+        .route("/api/channels/", get(api::get_channels))
+        .route("/api/groups/", get(api::get_groups))
+        
+        // --- Proxy ---
         .route("/play/:token/:channel_id", get(proxy::handle_proxy))
 
-        // Static files (The UI)
         .fallback_service(
             ServeDir::new("dist").append_index_html_on_directories(true)
         )
