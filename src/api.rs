@@ -4,14 +4,6 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 use crate::AppState;
 
-#[derive(Serialize, Deserialize)]
-pub struct Channel {
-    pub id: i32,
-    pub name: String,
-    pub stream_url: Option<String>,
-    pub logo: Option<String>,
-}
-
 pub async fn get_core_version() -> Json<Value> {
     Json(json!({
         "version": "0.22.1",
@@ -41,6 +33,7 @@ pub async fn get_current_user() -> Json<Value> {
 }
 
 pub async fn auth_placeholder() -> Json<Value> {
+    // Valid Base64 JWT-like strings to avoid DOMException
     Json(json!({ 
         "access": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.t-xIs7V95v-9mE", 
         "refresh": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.t-xIs7V95v-9mE",
@@ -66,25 +59,19 @@ pub async fn get_core_settings() -> Json<Value> {
     }))
 }
 
+// Wraps empty lists in a "results" object to satisfy common frontend patterns
+pub async fn get_results_stub() -> Json<Value> {
+    Json(json!({
+        "count": 0,
+        "next": null,
+        "previous": null,
+        "results": []
+    }))
+}
+
 pub async fn get_env_settings() -> Json<Value> {
     Json(json!({ "DEBUG": "false", "ENV": "production" }))
 }
-
-// Providing a few objects in these lists can prevent 'undefined' crashes in React
-pub async fn get_channel_groups() -> Json<Value> { Json(json!([])) }
-pub async fn get_profiles() -> Json<Value> { Json(json!([])) }
-pub async fn get_m3u_accounts() -> Json<Value> { 
-    Json(json!([{
-        "id": 1,
-        "name": "Default Provider",
-        "url": "http://example.com/playlist.m3u",
-        "enabled": true,
-        "last_sync": null
-    }])) 
-}
-pub async fn get_epg_sources() -> Json<Value> { Json(json!([])) }
-pub async fn get_notifications() -> Json<Value> { Json(json!([])) }
-pub async fn get_ids_stub() -> Json<Value> { Json(json!([])) }
 
 pub async fn get_config() -> Json<Value> {
     Json(json!({ "auth_enabled": false, "theme": "dark", "base_url": "/" }))
