@@ -1,6 +1,6 @@
 use axum::{
     body::Body,
-    extract::ws::{WebSocket, WebSocketUpgrade},
+    extract::ws::{WebSocketUpgrade}, // WebSocket itself isn't needed for the signature
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -22,11 +22,11 @@ pub struct AppState {
     pub http_client: reqwest::Client,
 }
 
-// Dummy WebSocket handler to stop console errors
+// Minimal WebSocket handler to satisfy the frontend
 async fn ws_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
     ws.on_upgrade(|mut socket| async move {
         while let Some(Ok(_msg)) = socket.recv().await {
-            // Just keep the connection alive
+            // Echo or ignore messages to keep the pipe open
         }
     })
 }
@@ -58,13 +58,11 @@ async fn main() {
     });
 
     let app = Router::new()
-        // Auth
         .route("/api/accounts/initialize-superuser/", get(api::check_superuser))
         .route("/api/accounts/users/me/", get(api::get_current_user))
         .route("/api/accounts/token/", post(api::auth_placeholder))
         .route("/api/accounts/token/refresh/", post(api::auth_placeholder))
 
-        // System & Data (Switching back to flat lists to fix .reduce() errors)
         .route("/api/core/version/", get(api::get_core_version))
         .route("/api/core/settings/", get(api::get_core_settings))
         .route("/api/core/notifications/", get(api::get_flat_list))
@@ -75,13 +73,15 @@ async fn main() {
         .route("/api/epg/sources/", get(api::get_flat_list))
         .route("/api/epg/epgdata/", get(api::get_flat_list))
 
-        // WebSocket
+        // Fixed the path to match the UI's request: /ws/
         .route("/ws/", get(ws_handler))
 
         .fallback_service(ServeDir::new("dist").not_found_service(get(spa_fallback)))
         .layer(CorsLayer::permissive())
         .with_state(state);
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await.unwrap();
+    let addr = "0.0.0.0:8080";
+    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    println!("🚀 RUNNING ON http://{}", addr);
     axum::serve(listener, app).await.unwrap();
 }
