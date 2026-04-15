@@ -46,13 +46,12 @@ async fn spa_fallback() -> impl IntoResponse {
 
 #[tokio::main]
 async fn main() {
-    println!("🚀 DISPATCHARR-RS IS STARTING UP...");
+    println!("🚀 DISPATCHARR-RS STARTING...");
     dotenvy::dotenv().ok();
     let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL missing");
     
     let mut opt = ConnectOptions::new(db_url.clone());
     opt.connect_timeout(Duration::from_secs(15));
-
     let db = Database::connect(opt).await.expect("DB Failure");
 
     let state = Arc::new(AppState {
@@ -61,42 +60,36 @@ async fn main() {
     });
 
     let app = Router::new()
-        // Auth Handlers
+        // API
         .route("/api/accounts/initialize-superuser/", get(api::check_superuser))
         .route("/api/accounts/users/me/", get(api::get_current_user))
         .route("/api/accounts/token/", post(api::auth_placeholder))
         .route("/api/accounts/token/refresh/", post(api::auth_placeholder))
         .route("/api/accounts/auth/logout/", post(api::logout_stub))
-        
-        // Settings & Core
         .route("/api/core/version/", get(api::get_core_version))
         .route("/api/core/settings/", get(api::get_core_settings))
         .route("/api/core/settings/env/", get(api::get_env_settings))
         .route("/api/core/notifications/", get(api::get_notifications))
         .route("/api/core/useragents/", get(api::get_flat_list))
         .route("/api/core/streamprofiles/", get(api::get_flat_list))
-        
-        // Data Channels
         .route("/api/channels/groups/", get(api::get_flat_list))
         .route("/api/channels/profiles/", get(api::get_flat_list))
         .route("/api/channels/channels/ids/", get(api::get_flat_list))
         .route("/api/m3u/accounts/", get(api::get_flat_list))
         .route("/api/epg/sources/", get(api::get_flat_list))
         .route("/api/epg/epgdata/", get(api::get_flat_list))
-        
         .route("/api/config/", get(api::get_config))
         .route("/ws/", get(ws_handler))
         .route("/play/:token/:channel_id", get(proxy::handle_proxy))
         
-        // Static Files and SPA Fallback
-        .fallback_service(
-            ServeDir::new("dist").not_found_service(get(spa_fallback))
-        )
+        // Revised Static/Fallback Logic
+        .nest_service("/assets", ServeDir::new("dist/assets"))
+        .fallback(spa_fallback)
+        
         .layer(CorsLayer::permissive())
         .with_state(state);
 
     let addr = "0.0.0.0:8080";
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    println!("🚀 LISTENING ON http://{}", addr);
     axum::serve(listener, app).await.unwrap();
 }

@@ -31,7 +31,7 @@ pub async fn auth_placeholder() -> Json<Value> {
 }
 
 pub async fn get_core_settings() -> Json<Value> {
-    // Adding EVERY standard key. The 'length' crash happens when one of these arrays is missing.
+    // We are adding every possible array property that React might try to call .length on
     Json(json!({
         "app_name": "Dispatcharr",
         "proxy_enabled": true,
@@ -40,9 +40,10 @@ pub async fn get_core_settings() -> Json<Value> {
         "stream_profiles": [],
         "user_agents": [],
         "notification_types": [],
-        "backend_url": "",
         "version": "0.22.1",
-        "maintenance_mode": false
+        "maintenance_mode": false,
+        "total_channels": 0,
+        "total_streams": 0
     }))
 }
 
@@ -50,17 +51,11 @@ pub async fn get_env_settings() -> Json<Value> {
     Json(json!({ "DEBUG": "false", "ENV": "production" }))
 }
 
-// Fixed: Frontend calls .filter() on this, so it MUST be an object with results
 pub async fn get_notifications() -> Json<Value> {
-    Json(json!({
-        "count": 0,
-        "next": null,
-        "previous": null,
-        "results": []
-    }))
+    // React calls .filter() on 'results'
+    Json(json!({ "results": [], "count": 0 }))
 }
 
-// Raw array for components calling .reduce()
 pub async fn get_flat_list() -> Json<Value> {
     Json(json!([]))
 }
