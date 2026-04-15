@@ -50,13 +50,14 @@ async fn main() {
     });
 
     let app = Router::new()
-        // Auth
+        // --- AUTH & ACCOUNTS ---
         .route("/api/accounts/initialize-superuser/", get(api::check_superuser))
         .route("/api/accounts/users/me/", get(api::get_current_user))
         .route("/api/accounts/token/", post(api::auth_placeholder))
+        .route("/api/accounts/token/refresh/", post(api::auth_placeholder)) // FIXED: Added refresh route
         .route("/api/accounts/auth/logout/", post(api::auth_placeholder))
 
-        // Core
+        // --- CORE & SETTINGS ---
         .route("/api/core/version/", get(api::get_core_version))
         .route("/api/core/settings/", get(api::get_core_settings))
         .route("/api/core/settings/env/", get(api::get_env_settings))
@@ -64,7 +65,7 @@ async fn main() {
         .route("/api/core/streamprofiles/", get(api::get_profiles))
         .route("/api/core/useragents/", get(api::get_profiles))
 
-        // Channels/M3U/EPG
+        // --- CHANNELS, M3U & EPG ---
         .route("/api/channels/groups/", get(api::get_channel_groups))
         .route("/api/channels/profiles/", get(api::get_profiles))
         .route("/api/channels/channels/ids/", get(api::get_ids_stub))
@@ -75,9 +76,10 @@ async fn main() {
         .route("/api/config/", get(api::get_config))
         .route("/api/config", get(api::get_config))
         
+        // --- PROXY ---
         .route("/play/:token/:channel_id", get(proxy::handle_proxy))
 
-        // UI
+        // --- UI ---
         .fallback_service(
             ServeDir::new("dist").append_index_html_on_directories(true)
         )
