@@ -42,47 +42,32 @@ async fn spa_fallback() -> impl IntoResponse {
 
 #[tokio::main]
 async fn main() {
-    // STARTUP CHECK: This must show up in Unraid logs immediately
     println!("🚀 DISPATCHARR-RS IS STARTING UP...");
 
     dotenvy::dotenv().ok();
-    
-    let db_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
-        println!("❌ ERROR: DATABASE_URL environment variable is MISSING!");
-        "postgres://fallback_if_missing".to_string()
-    });
-
-    println!("🔍 TARGET DB URL: {}", db_url);
+    let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL missing");
     
     let mut opt = ConnectOptions::new(db_url.clone());
-    opt.connect_timeout(Duration::from_secs(15))
-       .acquire_timeout(Duration::from_secs(15))
-       .max_connections(10)
-       .min_connections(2)
-       .sqlx_logging(true);
+    opt.connect_timeout(Duration::from_secs(15));
 
     let mut db_conn = None;
     for i in 1..=5 {
         println!("🔄 DB CONNECTION ATTEMPT {}/5...", i);
         match Database::connect(opt.clone()).await {
             Ok(conn) => {
-                println!("✅ DATABASE CONNECTED SUCCESSFULLY");
+                println!("✅ DATABASE CONNECTED");
                 db_conn = Some(conn);
                 break;
             }
             Err(e) => {
-                println!("⚠️  CONNECTION ATTEMPT {} FAILED: {:?}", i, e);
-                if i == 5 {
-                    println!("❌ FATAL: COULD NOT CONNECT TO DATABASE. EXITING.");
-                    std::process::exit(1);
-                }
+                println!("⚠️  ATTEMPT {} FAILED: {:?}", i, e);
                 tokio::time::sleep(Duration::from_secs(5)).await;
             }
         }
     }
 
     let state = Arc::new(AppState {
-        db: db_conn.expect("DB connection object missing"),
+        db: db_conn.expect("DB Failure"),
         http_client: reqwest::Client::builder().build().unwrap(),
     });
 
@@ -92,19 +77,23 @@ async fn main() {
         .route("/api/accounts/token/", post(api::auth_placeholder))
         .route("/api/accounts/token/refresh/", post(api::auth_placeholder))
         .route("/api/accounts/auth/logout/", post(api::logout_stub))
+        
         .route("/api/core/version/", get(api::get_core_version))
         .route("/api/core/settings/", get(api::get_core_settings))
-        .route("/api/core/notifications/", get(api::get_flat_list))
+        .route("/api/core/notifications/", get(api::get_notifications))
         .route("/api/core/useragents/", get(api::get_flat_list))
         .route("/api/core/streamprofiles/", get(api::get_flat_list))
+        
         .route("/api/channels/groups/", get(api::get_flat_list))
         .route("/api/channels/profiles/", get(api::get_flat_list))
         .route("/api/m3u/accounts/", get(api::get_flat_list))
         .route("/api/epg/sources/", get(api::get_flat_list))
         .route("/api/epg/epgdata/", get(api::get_flat_list))
+        
         .route("/api/config/", get(api::get_config))
         .route("/ws/", get(ws_handler))
         .route("/play/:token/:channel_id", get(proxy::handle_proxy))
+        
         .fallback_service(
             ServeDir::new("dist").not_found_service(get(spa_fallback))
         )
@@ -113,7 +102,6 @@ async fn main() {
 
     let addr = "0.0.0.0:8080";
     println!("🚀 LISTENING ON http://{}", addr);
-
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }

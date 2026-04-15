@@ -13,6 +13,7 @@ pub async fn get_current_user() -> Json<Value> {
     Json(json!({
         "id": 1,
         "username": "admin",
+        "email": "admin@example.com",
         "is_superuser": true,
         "is_active": true,
         "is_staff": true,
@@ -32,14 +33,22 @@ pub async fn get_core_settings() -> Json<Value> {
     Json(json!({
         "app_name": "Dispatcharr",
         "proxy_enabled": true,
-        "channel_profiles": [],
-        "stream_profiles": [],
-        "user_agents": [],
+        "channel_profiles": [{"id": 1, "name": "Default"}],
+        "stream_profiles": [{"id": 1, "name": "Direct"}],
+        "user_agents": [{"id": 1, "name": "Default"}],
         "notification_types": []
     }))
 }
 
+// Fixed: Adding dummy objects prevents '.reduce' and '.filter' from crashing on empty sets
 pub async fn get_flat_list() -> Json<Value> {
+    Json(json!([
+        { "id": 1, "name": "Default", "enabled": true }
+    ]))
+}
+
+pub async fn get_notifications() -> Json<Value> {
+    // Specifically for the .filter error you saw
     Json(json!([]))
 }
 
