@@ -50,10 +50,10 @@ async fn main() {
     dotenvy::dotenv().ok();
     let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL missing");
     
-    let mut opt = ConnectOptions::new(db_url.clone());
+    let mut opt = ConnectOptions::new(db_url);
     opt.connect_timeout(Duration::from_secs(15));
-
-    // Fix: Use associated function syntax
+    
+    // Correct associated function syntax: Database::connect
     let db = Database::connect(opt).await.expect("DB Failure");
 
     let state = Arc::new(AppState {
@@ -67,29 +67,28 @@ async fn main() {
         .route("/api/accounts/users/me/", get(api::get_current_user))
         .route("/api/accounts/token/", post(api::auth_placeholder))
         .route("/api/accounts/token/refresh/", post(api::auth_placeholder))
-        .route("/api/accounts/auth/logout/", post(api::logout_stub))
         
         // Settings
         .route("/api/core/version/", get(api::get_core_version))
         .route("/api/core/settings/", get(api::get_core_settings))
         .route("/api/core/settings/env/", get(api::get_env_settings))
-        
-        // Mapped to avoid ".filter" errors
+
+        // Mapped to avoid ".filter" / "length" errors
         .route("/api/core/notifications/", get(api::get_drf_results))
         .route("/api/channels/channels/ids/", get(api::get_drf_results))
 
         // Mapped to avoid ".reduce" errors
-        .route("/api/channels/groups/", get(api::get_flat_list))
-        .route("/api/channels/profiles/", get(api::get_flat_list))
-        .route("/api/m3u/accounts/", get(api::get_flat_list))
-        .route("/api/epg/sources/", get(api::get_flat_list))
-        .route("/api/epg/epgdata/", get(api::get_flat_list))
-        
+        .route("/api/channels/groups/", get(api::get_flat_array))
+        .route("/api/channels/profiles/", get(api::get_flat_array))
+        .route("/api/m3u/accounts/", get(api::get_flat_array))
+        .route("/api/epg/sources/", get(api::get_flat_array))
+        .route("/api/epg/epgdata/", get(api::get_flat_array))
+
         .route("/api/config/", get(api::get_config))
         .route("/ws/", get(ws_handler))
         .route("/play/:token/:channel_id", get(proxy::handle_proxy))
         
-        // SPA Fallback
+        // Static Files and SPA Logic
         .nest_service("/assets", ServeDir::new("dist/assets"))
         .fallback(spa_fallback)
         
@@ -98,6 +97,6 @@ async fn main() {
 
     let addr = "0.0.0.0:8080";
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    println!("🚀 LISTENING ON http://{}", addr);
+    println!("🚀 RUNNING ON http://{}", addr);
     axum::serve(listener, app).await.unwrap();
 }
