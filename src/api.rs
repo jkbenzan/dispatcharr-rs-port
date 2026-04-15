@@ -45,12 +45,9 @@ pub async fn get_env_settings() -> Json<Value> {
     Json(json!({ "DEBUG": "false", "ENV": "production" }))
 }
 
-pub async fn get_results_stub() -> Json<Value> {
-    // Some components might crash if results is missing, even if empty
-    Json(json!({
-        "count": 0,
-        "results": []
-    }))
+// FIXED: Returning a flat array [] because the UI calls .reduce() on these
+pub async fn get_flat_list() -> Json<Value> {
+    Json(json!([]))
 }
 
 pub async fn get_config() -> Json<Value> {
