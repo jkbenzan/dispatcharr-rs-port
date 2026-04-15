@@ -45,12 +45,10 @@ pub async fn get_env_settings() -> Json<Value> {
     Json(json!({ "DEBUG": "false", "ENV": "production" }))
 }
 
-// Satisfies the .filter() and .reduce() calls by providing the "results" wrapper
 pub async fn get_results_stub() -> Json<Value> {
+    // Some components might crash if results is missing, even if empty
     Json(json!({
         "count": 0,
-        "next": null,
-        "previous": null,
         "results": []
     }))
 }
