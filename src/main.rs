@@ -28,9 +28,7 @@ async fn ws_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
 
 async fn handle_socket(mut socket: WebSocket) {
     while let Some(Ok(msg)) = socket.recv().await {
-        if let axum::extract::ws::Message::Close(_) = msg {
-            break;
-        }
+        if let axum::extract::ws::Message::Close(_) = msg { break; }
     }
 }
 
@@ -55,22 +53,15 @@ async fn main() {
     let mut opt = ConnectOptions::new(db_url.clone());
     opt.connect_timeout(Duration::from_secs(15));
 
-    let mut db_conn = None;
-    for i in 1..=5 {
-        if let Ok(conn) = Database::connect(opt.clone()).await {
-            db_conn = Some(conn);
-            break;
-        }
-        tokio::time::sleep(Duration::from_secs(5)).await;
-    }
+    let db = Database::connect(opt).await.expect("DB Failure");
 
     let state = Arc::new(AppState {
-        db: db_conn.expect("DB Failure"),
+        db,
         http_client: reqwest::Client::builder().build().unwrap(),
     });
 
     let app = Router::new()
-        // Auth
+        // Auth Handlers
         .route("/api/accounts/initialize-superuser/", get(api::check_superuser))
         .route("/api/accounts/users/me/", get(api::get_current_user))
         .route("/api/accounts/token/", post(api::auth_placeholder))
@@ -81,11 +72,11 @@ async fn main() {
         .route("/api/core/version/", get(api::get_core_version))
         .route("/api/core/settings/", get(api::get_core_settings))
         .route("/api/core/settings/env/", get(api::get_env_settings))
-        .route("/api/core/notifications/", get(api::get_flat_list))
+        .route("/api/core/notifications/", get(api::get_notifications))
         .route("/api/core/useragents/", get(api::get_flat_list))
         .route("/api/core/streamprofiles/", get(api::get_flat_list))
         
-        // Data
+        // Data Channels
         .route("/api/channels/groups/", get(api::get_flat_list))
         .route("/api/channels/profiles/", get(api::get_flat_list))
         .route("/api/channels/channels/ids/", get(api::get_flat_list))
@@ -97,6 +88,8 @@ async fn main() {
         .route("/ws/", get(ws_handler))
         .route("/play/:token/:channel_id", get(proxy::handle_proxy))
         
+        // Static Files and SPA Fallback
+        .nest_service("/static", ServeDir::new("dist"))
         .fallback_service(
             ServeDir::new("dist").not_found_service(get(spa_fallback))
         )

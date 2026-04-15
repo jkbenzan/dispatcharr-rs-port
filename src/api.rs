@@ -18,11 +18,7 @@ pub async fn get_current_user() -> Json<Value> {
         "is_active": true,
         "is_staff": true,
         "permissions": ["*"],
-        "profile": {
-            "theme": "dark",
-            "language": "en",
-            "notifications_enabled": true
-        }
+        "profile": { "theme": "dark", "language": "en" }
     }))
 }
 
@@ -35,7 +31,7 @@ pub async fn auth_placeholder() -> Json<Value> {
 }
 
 pub async fn get_core_settings() -> Json<Value> {
-    // The .length crash is likely happening here because one of these was missing or renamed
+    // Providing empty arrays here prevents the 'reading length' crash
     Json(json!({
         "app_name": "Dispatcharr",
         "proxy_enabled": true,
@@ -53,9 +49,13 @@ pub async fn get_env_settings() -> Json<Value> {
     Json(json!({ "DEBUG": "false", "ENV": "production" }))
 }
 
-// Fixed: Some UI components want a flat list [], others want {"results": []}
-// We will use a flat list for now since .reduce() was failing on the object
+pub async fn get_notifications() -> Json<Value> {
+    // The UI calls .filter() on notifications, so it MUST have a results array
+    Json(json!({ "results": [] }))
+}
+
 pub async fn get_flat_list() -> Json<Value> {
+    // raw arrays for components calling .reduce()
     Json(json!([]))
 }
 
