@@ -12,12 +12,6 @@ pub struct Channel {
     pub logo: Option<String>,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct Group {
-    pub id: i32,
-    pub name: String,
-}
-
 pub async fn get_core_version() -> Json<Value> {
     Json(json!({
         "version": "0.22.1",
@@ -34,40 +28,50 @@ pub async fn get_current_user() -> Json<Value> {
     Json(json!({
         "id": 1,
         "username": "admin",
-        "email": "admin@example.com",
-        "is_superuser": true,
-        "first_name": "Admin",
-        "last_name": "User"
+        "is_superuser": true
     }))
 }
 
-// Fixed: This returns the standard JWT-style response the UI expects
 pub async fn auth_placeholder() -> Json<Value> {
     Json(json!({ 
-        "access": "rust_access_token_placeholder",
-        "refresh": "rust_refresh_token_placeholder",
-        "user": {
-            "username": "admin",
-            "is_superuser": true
-        }
+        "access": "rust_access_token",
+        "refresh": "rust_refresh_token"
     }))
+}
+
+// --- NEW STUBS TO FIX 404s ---
+
+pub async fn get_core_settings() -> Json<Value> {
+    Json(json!({
+        "app_name": "Dispatcharr",
+        "registration_enabled": false
+    }))
+}
+
+pub async fn get_env_settings() -> Json<Value> {
+    Json(json!({ "DEBUG": "false" }))
+}
+
+pub async fn get_channel_groups() -> Json<Value> {
+    Json(json!([])) // Empty list for now
+}
+
+pub async fn get_profiles() -> Json<Value> {
+    Json(json!([]))
+}
+
+pub async fn get_m3u_accounts() -> Json<Value> {
+    Json(json!([]))
+}
+
+pub async fn get_epg_sources() -> Json<Value> {
+    Json(json!([]))
+}
+
+pub async fn get_notifications() -> Json<Value> {
+    Json(json!([]))
 }
 
 pub async fn get_config() -> Json<Value> {
     Json(json!({ "auth_enabled": false, "theme": "dark", "base_url": "/" }))
-}
-
-pub async fn get_channels(State(_state): State<Arc<AppState>>) -> Json<Vec<Channel>> {
-    Json(vec![
-        Channel { 
-            id: 1, 
-            name: "Sample Channel".into(), 
-            stream_url: Some("/play/test/1".into()),
-            logo: None 
-        }
-    ])
-}
-
-pub async fn get_groups(State(_state): State<Arc<AppState>>) -> Json<Vec<Group>> {
-    Json(vec![Group { id: 1, name: "General".into() }])
 }
