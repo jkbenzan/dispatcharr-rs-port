@@ -4,23 +4,32 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-# Web Server & Async
+# Web Server
 axum = "0.7"
 tokio = { version = "1.0", features = ["full"] }
+tower = "0.4"
+# Critical: fs allows serving the dist folder, cors allows UI-API talk
 tower-http = { version = "0.5", features = ["cors", "fs", "trace"] }
 
-# Database
-sea-orm = { version = "0.12", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros"] }
+# Database (PostgreSQL via SeaORM)
+sea-orm = { version = "0.12", features = [
+    "sqlx-postgres", 
+    "runtime-tokio-rustls", 
+    "macros"
+] }
 
-# Networking
-reqwest = { version = "0.11", features = ["stream"] }
-futures-util = "0.3"
-
-# Serialization & Config
+# Serialization (Needed for api.rs JSON responses)
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-jsonwebtoken = "9.0"
-dotenvy = "0.15"
 
-# EPG & XML
-quick-xml = "0.31"
+# Networking & Utils
+reqwest = { version = "0.12", features = ["json"] }
+dotenvy = "0.15"
+chrono = { version = "0.4", features = ["serde"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+[profile.release]
+opt-level = 'z'     # Optimize for size
+lto = true          # Link Time Optimization for a smaller binary
+panic = 'abort'     # Reduces binary size
