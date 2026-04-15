@@ -40,11 +40,16 @@ pub async fn get_current_user() -> Json<Value> {
     }))
 }
 
+// Fixed: Tokens are now valid Base64 strings to prevent the DOMException
 pub async fn auth_placeholder() -> Json<Value> {
     Json(json!({ 
-        "access": "rust_access_token",
-        "refresh": "rust_refresh_token",
-        "user": { "username": "admin", "is_superuser": true }
+        "access": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.t-xIs7V95v-9mE", 
+        "refresh": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.t-xIs7V95v-9mE",
+        "user": {
+            "id": 1,
+            "username": "admin",
+            "is_superuser": true
+        }
     }))
 }
 
@@ -62,19 +67,9 @@ pub async fn get_env_settings() -> Json<Value> {
     Json(json!({ "DEBUG": "false", "ENV": "production" }))
 }
 
-// Seeding with one dummy item helps React components render instead of hanging
 pub async fn get_channel_groups() -> Json<Value> { Json(json!([])) }
 pub async fn get_profiles() -> Json<Value> { Json(json!([])) }
-
-pub async fn get_m3u_accounts() -> Json<Value> { 
-    Json(json!([{
-        "id": 1,
-        "name": "Dummy Account",
-        "url": "http://example.com",
-        "enabled": true
-    }])) 
-}
-
+pub async fn get_m3u_accounts() -> Json<Value> { Json(json!([])) }
 pub async fn get_epg_sources() -> Json<Value> { Json(json!([])) }
 pub async fn get_notifications() -> Json<Value> { Json(json!([])) }
 pub async fn get_ids_stub() -> Json<Value> { Json(json!([])) }

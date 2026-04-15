@@ -77,6 +77,7 @@ async fn main() {
         
         .route("/play/:token/:channel_id", get(proxy::handle_proxy))
 
+        // UI
         .fallback_service(
             ServeDir::new("dist").append_index_html_on_directories(true)
         )
