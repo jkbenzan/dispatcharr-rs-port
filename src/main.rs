@@ -50,13 +50,13 @@ async fn main() {
     });
 
     let app = Router::new()
-        // --- AUTH & ACCOUNTS (Essential for getting past login) ---
+        // Auth
         .route("/api/accounts/initialize-superuser/", get(api::check_superuser))
         .route("/api/accounts/users/me/", get(api::get_current_user))
         .route("/api/accounts/token/", post(api::auth_placeholder))
         .route("/api/accounts/auth/logout/", post(api::auth_placeholder))
 
-        // --- CORE & SETTINGS (Essential for Dashboard rendering) ---
+        // Core
         .route("/api/core/version/", get(api::get_core_version))
         .route("/api/core/settings/", get(api::get_core_settings))
         .route("/api/core/settings/env/", get(api::get_env_settings))
@@ -64,7 +64,7 @@ async fn main() {
         .route("/api/core/streamprofiles/", get(api::get_profiles))
         .route("/api/core/useragents/", get(api::get_profiles))
 
-        // --- CHANNELS, M3U & EPG (Data tables) ---
+        // Channels/M3U/EPG
         .route("/api/channels/groups/", get(api::get_channel_groups))
         .route("/api/channels/profiles/", get(api::get_profiles))
         .route("/api/channels/channels/ids/", get(api::get_ids_stub))
@@ -73,11 +73,10 @@ async fn main() {
         .route("/api/epg/epgdata/", get(api::get_epg_sources))
 
         .route("/api/config/", get(api::get_config))
+        .route("/api/config", get(api::get_config))
         
-        // --- PROXY ---
         .route("/play/:token/:channel_id", get(proxy::handle_proxy))
 
-        // --- UI FALLBACK ---
         .fallback_service(
             ServeDir::new("dist").append_index_html_on_directories(true)
         )

@@ -32,7 +32,11 @@ pub async fn get_current_user() -> Json<Value> {
         "is_superuser": true,
         "is_active": true,
         "is_staff": true,
-        "permissions": ["*"]
+        "permissions": ["*"],
+        "profile": {
+            "theme": "dark",
+            "language": "en"
+        }
     }))
 }
 
@@ -49,7 +53,8 @@ pub async fn get_core_settings() -> Json<Value> {
         "app_name": "Dispatcharr",
         "registration_enabled": false,
         "allow_public_m3u": true,
-        "proxy_enabled": true
+        "proxy_enabled": true,
+        "refresh_interval": 3600
     }))
 }
 
@@ -57,9 +62,19 @@ pub async fn get_env_settings() -> Json<Value> {
     Json(json!({ "DEBUG": "false", "ENV": "production" }))
 }
 
+// Seeding with one dummy item helps React components render instead of hanging
 pub async fn get_channel_groups() -> Json<Value> { Json(json!([])) }
 pub async fn get_profiles() -> Json<Value> { Json(json!([])) }
-pub async fn get_m3u_accounts() -> Json<Value> { Json(json!([])) }
+
+pub async fn get_m3u_accounts() -> Json<Value> { 
+    Json(json!([{
+        "id": 1,
+        "name": "Dummy Account",
+        "url": "http://example.com",
+        "enabled": true
+    }])) 
+}
+
 pub async fn get_epg_sources() -> Json<Value> { Json(json!([])) }
 pub async fn get_notifications() -> Json<Value> { Json(json!([])) }
 pub async fn get_ids_stub() -> Json<Value> { Json(json!([])) }
