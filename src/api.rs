@@ -19,10 +19,12 @@ pub struct Group {
 }
 
 pub async fn get_system_status() -> Json<Value> {
+    // We return a slightly more verbose object to satisfy picky frontends
     Json(json!({
-        "version": "0.22.1",
         "status": "ok",
-        "engine": "rust-rs"
+        "version": "0.22.1",
+        "api_version": "1.0",
+        "database": "connected"
     }))
 }
 

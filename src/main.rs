@@ -42,16 +42,21 @@ async fn main() {
     });
 
     let app = Router::new()
-        // API Routes
+        // API Routes with common aliases
         .route("/api/system/status", get(api::get_system_status))
-        .route("/api/config", get(api::get_config)) // Added this to fix the warning
+        .route("/api/v1/system/status", get(api::get_system_status)) // Alias 1
+        .route("/system/status", get(api::get_system_status))        // Alias 2
+        
+        .route("/api/config", get(api::get_config))
+        .route("/api/v1/config", get(api::get_config))
+        
         .route("/api/channels", get(api::get_channels))
         .route("/api/groups", get(api::get_groups))
         
         // Proxy
         .route("/play/:token/:channel_id", get(proxy::handle_proxy))
 
-        // UI Fallback
+        // UI Fallback (Must be last)
         .fallback_service(ServeDir::new("dist"))
         
         .layer(CorsLayer::permissive())
