@@ -24,8 +24,9 @@ pub async fn get_current_user() -> Json<Value> {
 
 pub async fn auth_placeholder() -> Json<Value> {
     Json(json!({ 
-        "access": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.t-xIs7V95v-9mE", 
-        "refresh": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.t-xIs7V95v-9mE"
+        "access": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxLCJ1c2VybmFtZSI6ImFkbWluIiwiaXNfc3VwZXJ1c2VyIjp0cnVlfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c", 
+        "refresh": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxLCJ1c2VybmFtZSI6ImFkbWluIiwiaXNfc3VwZXJ1c2VyIjp0cnVlfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
+        "user": { "id": 1, "username": "admin", "is_superuser": true, "is_staff": true }
     }))
 }
 
@@ -33,23 +34,25 @@ pub async fn get_core_settings() -> Json<Value> {
     Json(json!({
         "app_name": "Dispatcharr",
         "proxy_enabled": true,
-        "channel_profiles": [{"id": 1, "name": "Default"}],
-        "stream_profiles": [{"id": 1, "name": "Direct"}],
-        "user_agents": [{"id": 1, "name": "Default"}],
+        "channel_profiles": [],
+        "stream_profiles": [],
+        "user_agents": [],
         "notification_types": []
     }))
 }
 
-// Fixed: Adding dummy objects prevents '.reduce' and '.filter' from crashing on empty sets
-pub async fn get_flat_list() -> Json<Value> {
-    Json(json!([
-        { "id": 1, "name": "Default", "enabled": true }
-    ]))
+pub async fn get_env_settings() -> Json<Value> {
+    Json(json!({ "DEBUG": "false", "ENV": "production" }))
 }
 
-pub async fn get_notifications() -> Json<Value> {
-    // Specifically for the .filter error you saw
-    Json(json!([]))
+// Satisfies the .filter() and .reduce() calls by providing the "results" wrapper
+pub async fn get_results_stub() -> Json<Value> {
+    Json(json!({
+        "count": 0,
+        "next": null,
+        "previous": null,
+        "results": []
+    }))
 }
 
 pub async fn get_config() -> Json<Value> {

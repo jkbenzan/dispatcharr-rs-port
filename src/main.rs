@@ -43,7 +43,6 @@ async fn spa_fallback() -> impl IntoResponse {
 #[tokio::main]
 async fn main() {
     println!("🚀 DISPATCHARR-RS IS STARTING UP...");
-
     dotenvy::dotenv().ok();
     let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL missing");
     
@@ -52,18 +51,11 @@ async fn main() {
 
     let mut db_conn = None;
     for i in 1..=5 {
-        println!("🔄 DB CONNECTION ATTEMPT {}/5...", i);
-        match Database::connect(opt.clone()).await {
-            Ok(conn) => {
-                println!("✅ DATABASE CONNECTED");
-                db_conn = Some(conn);
-                break;
-            }
-            Err(e) => {
-                println!("⚠️  ATTEMPT {} FAILED: {:?}", i, e);
-                tokio::time::sleep(Duration::from_secs(5)).await;
-            }
+        if let Ok(conn) = Database::connect(opt.clone()).await {
+            db_conn = Some(conn);
+            break;
         }
+        tokio::time::sleep(Duration::from_secs(5)).await;
     }
 
     let state = Arc::new(AppState {
@@ -80,28 +72,29 @@ async fn main() {
         
         .route("/api/core/version/", get(api::get_core_version))
         .route("/api/core/settings/", get(api::get_core_settings))
-        .route("/api/core/notifications/", get(api::get_notifications))
-        .route("/api/core/useragents/", get(api::get_flat_list))
-        .route("/api/core/streamprofiles/", get(api::get_flat_list))
+        .route("/api/core/settings/env/", get(api::get_env_settings)) // FIXED: Added env route
+        .route("/api/core/notifications/", get(api::get_results_stub)) // FIXED: Added results wrapper
+        .route("/api/core/useragents/", get(api::get_results_stub))
+        .route("/api/core/streamprofiles/", get(api::get_results_stub))
         
-        .route("/api/channels/groups/", get(api::get_flat_list))
-        .route("/api/channels/profiles/", get(api::get_flat_list))
-        .route("/api/m3u/accounts/", get(api::get_flat_list))
-        .route("/api/epg/sources/", get(api::get_flat_list))
-        .route("/api/epg/epgdata/", get(api::get_flat_list))
+        .route("/api/channels/groups/", get(api::get_results_stub))
+        .route("/api/channels/profiles/", get(api::get_results_stub))
+        .route("/api/channels/channels/ids/", get(api::get_results_stub)) // FIXED: Added ids route
+        .route("/api/m3u/accounts/", get(api::get_results_stub))
+        .route("/api/epg/sources/", get(api::get_results_stub))
         
         .route("/api/config/", get(api::get_config))
         .route("/ws/", get(ws_handler))
         .route("/play/:token/:channel_id", get(proxy::handle_proxy))
         
-        .fallback_service(
-            ServeDir::new("dist").not_found_service(get(spa_fallback))
-        )
+        // Static Files and Manifest
+        .nest_service("/static", ServeDir::new("dist"))
+        .fallback_service(ServeDir::new("dist").not_found_service(get(spa_fallback)))
+        
         .layer(CorsLayer::permissive())
         .with_state(state);
 
     let addr = "0.0.0.0:8080";
-    println!("🚀 LISTENING ON http://{}", addr);
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }
