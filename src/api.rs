@@ -31,7 +31,6 @@ pub async fn auth_placeholder() -> Json<Value> {
 }
 
 pub async fn get_core_settings() -> Json<Value> {
-    // Providing empty arrays here prevents the 'reading length' crash
     Json(json!({
         "app_name": "Dispatcharr",
         "proxy_enabled": true,
@@ -49,14 +48,14 @@ pub async fn get_env_settings() -> Json<Value> {
     Json(json!({ "DEBUG": "false", "ENV": "production" }))
 }
 
-pub async fn get_notifications() -> Json<Value> {
-    // The UI calls .filter() on notifications, so it MUST have a results array
-    Json(json!({ "results": [] }))
-}
-
-pub async fn get_flat_list() -> Json<Value> {
-    // raw arrays for components calling .reduce()
-    Json(json!([]))
+// Universal response wrapper to prevent .length and .filter crashes
+pub async fn get_results_stub() -> Json<Value> {
+    Json(json!({
+        "count": 0,
+        "next": null,
+        "previous": null,
+        "results": []
+    }))
 }
 
 pub async fn get_config() -> Json<Value> {
