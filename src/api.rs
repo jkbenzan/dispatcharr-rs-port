@@ -70,9 +70,18 @@ pub async fn get_env_settings() -> Json<Value> {
     Json(json!({ "DEBUG": "false", "ENV": "production" }))
 }
 
+// Providing a few objects in these lists can prevent 'undefined' crashes in React
 pub async fn get_channel_groups() -> Json<Value> { Json(json!([])) }
 pub async fn get_profiles() -> Json<Value> { Json(json!([])) }
-pub async fn get_m3u_accounts() -> Json<Value> { Json(json!([])) }
+pub async fn get_m3u_accounts() -> Json<Value> { 
+    Json(json!([{
+        "id": 1,
+        "name": "Default Provider",
+        "url": "http://example.com/playlist.m3u",
+        "enabled": true,
+        "last_sync": null
+    }])) 
+}
 pub async fn get_epg_sources() -> Json<Value> { Json(json!([])) }
 pub async fn get_notifications() -> Json<Value> { Json(json!([])) }
 pub async fn get_ids_stub() -> Json<Value> { Json(json!([])) }
