@@ -22,24 +22,20 @@ pub struct AppState {
     pub http_client: reqwest::Client,
 }
 
-/// WebSocket handler to keep the frontend's persistent connection alive
 async fn ws_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
     ws.on_upgrade(handle_socket)
 }
 
 async fn handle_socket(mut socket: WebSocket) {
     while let Some(Ok(msg)) = socket.recv().await {
-        if let axum::extract::ws::Message::Close(_) = msg {
-            break;
-        }
+        if let axum::extract::ws::Message::Close(_) = msg { break; }
     }
 }
 
-/// SPA Fallback: Ensures that React Router paths like /channels load the app
 async fn spa_fallback() -> impl IntoResponse {
     let index_content = tokio::fs::read_to_string("dist/index.html")
         .await
-        .unwrap_or_else(|_| "index.html not found - ensure 'dist' folder exists".to_string());
+        .unwrap_or_else(|_| "index.html missing".to_string());
     
     Response::builder()
         .status(StatusCode::OK)
@@ -50,19 +46,13 @@ async fn spa_fallback() -> impl IntoResponse {
 
 #[tokio::main]
 async fn main() {
-    println!("🚀 DISPATCHARR-RS STARTING UP...");
+    println!("🚀 DISPATCHARR-RS BOOTING...");
     dotenvy::dotenv().ok();
+    let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL missing");
     
-    let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    
-    let mut opt = ConnectOptions::new(db_url.clone());
-    opt.connect_timeout(Duration::from_secs(15))
-       .max_connections(10)
-       .min_connections(2);
-
-    println!("🔍 CONNECTING TO DB: {}", db_url);
-    let db = Database::connect(opt).await.expect("Failed to connect to database");
-    println!("✅ DATABASE CONNECTED");
+    let mut opt = ConnectOptions::new(db_url);
+    opt.connect_timeout(Duration::from_secs(15));
+    let db = Database::connect(opt).await.expect("DB Failure");
 
     let state = Arc::new(AppState {
         db,
@@ -70,47 +60,39 @@ async fn main() {
     });
 
     let app = Router::new()
-        // --- Authentication ---
         .route("/api/accounts/initialize-superuser/", get(api::check_superuser))
         .route("/api/accounts/users/me/", get(api::get_current_user))
         .route("/api/accounts/token/", post(api::auth_placeholder))
         .route("/api/accounts/token/refresh/", post(api::auth_placeholder))
-        .route("/api/accounts/auth/logout/", post(api::logout_stub))
-
-        // --- Core Settings (Trailing slashes match Dispatcharr DRF defaults) ---
+        
         .route("/api/core/version/", get(api::get_core_version))
         .route("/api/core/settings/", get(api::get_core_settings))
         .route("/api/core/settings/env/", get(api::get_env_settings))
-        .route("/api/core/notifications/", get(api::get_drf_list))
-        .route("/api/core/useragents/", get(api::get_drf_list))
-        .route("/api/core/streamprofiles/", get(api::get_drf_list))
 
-        // --- Data Channels ---
-        .route("/api/channels/groups/", get(api::get_drf_list))
-        .route("/api/channels/profiles/", get(api::get_drf_list))
-        .route("/api/channels/channels/ids/", get(api::get_drf_list))
-        .route("/api/m3u/accounts/", get(api::get_drf_list))
-        .route("/api/epg/sources/", get(api::get_drf_list))
-        .route("/api/epg/epgdata/", get(api::get_drf_list))
+        // These specific routes threw ".filter" or ".length" errors (Needs Object)
+        .route("/api/core/notifications/", get(api::get_drf_results))
+        .route("/api/channels/channels/ids/", get(api::get_drf_results))
 
-        // --- Config & Real-time ---
+        // These specific routes threw ".reduce" errors (Needs Flat Array)
+        .route("/api/channels/groups/", get(api::get_flat_array))
+        .route("/api/channels/profiles/", get(api::get_flat_array))
+        .route("/api/m3u/accounts/", get(api::get_flat_array))
+        .route("/api/epg/sources/", get(api::get_flat_array))
+        .route("/api/epg/epgdata/", get(api::get_flat_array))
+
         .route("/api/config/", get(api::get_config))
         .route("/ws/", get(ws_handler))
         .route("/play/:token/:channel_id", get(proxy::handle_proxy))
-
-        // --- Static Files & SPA Routing ---
-        // Explicitly serve the assets folder
+        
+        // SPA Logic
         .nest_service("/assets", ServeDir::new("dist/assets"))
-        // Serve everything else in dist (icons, manifest, etc.)
-        .fallback_service(
-            ServeDir::new("dist").not_found_service(get(spa_fallback))
-        )
+        .fallback(spa_fallback)
+        
         .layer(CorsLayer::permissive())
         .with_state(state);
 
     let addr = "0.0.0.0:8080";
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    println!("🚀 SERVER LISTENING ON http://{}", addr);
-    
+    println!("🚀 RUNNING ON http://{}", addr);
     axum::serve(listener, app).await.unwrap();
 }
