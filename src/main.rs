@@ -35,7 +35,7 @@ async fn handle_socket(mut socket: WebSocket) {
 async fn spa_fallback() -> impl IntoResponse {
     let index_content = tokio::fs::read_to_string("dist/index.html")
         .await
-        .unwrap_or_else(|_| "index.html missing".to_string());
+        .unwrap_or_else(|_| "index.html not found - check dist folder".to_string());
     
     Response::builder()
         .status(StatusCode::OK)
@@ -46,13 +46,17 @@ async fn spa_fallback() -> impl IntoResponse {
 
 #[tokio::main]
 async fn main() {
-    println!("🚀 STARTING BACKEND...");
+    println!("🚀 DISPATCHARR-RS STARTING UP...");
     dotenvy::dotenv().ok();
+    
     let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL missing");
     
-    let mut opt = ConnectOptions::new(db_url);
+    let mut opt = ConnectOptions::new(db_url.clone());
     opt.connect_timeout(Duration::from_secs(15));
-    let db = Database.connect(opt).await.expect("DB Failure");
+
+    // FIXED: Changed Database.connect to Database::connect
+    let db = Database::connect(opt).await.expect("DB Failure");
+    println!("✅ DATABASE CONNECTED");
 
     let state = Arc::new(AppState {
         db,
@@ -60,36 +64,43 @@ async fn main() {
     });
 
     let app = Router::new()
+        // Auth
         .route("/api/accounts/initialize-superuser/", get(api::check_superuser))
         .route("/api/accounts/users/me/", get(api::get_current_user))
         .route("/api/accounts/token/", post(api::auth_placeholder))
         .route("/api/accounts/token/refresh/", post(api::auth_placeholder))
+        .route("/api/accounts/auth/logout/", post(api::logout_stub))
         
+        // Settings & Core
         .route("/api/core/version/", get(api::get_core_version))
         .route("/api/core/settings/", get(api::get_core_settings))
         .route("/api/core/settings/env/", get(api::get_env_settings))
-        .route("/api/core/notifications/", get(api::get_results_stub))
+        .route("/api/core/notifications/", get(api::get_drf_list))
+        .route("/api/core/useragents/", get(api::get_drf_list))
+        .route("/api/core/streamprofiles/", get(api::get_drf_list))
         
-        .route("/api/channels/groups/", get(api::get_flat_list))
-        .route("/api/channels/profiles/", get(api::get_flat_list))
-        .route("/api/channels/channels/ids/", get(api::get_results_stub))
-        .route("/api/m3u/accounts/", get(api::get_flat_list))
-        .route("/api/epg/sources/", get(api::get_flat_list))
-        .route("/api/epg/epgdata/", get(api::get_flat_list))
+        // Data
+        .route("/api/channels/groups/", get(api::get_drf_list))
+        .route("/api/channels/profiles/", get(api::get_drf_list))
+        .route("/api/channels/channels/ids/", get(api::get_drf_list))
+        .route("/api/m3u/accounts/", get(api::get_drf_list))
+        .route("/api/epg/sources/", get(api::get_drf_list))
+        .route("/api/epg/epgdata/", get(api::get_drf_list))
         
         .route("/api/config/", get(api::get_config))
         .route("/ws/", get(ws_handler))
+        .route("/play/:token/:channel_id", get(proxy::handle_proxy))
         
-        // This ensures the frontend assets are served correctly
+        // Static Files and SPA Fallback
         .nest_service("/assets", ServeDir::new("dist/assets"))
-        // This ensures /channels, /playlists, etc. all load the React app
-        .fallback(spa_fallback)
-        
+        .fallback_service(
+            ServeDir::new("dist").not_found_service(get(spa_fallback))
+        )
         .layer(CorsLayer::permissive())
         .with_state(state);
 
     let addr = "0.0.0.0:8080";
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    println!("🚀 LISTENING ON {}", addr);
+    println!("🚀 LISTENING ON http://{}", addr);
     axum::serve(listener, app).await.unwrap();
 }
