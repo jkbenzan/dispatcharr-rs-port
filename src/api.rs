@@ -29,7 +29,6 @@ pub async fn auth_placeholder() -> Json<Value> {
 }
 
 pub async fn get_core_settings() -> Json<Value> {
-    // Adding channel_profiles here as the console specifically asked for it
     Json(json!({
         "app_name": "Dispatcharr",
         "proxy_enabled": true,
@@ -40,7 +39,6 @@ pub async fn get_core_settings() -> Json<Value> {
     }))
 }
 
-// Fixed: The frontend needs a flat array [] so it can call .filter() or .reduce()
 pub async fn get_flat_list() -> Json<Value> {
     Json(json!([]))
 }
