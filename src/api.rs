@@ -52,7 +52,15 @@ pub async fn get_env_settings() -> Json<Value> {
     Json(json!({ "DEBUG": "false", "ENV": "production" }))
 }
 
-pub async fn get_drf_list() -> Json<Value> {
+// FIXED: Use this for fetchChannelGroups, fetchPlaylists, fetchEPGData, fetchEPGs
+// These routes need a FLAT ARRAY to avoid ".reduce is not a function"
+pub async fn get_flat_list() -> Json<Value> {
+    Json(json!([]))
+}
+
+// FIXED: Use this for notifications
+// This route needs an OBJECT with results to avoid ".filter is undefined"
+pub async fn get_drf_results() -> Json<Value> {
     Json(json!({
         "count": 0,
         "next": null,
