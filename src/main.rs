@@ -1,8 +1,8 @@
 use axum::{
     body::Body,
-    http::Request,
+    http::{Request, StatusCode},
     middleware::{self, Next},
-    response::Response,
+    response::{Response, IntoResponse},
     routing::{get, post},
     Router,
 };
@@ -30,6 +30,19 @@ async fn logger_middleware(req: Request<Body>, next: Next) -> Response {
     res
 }
 
+// Fixed: This handles the "Blank Screen on Refresh" by serving index.html for unknown routes
+async fn spa_fallback() -> impl IntoResponse {
+    let index_content = tokio::fs::read_to_string("dist/index.html")
+        .await
+        .unwrap_or_else(|_| "index.html not found".to_string());
+    
+    Response::builder()
+        .status(StatusCode::OK)
+        .header("Content-Type", "text/html")
+        .body(Body::from(index_content))
+        .unwrap()
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt().with_max_level(tracing::Level::INFO).init();
@@ -50,12 +63,14 @@ async fn main() {
     });
 
     let app = Router::new()
+        // Auth
         .route("/api/accounts/initialize-superuser/", get(api::check_superuser))
         .route("/api/accounts/users/me/", get(api::get_current_user))
         .route("/api/accounts/token/", post(api::auth_placeholder))
         .route("/api/accounts/token/refresh/", post(api::auth_placeholder))
         .route("/api/accounts/auth/logout/", post(api::auth_placeholder))
 
+        // Core
         .route("/api/core/version/", get(api::get_core_version))
         .route("/api/core/settings/", get(api::get_core_settings))
         .route("/api/core/settings/env/", get(api::get_env_settings))
@@ -63,6 +78,7 @@ async fn main() {
         .route("/api/core/streamprofiles/", get(api::get_results_stub))
         .route("/api/core/useragents/", get(api::get_results_stub))
 
+        // Data
         .route("/api/channels/groups/", get(api::get_results_stub))
         .route("/api/channels/profiles/", get(api::get_results_stub))
         .route("/api/channels/channels/ids/", get(api::get_results_stub))
@@ -75,7 +91,11 @@ async fn main() {
         
         .route("/play/:token/:channel_id", get(proxy::handle_proxy))
 
-        .fallback_service(ServeDir::new("dist").append_index_html_on_directories(true))
+        // Static Files
+        .nest_service("/assets", ServeDir::new("dist/assets"))
+        
+        // Fixed: The global fallback now points to our SPA handler
+        .fallback(spa_fallback)
         
         .layer(middleware::from_fn(logger_middleware))
         .layer(CorsLayer::permissive())
