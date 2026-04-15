@@ -22,15 +22,18 @@ pub struct AppState {
     pub http_client: reqwest::Client,
 }
 
-// Custom logging middleware that Axum 0.7 supports easily
 async fn logger_middleware(req: Request<Body>, next: Next) -> Response {
-    println!("📥 INCOMING REQUEST: {} {}", req.method(), req.uri());
-    next.run(req).await
+    let method = req.method().clone();
+    let uri = req.uri().clone();
+    let res = next.run(req).await;
+    
+    // Log the request AND the result (so we see the 404s)
+    println!("📡 {} {} -> {}", method, uri, res.status());
+    res
 }
 
 #[tokio::main]
 async fn main() {
-    // 1. Initialize logging
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
         .init();
@@ -38,42 +41,24 @@ async fn main() {
     dotenvy::dotenv().ok();
     
     let db_url = std::env::var("DATABASE_URL")
-        .expect("DATABASE_URL must be set in your Unraid Docker template");
+        .expect("DATABASE_URL must be set");
     let port = std::env::var("PORT").unwrap_or_else(|_| "8080".to_string());
 
-    // 2. Database Connection with strict 10s timeout
-    let mut opt = ConnectOptions::new(db_url.clone());
+    let mut opt = ConnectOptions::new(db_url);
     opt.max_connections(10)
        .connect_timeout(Duration::from_secs(10)) 
-       .acquire_timeout(Duration::from_secs(10))
        .sqlx_logging(true);
 
-    println!("--------------------------------------------------");
-    println!("🔍 ATTEMPTING DB CONNECTION TO: {}", db_url);
-    println!("--------------------------------------------------");
-
-    let db = match Database::connect(opt).await {
-        Ok(conn) => {
-            println!("✅ DATABASE CONNECTED SUCCESSFULLY");
-            conn
-        },
-        Err(e) => {
-            println!("❌ DATABASE ERROR: {:?}", e);
-            // This panic will now show up in your Unraid logs
-            panic!("Could not connect to database. Check your DATABASE_URL.");
-        }
-    };
+    let db = Database::connect(opt).await.expect("DB Failure");
+    println!("✅ DATABASE CONNECTED");
 
     let state = Arc::new(AppState {
         db,
-        http_client: reqwest::Client::builder()
-            .timeout(Duration::from_secs(10))
-            .build()
-            .unwrap(),
+        http_client: reqwest::Client::builder().build().unwrap(),
     });
 
-    // 3. Routing
     let app = Router::new()
+        // API routes
         .route("/api/system/status", get(api::get_system_status))
         .route("/api/v1/system/status", get(api::get_system_status))
         .route("/api/config", get(api::get_config))
@@ -81,21 +66,18 @@ async fn main() {
         .route("/api/groups", get(api::get_groups))
         .route("/play/:token/:channel_id", get(proxy::handle_proxy))
 
+        // Static files (The UI)
         .fallback_service(
             ServeDir::new("dist").append_index_html_on_directories(true)
         )
         
-        // 4. Layers (Fixed the trait error by using from_fn)
         .layer(middleware::from_fn(logger_middleware))
         .layer(CorsLayer::permissive())
         .with_state(state);
 
     let addr = format!("0.0.0.0:{}", port);
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
-    
-    println!("--------------------------------------------------");
-    println!("🚀 SERVER STARTED ON http://{}", addr);
-    println!("--------------------------------------------------");
+    println!("🚀 RUNNING ON http://{}", addr);
 
     axum::serve(listener, app).await.unwrap();
 }
