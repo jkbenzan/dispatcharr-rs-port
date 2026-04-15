@@ -3,7 +3,7 @@ use axum::{
     http::Request,
     middleware::{self, Next},
     response::Response,
-    routing::{get, post}, // Added post support
+    routing::{get, post},
     Router,
 };
 use sea_orm::{Database, ConnectOptions};
@@ -50,16 +50,14 @@ async fn main() {
     });
 
     let app = Router::new()
-        // --- Core Endpoints ---
-        .route("/api/core/version/", get(api::get_core_version))
-        
-        // --- Account Endpoints (Based on your logs) ---
+        // --- Auth & Accounts ---
         .route("/api/accounts/initialize-superuser/", get(api::check_superuser))
         .route("/api/accounts/users/me/", get(api::get_current_user))
         .route("/api/accounts/token/", post(api::auth_placeholder))
         .route("/api/accounts/auth/logout/", post(api::auth_placeholder))
 
-        // --- Data Endpoints ---
+        // --- System & Data ---
+        .route("/api/core/version/", get(api::get_core_version))
         .route("/api/config/", get(api::get_config))
         .route("/api/channels/", get(api::get_channels))
         .route("/api/groups/", get(api::get_groups))
@@ -67,6 +65,7 @@ async fn main() {
         // --- Proxy ---
         .route("/play/:token/:channel_id", get(proxy::handle_proxy))
 
+        // --- UI ---
         .fallback_service(
             ServeDir::new("dist").append_index_html_on_directories(true)
         )

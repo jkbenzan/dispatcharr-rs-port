@@ -18,7 +18,6 @@ pub struct Group {
     pub name: String,
 }
 
-// Fixed: This is the exact endpoint the UI was asking for (/api/core/version/)
 pub async fn get_core_version() -> Json<Value> {
     Json(json!({
         "version": "0.22.1",
@@ -27,23 +26,31 @@ pub async fn get_core_version() -> Json<Value> {
     }))
 }
 
-// Fixed: Satisfies /api/accounts/initialize-superuser/
 pub async fn check_superuser() -> Json<Value> {
     Json(json!({ "initialized": true }))
 }
 
-// Fixed: Satisfies /api/accounts/users/me/
 pub async fn get_current_user() -> Json<Value> {
     Json(json!({
         "id": 1,
         "username": "admin",
-        "is_superuser": true
+        "email": "admin@example.com",
+        "is_superuser": true,
+        "first_name": "Admin",
+        "last_name": "User"
     }))
 }
 
-// Fixed: Satisfies /api/accounts/token/ and Logout
+// Fixed: This returns the standard JWT-style response the UI expects
 pub async fn auth_placeholder() -> Json<Value> {
-    Json(json!({ "status": "success", "token": "rust_token_placeholder" }))
+    Json(json!({ 
+        "access": "rust_access_token_placeholder",
+        "refresh": "rust_refresh_token_placeholder",
+        "user": {
+            "username": "admin",
+            "is_superuser": true
+        }
+    }))
 }
 
 pub async fn get_config() -> Json<Value> {
