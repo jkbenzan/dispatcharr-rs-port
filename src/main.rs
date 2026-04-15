@@ -46,13 +46,13 @@ async fn spa_fallback() -> impl IntoResponse {
 
 #[tokio::main]
 async fn main() {
-    println!("🚀 DISPATCHARR-RS BOOTING...");
+    println!("🚀 STARTING BACKEND...");
     dotenvy::dotenv().ok();
     let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL missing");
     
     let mut opt = ConnectOptions::new(db_url);
     opt.connect_timeout(Duration::from_secs(15));
-    let db = Database::connect(opt).await.expect("DB Failure");
+    let db = Database.connect(opt).await.expect("DB Failure");
 
     let state = Arc::new(AppState {
         db,
@@ -68,24 +68,21 @@ async fn main() {
         .route("/api/core/version/", get(api::get_core_version))
         .route("/api/core/settings/", get(api::get_core_settings))
         .route("/api/core/settings/env/", get(api::get_env_settings))
-
-        // These specific routes threw ".filter" or ".length" errors (Needs Object)
-        .route("/api/core/notifications/", get(api::get_drf_results))
-        .route("/api/channels/channels/ids/", get(api::get_drf_results))
-
-        // These specific routes threw ".reduce" errors (Needs Flat Array)
-        .route("/api/channels/groups/", get(api::get_flat_array))
-        .route("/api/channels/profiles/", get(api::get_flat_array))
-        .route("/api/m3u/accounts/", get(api::get_flat_array))
-        .route("/api/epg/sources/", get(api::get_flat_array))
-        .route("/api/epg/epgdata/", get(api::get_flat_array))
-
+        .route("/api/core/notifications/", get(api::get_results_stub))
+        
+        .route("/api/channels/groups/", get(api::get_flat_list))
+        .route("/api/channels/profiles/", get(api::get_flat_list))
+        .route("/api/channels/channels/ids/", get(api::get_results_stub))
+        .route("/api/m3u/accounts/", get(api::get_flat_list))
+        .route("/api/epg/sources/", get(api::get_flat_list))
+        .route("/api/epg/epgdata/", get(api::get_flat_list))
+        
         .route("/api/config/", get(api::get_config))
         .route("/ws/", get(ws_handler))
-        .route("/play/:token/:channel_id", get(proxy::handle_proxy))
         
-        // SPA Logic
+        // This ensures the frontend assets are served correctly
         .nest_service("/assets", ServeDir::new("dist/assets"))
+        // This ensures /channels, /playlists, etc. all load the React app
         .fallback(spa_fallback)
         
         .layer(CorsLayer::permissive())
@@ -93,6 +90,6 @@ async fn main() {
 
     let addr = "0.0.0.0:8080";
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    println!("🚀 RUNNING ON http://{}", addr);
+    println!("🚀 LISTENING ON {}", addr);
     axum::serve(listener, app).await.unwrap();
 }

@@ -22,7 +22,8 @@ pub async fn get_current_user() -> Json<Value> {
             "theme": "dark",
             "language": "en",
             "navigation_order": [],
-            "hidden_nav_items": []
+            "hidden_nav_items": [],
+            "notifications_enabled": true
         }
     }))
 }
@@ -36,6 +37,8 @@ pub async fn auth_placeholder() -> Json<Value> {
 }
 
 pub async fn get_core_settings() -> Json<Value> {
+    // React calls .length on these arrays to draw the sidebar. 
+    // If they are missing, it crashes the whole page.
     Json(json!({
         "app_name": "Dispatcharr",
         "proxy_enabled": true,
@@ -44,7 +47,12 @@ pub async fn get_core_settings() -> Json<Value> {
         "stream_profiles": [],
         "user_agents": [],
         "notification_types": [],
-        "version": "0.22.1"
+        "version": "0.22.1",
+        "maintenance_mode": false,
+        "stats": {
+            "total_channels": 0,
+            "total_playlists": 0
+        }
     }))
 }
 
@@ -52,17 +60,15 @@ pub async fn get_env_settings() -> Json<Value> {
     Json(json!({ "DEBUG": "false", "ENV": "production" }))
 }
 
-// FIXED: Routes throwing ".reduce is not a function" MUST return this
-pub async fn get_flat_array() -> Json<Value> {
+// Flat array for .reduce()
+pub async fn get_flat_list() -> Json<Value> {
     Json(json!([]))
 }
 
-// FIXED: Routes throwing ".filter is undefined" or "reading length" MUST return this
-pub async fn get_drf_results() -> Json<Value> {
+// Result object for .filter()
+pub async fn get_results_stub() -> Json<Value> {
     Json(json!({
         "count": 0,
-        "next": null,
-        "previous": null,
         "results": []
     }))
 }
