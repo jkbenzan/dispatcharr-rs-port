@@ -22,14 +22,17 @@ sea-orm = { version = "0.12", features = [
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
-# Networking & Utils
-reqwest = { version = "0.12", features = ["json"] }
+# Networking & Streaming (Fixed for proxy.rs)
+reqwest = { version = "0.12", features = ["json", "stream"] }
+futures-util = "0.3"
+
+# Utils
 dotenvy = "0.15"
 chrono = { version = "0.4", features = ["serde"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
 
 [profile.release]
-opt-level = 'z'     # Optimize for size
-lto = true          # Link Time Optimization for a smaller binary
-panic = 'abort'     # Reduces binary size
+opt-level = 'z'
+lto = true
+panic = 'abort'
