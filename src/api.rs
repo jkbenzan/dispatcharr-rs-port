@@ -40,8 +40,8 @@ pub async fn get_current_user() -> Json<Value> {
     }))
 }
 
-// Fixed: Tokens are now valid Base64 strings to prevent the DOMException
 pub async fn auth_placeholder() -> Json<Value> {
+    // Valid Base64 JWT-like strings
     Json(json!({ 
         "access": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.t-xIs7V95v-9mE", 
         "refresh": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.t-xIs7V95v-9mE",
@@ -54,12 +54,17 @@ pub async fn auth_placeholder() -> Json<Value> {
 }
 
 pub async fn get_core_settings() -> Json<Value> {
+    // Added channel_profiles and other essential keys to prevent JS crashes
     Json(json!({
         "app_name": "Dispatcharr",
         "registration_enabled": false,
         "allow_public_m3u": true,
         "proxy_enabled": true,
-        "refresh_interval": 3600
+        "refresh_interval": 3600,
+        "channel_profiles": [],
+        "stream_profiles": [],
+        "user_agents": [],
+        "notification_types": []
     }))
 }
 
