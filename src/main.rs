@@ -61,36 +61,34 @@ async fn main() {
     });
 
     let app = Router::new()
-        // Auth
+        // Auth Handlers
         .route("/api/accounts/initialize-superuser/", get(api::check_superuser))
         .route("/api/accounts/users/me/", get(api::get_current_user))
         .route("/api/accounts/token/", post(api::auth_placeholder))
         .route("/api/accounts/token/refresh/", post(api::auth_placeholder))
         .route("/api/accounts/auth/logout/", post(api::logout_stub))
         
-        // Settings
+        // Settings & Core
         .route("/api/core/version/", get(api::get_core_version))
         .route("/api/core/settings/", get(api::get_core_settings))
         .route("/api/core/settings/env/", get(api::get_env_settings))
+        .route("/api/core/notifications/", get(api::get_notifications))
+        .route("/api/core/useragents/", get(api::get_flat_list))
+        .route("/api/core/streamprofiles/", get(api::get_flat_list))
         
-        // FIXED: Using specific return shapes based on F12 error logs
-        .route("/api/core/notifications/", get(api::get_results_object)) // .filter crash
-        .route("/api/core/useragents/", get(api::get_raw_array))
-        .route("/api/core/streamprofiles/", get(api::get_raw_array))
-        
-        .route("/api/channels/groups/", get(api::get_raw_array)) // .reduce crash
-        .route("/api/channels/profiles/", get(api::get_raw_array)) // .reduce crash
-        .route("/api/channels/channels/ids/", get(api::get_raw_array))
-        
-        .route("/api/m3u/accounts/", get(api::get_raw_array)) // .reduce crash
-        .route("/api/epg/sources/", get(api::get_raw_array))
-        .route("/api/epg/epgdata/", get(api::get_raw_array)) // .reduce crash
+        // Data Channels
+        .route("/api/channels/groups/", get(api::get_flat_list))
+        .route("/api/channels/profiles/", get(api::get_flat_list))
+        .route("/api/channels/channels/ids/", get(api::get_flat_list))
+        .route("/api/m3u/accounts/", get(api::get_flat_list))
+        .route("/api/epg/sources/", get(api::get_flat_list))
+        .route("/api/epg/epgdata/", get(api::get_flat_list))
         
         .route("/api/config/", get(api::get_config))
         .route("/ws/", get(ws_handler))
         .route("/play/:token/:channel_id", get(proxy::handle_proxy))
         
-        // SPA
+        // Static Files and SPA Fallback
         .fallback_service(
             ServeDir::new("dist").not_found_service(get(spa_fallback))
         )

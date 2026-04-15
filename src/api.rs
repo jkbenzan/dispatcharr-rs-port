@@ -31,6 +31,7 @@ pub async fn auth_placeholder() -> Json<Value> {
 }
 
 pub async fn get_core_settings() -> Json<Value> {
+    // Adding EVERY standard key. The 'length' crash happens when one of these arrays is missing.
     Json(json!({
         "app_name": "Dispatcharr",
         "proxy_enabled": true,
@@ -39,7 +40,9 @@ pub async fn get_core_settings() -> Json<Value> {
         "stream_profiles": [],
         "user_agents": [],
         "notification_types": [],
-        "version": "0.22.1"
+        "backend_url": "",
+        "version": "0.22.1",
+        "maintenance_mode": false
     }))
 }
 
@@ -47,17 +50,19 @@ pub async fn get_env_settings() -> Json<Value> {
     Json(json!({ "DEBUG": "false", "ENV": "production" }))
 }
 
-// Routes failing with ".reduce is not a function" need this
-pub async fn get_raw_array() -> Json<Value> {
-    Json(json!([]))
-}
-
-// Routes failing with "Cannot read properties of undefined (reading 'filter')" need this
-pub async fn get_results_object() -> Json<Value> {
+// Fixed: Frontend calls .filter() on this, so it MUST be an object with results
+pub async fn get_notifications() -> Json<Value> {
     Json(json!({
         "count": 0,
+        "next": null,
+        "previous": null,
         "results": []
     }))
+}
+
+// Raw array for components calling .reduce()
+pub async fn get_flat_list() -> Json<Value> {
+    Json(json!([]))
 }
 
 pub async fn get_config() -> Json<Value> {
