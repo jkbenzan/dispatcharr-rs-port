@@ -4,6 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tower_http::cors::CorsLayer;
 use tower_http::services::ServeDir;
+use tower_http::trace::TraceLayer; // Added for detailed request logging
 
 mod proxy;
 mod api;
@@ -17,7 +18,7 @@ pub struct AppState {
 
 #[tokio::main]
 async fn main() {
-    // 1. Initialize logging immediately so we can see DB connection errors
+    // 1. Initialize logging
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
         .init();
@@ -28,22 +29,15 @@ async fn main() {
         .expect("DATABASE_URL must be set in your Unraid Docker template");
     let port = std::env::var("PORT").unwrap_or_else(|_| "8080".to_string());
 
-    println!("Attempting to connect to database...");
-
-    // 2. Database Connection with specific timeouts
+    // 2. Database Connection
     let mut opt = ConnectOptions::new(db_url);
     opt.max_connections(20)
-       .min_connections(5)
        .connect_timeout(Duration::from_secs(10))
-       .acquire_timeout(Duration::from_secs(10))
-       .idle_timeout(Duration::from_secs(8))
        .sqlx_logging(true);
 
     let db = Database::connect(opt)
         .await
-        .expect("CRITICAL: Database connection failed. Is Postgres running?");
-
-    println!("✅ Database Connected Successfully!");
+        .expect("CRITICAL: Database connection failed.");
 
     let state = Arc::new(AppState {
         db: db.clone(),
@@ -55,25 +49,32 @@ async fn main() {
 
     // 3. Routing
     let app = Router::new()
-        // API Endpoints
+        // SYSTEM & CONFIG (Covering all known Dispatcharr variations)
         .route("/api/system/status", get(api::get_system_status))
         .route("/api/v1/system/status", get(api::get_system_status))
+        .route("/system/status", get(api::get_system_status))
         .route("/api/config", get(api::get_config))
-        .route("/api/channels", get(api::get_channels))
-        .route("/api/groups", get(api::get_groups))
+        .route("/api/v1/config", get(api::get_config))
         
-        // Proxy
+        // DATA ENDPOINTS
+        .route("/api/channels", get(api::get_channels))
+        .route("/api/v1/channels", get(api::get_channels))
+        .route("/api/groups", get(api::get_groups))
+        .route("/api/v1/groups", get(api::get_groups))
+        
+        // PROXY
         .route("/play/:token/:channel_id", get(proxy::handle_proxy))
 
-        // UI Serving - Fixed to explicitly serve index.html on root
+        // UI SERVING
         .fallback_service(
             ServeDir::new("dist").append_index_html_on_directories(true)
         )
         
+        // LAYERS
+        .layer(TraceLayer::new_for_http()) // This will log every URL the browser hits
         .layer(CorsLayer::permissive())
         .with_state(state);
 
-    // 4. Start Server
     let addr = format!("0.0.0.0:{}", port);
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     
