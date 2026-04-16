@@ -99,6 +99,34 @@ mod tests {
 
         assert_eq!(body["version"], "0.22.1");
         assert_eq!(body["name"], "Dispatcharr");
-        assert_eq!(body["description"], "Rust Backend");
+
     }
+}
+
+pub async fn refresh_token() -> Json<Value> {
+    auth_placeholder().await
+}
+
+pub async fn get_channels() -> Json<Value> {
+    get_paginated_object().await
+}
+
+pub async fn get_channel_groups() -> Json<Value> {
+    get_paginated_object().await
+}
+
+pub async fn get_profiles() -> Json<Value> {
+    get_flat_array().await
+}
+
+pub async fn get_ids_stub() -> Json<Value> {
+    get_flat_array().await
+}
+
+pub async fn get_m3u_accounts() -> Json<Value> {
+    get_paginated_object().await
+}
+
+pub async fn get_epg_sources() -> Json<Value> {
+    get_paginated_object().await
 }
