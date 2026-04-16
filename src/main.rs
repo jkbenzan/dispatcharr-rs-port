@@ -1,16 +1,14 @@
 use axum::{
-    body::Body,
-    http::Request,
-    middleware::{self, Next},
-    response::Response,
+    extract::ws::{WebSocket, WebSocketUpgrade},
+    response::IntoResponse,
     routing::{get, post},
     Router,
 };
-use sea_orm::{Database, ConnectOptions};
+use sea_orm::{Database, ConnectOptions, DatabaseConnection};
 use std::sync::Arc;
 use std::time::Duration;
 use tower_http::cors::CorsLayer;
-use tower_http::services::ServeDir;
+use tower_http::services::{ServeDir, ServeFile};
 
 mod proxy;
 mod api;
@@ -18,52 +16,53 @@ mod entities;
 mod epg;
 
 pub struct AppState {
-    pub db: sea_orm::DatabaseConnection,
+    pub db: DatabaseConnection,
     pub http_client: reqwest::Client,
 }
 
-async fn logger_middleware(req: Request<Body>, next: Next) -> Response {
-    let method = req.method().clone();
-    let uri = req.uri().clone();
-    let res = next.run(req).await;
-    println!("📡 {} {} -> {}", method, uri, res.status());
-    res
+async fn ws_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
+    ws.on_upgrade(handle_socket)
+}
+
+async fn handle_socket(mut socket: WebSocket) {
+    while let Some(Ok(msg)) = socket.recv().await {
+        if let axum::extract::ws::Message::Close(_) = msg { break; }
+    }
 }
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt().with_max_level(tracing::Level::INFO).init();
+    println!("🚀 BACKEND STARTING...");
     dotenvy::dotenv().ok();
     
     let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL missing");
-    let port = std::env::var("PORT").unwrap_or_else(|_| "8080".to_string());
-
     let mut opt = ConnectOptions::new(db_url);
-    opt.connect_timeout(Duration::from_secs(10));
+    opt.connect_timeout(Duration::from_secs(15));
 
     let db = Database::connect(opt).await.expect("DB Failure");
-    println!("✅ DATABASE CONNECTED");
+    println!("✅ DB CONNECTED");
 
     let state = Arc::new(AppState {
         db,
         http_client: reqwest::Client::builder().build().unwrap(),
     });
 
+    // SPA Routing: Serve index.html if the user hits a route like /channels directly
+    let spa_service = ServeDir::new("dist")
+        .not_found_service(ServeFile::new("dist/index.html"));
+
     let app = Router::new()
-        // --- AUTH & ACCOUNTS ---
+        // Auth Handlers
         .route("/api/accounts/initialize-superuser/", get(api::check_superuser))
         .route("/api/accounts/users/me/", get(api::get_current_user))
         .route("/api/accounts/token/", post(api::auth_placeholder))
-        .route("/api/accounts/token/refresh/", post(api::auth_placeholder)) // FIXED: Added refresh route
-        .route("/api/accounts/auth/logout/", post(api::auth_placeholder))
-
-        // --- CORE & SETTINGS ---
+        .route("/api/accounts/token/refresh/", post(api::auth_placeholder))
+        .route("/api/accounts/auth/logout/", post(api::logout_stub))
+        
+        // Core Config
         .route("/api/core/version/", get(api::get_core_version))
         .route("/api/core/settings/", get(api::get_core_settings))
         .route("/api/core/settings/env/", get(api::get_env_settings))
-        .route("/api/core/notifications/", get(api::get_notifications))
-        .route("/api/core/streamprofiles/", get(api::get_profiles))
-        .route("/api/core/useragents/", get(api::get_profiles))
 
         // --- CHANNELS, M3U & EPG ---
         .route("/api/channels/channels/", get(api::get_channels))
@@ -74,24 +73,18 @@ async fn main() {
         .route("/api/epg/sources/", get(api::get_epg_sources))
         .route("/api/epg/epgdata/", get(api::get_epg_sources))
 
+        // System & Proxy
         .route("/api/config/", get(api::get_config))
-        .route("/api/config", get(api::get_config))
-        
-        // --- PROXY ---
+        .route("/ws/", get(ws_handler))
         .route("/play/:token/:channel_id", get(proxy::handle_proxy))
-
-        // --- UI ---
-        .fallback_service(
-            ServeDir::new("dist").append_index_html_on_directories(true)
-        )
         
-        .layer(middleware::from_fn(logger_middleware))
+        // Serve the compiled React frontend
+        .fallback_service(spa_service)
         .layer(CorsLayer::permissive())
         .with_state(state);
 
-    let addr = format!("0.0.0.0:{}", port);
-    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
-    println!("🚀 RUNNING ON http://{}", addr);
-
+    let addr = "0.0.0.0:8080";
+    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    println!("🚀 LISTENING ON {}", addr);
     axum::serve(listener, app).await.unwrap();
 }
