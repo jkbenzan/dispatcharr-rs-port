@@ -1,8 +1,10 @@
-use crate::entities::channel;
+use crate::entities::{stream, m3u_account};
 use regex::Regex;
-use sea_orm::{DatabaseConnection, Set};
+use sea_orm::{DatabaseConnection, Set, EntityTrait, QueryFilter, ColumnTrait};
+use std::collections::HashSet;
 use std::error::Error;
-use uuid::Uuid;
+use sha2::{Sha256, Digest};
+use chrono::Utc;
 
 pub async fn fetch_and_parse_m3u(
     db: &DatabaseConnection,
@@ -10,20 +12,28 @@ pub async fn fetch_and_parse_m3u(
     account_id: i64,
 ) -> Result<(), Box<dyn Error>> {
     println!("Fetching M3U from {}", url);
-    
-    // In a real scenario, use reqwest to fetch `url`. For now, we simulate the body payload.
-    // let body = reqwest::get(url).await?.text().await?;
-    let body = "#EXTM3U\n#EXTINF:-1 tvg-id=\"CNN\" tvg-logo=\"logo.png\" group-title=\"News\",CNN HD\nhttp://stream.url/cnn.ts";
+    let body = reqwest::get(url).await?.text().await?;
+
+    let existing_records = stream::Entity::find()
+        .filter(stream::Column::M3uAccountId.eq(account_id))
+        .all(db)
+        .await
+        .unwrap_or_default();
+        
+    let mut hash_set: HashSet<String> = HashSet::new();
+    for rec in existing_records {
+        if let Some(h) = rec.stream_hash {
+            hash_set.insert(h);
+        }
+    }
 
     let extinf_re = Regex::new(r#"#EXTINF:[^\s]+(?:\s+tvg-id="([^"]*)")?(?:\s+tvg-logo="([^"]*)")?(?:\s+group-title="([^"]*)")?,(.+)"#)?;
-
-    let mut current_extinf: Option<channel::ActiveModel> = None;
+    let mut current_extinf: Option<stream::ActiveModel> = None;
+    let mut streams_batch = vec![];
 
     for line in body.lines() {
         let line = line.trim();
-        if line.is_empty() {
-            continue;
-        }
+        if line.is_empty() { continue; }
 
         if line.starts_with("#EXTINF") {
             if let Some(caps) = extinf_re.captures(line) {
@@ -31,34 +41,45 @@ pub async fn fetch_and_parse_m3u(
                 let tvg_id = caps.get(1).map(|m| m.as_str().to_string());
                 let logo_url = caps.get(2).map(|m| m.as_str().to_string());
                 
-                // We're skipping group-title linking to dispatcharr_channels_channelgroup to save space in this skeleton module,
-                // but usually you would lookup GroupId.
-                
-                current_extinf = Some(channel::ActiveModel {
-                    uuid: Set(Uuid::new_v4()),
+                current_extinf = Some(stream::ActiveModel {
                     name: Set(name),
                     tvg_id: Set(tvg_id),
-                    channel_number: Set(0.0), // Assign programmatically or grab from tvg-chno
-                    is_adult: Set(false),
-                    auto_created: Set(true),
-                    user_level: Set(0),
-                    created_at: Set(chrono::Utc::now().into()),
-                    updated_at: Set(chrono::Utc::now().into()),
-                    ..Default::default() // stream_url etc requires stream mapping
+                    logo_url: Set(logo_url),
+                    m3u_account_id: Set(Some(account_id)),
+                    is_custom: Set(false),
+                    current_viewers: Set(0),
+                    updated_at: Set(Utc::now().into()),
+                    last_seen: Set(Utc::now().into()),
+                    ..Default::default()
                 });
             }
         } else if !line.starts_with('#') {
-            // It's a stream URL
-            if let Some(mut model) = current_extinf.take() {
-                // Here, you would typically link this URL to a Streams entity instead of the Channel
-                // But this demonstrates the extraction pipeline.
+            if let Some(mut stream_model) = current_extinf.take() {
+                stream_model.url = Set(Some(line.to_string()));
                 
-                println!("Saving channel: {:?}", model.name);
-                // model.insert(db).await?; // Commented out to prevent DB errors on empty schema
+                let mut hasher = Sha256::new();
+                hasher.update(line.as_bytes());
+                hasher.update(&account_id.to_be_bytes());
+                let result = hex::encode(hasher.finalize());
+                
+                if !hash_set.contains(&result) {
+                    stream_model.stream_hash = Set(Some(result.clone()));
+                    hash_set.insert(result);
+                    streams_batch.push(stream_model);
+
+                    if streams_batch.len() >= 500 {
+                        let chunk = std::mem::take(&mut streams_batch);
+                        let _ = stream::Entity::insert_many(chunk).exec(db).await;
+                    }
+                }
             }
         }
     }
 
-    println!("M3U Parsing Complete");
+    if !streams_batch.is_empty() {
+        let _ = stream::Entity::insert_many(streams_batch).exec(db).await;
+    }
+
+    println!("M3U Parsing Complete for M3U Account {}", account_id);
     Ok(())
 }

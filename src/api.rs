@@ -45,8 +45,9 @@ pub async fn get_core_settings() -> Json<Value> {
 
 use crate::{AppState, auth::{CurrentUser, generate_jwt, verify_password}};
 use crate::entities::{user, channel, m3u_account, epg_source, channel_group, channel_profile, stream};
+use crate::{m3u, epg};
 use axum::{
-    extract::{Query, State},
+    extract::{Query, State, Path},
     http::StatusCode,
     response::IntoResponse,
 };
@@ -345,6 +346,50 @@ pub async fn get_epg_sources(State(state): State<Arc<AppState>>) -> Json<Value> 
 }
 
 pub async fn get_epgdata() -> Json<Value> { get_flat_array().await }
+
+pub async fn refresh_m3u_account(
+    State(state): State<Arc<AppState>>,
+    Path(account_id): Path<i64>,
+) -> impl IntoResponse {
+    let account = match m3u_account::Entity::find_by_id(account_id).one(&state.db).await {
+        Ok(Some(acc)) => acc,
+        _ => return (StatusCode::NOT_FOUND, Json(json!({"error": "Account not found"}))),
+    };
+
+    if let Some(url) = account.server_url.clone() {
+        let db_clone = state.db.clone();
+        tokio::spawn(async move {
+            if let Err(e) = m3u::fetch_and_parse_m3u(&db_clone, &url, account_id).await {
+                eprintln!("Failed to parse M3U Task: {}", e);
+            }
+        });
+        (StatusCode::ACCEPTED, Json(json!({"status": "M3U refresh task started"})))
+    } else {
+        (StatusCode::BAD_REQUEST, Json(json!({"error": "No server URL"})))
+    }
+}
+
+pub async fn refresh_epg_source(
+    State(state): State<Arc<AppState>>,
+    Path(source_id): Path<i64>,
+) -> impl IntoResponse {
+    let source = match epg_source::Entity::find_by_id(source_id).one(&state.db).await {
+        Ok(Some(src)) => src,
+        _ => return (StatusCode::NOT_FOUND, Json(json!({"error": "Source not found"}))),
+    };
+
+    if let Some(url) = source.url.clone() {
+        let db_clone = state.db.clone();
+        tokio::spawn(async move {
+            if let Err(e) = epg::refresh_all_guides(&db_clone, &url, source_id).await {
+                eprintln!("Failed to parse EPG Task: {}", e);
+            }
+        });
+        (StatusCode::ACCEPTED, Json(json!({"status": "EPG refresh task started"})))
+    } else {
+        (StatusCode::BAD_REQUEST, Json(json!({"error": "No server URL"})))
+    }
+}
 
 #[cfg(test)]
 mod tests {
