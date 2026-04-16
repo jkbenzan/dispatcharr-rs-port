@@ -93,20 +93,39 @@ pub async fn login(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<LoginRequest>,
 ) -> Result<Json<Value>, StatusCode> {
-    let user = user::Entity::find()
+    println!("🔐 Login attempt for user: '{}'", payload.username);
+
+    let user = match user::Entity::find()
         .filter(user::Column::Username.eq(&payload.username))
         .one(&state.db)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .ok_or(StatusCode::UNAUTHORIZED)?;
+    {
+        Ok(Some(u)) => u,
+        Ok(None) => {
+            println!("❌ User '{}' not found in database", payload.username);
+            return Err(StatusCode::UNAUTHORIZED);
+        }
+        Err(e) => {
+            println!("❌ DB Error during login: {:?}", e);
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    };
 
-    if !verify_password(&user.password, &payload.password) {
+    println!("✅ User found: {}", user.username);
+    
+    let is_valid = verify_password(&user.password, &payload.password);
+    println!("🔑 Password Verify Result: {}", is_valid);
+
+    if !is_valid {
         return Err(StatusCode::UNAUTHORIZED);
     }
 
     if !user.is_active {
+        println!("❌ User is completely inactive!");
         return Err(StatusCode::UNAUTHORIZED);
     }
+
+    println!("🎉 Login Success for {}", user.username);
 
     let token = generate_jwt(&user).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
