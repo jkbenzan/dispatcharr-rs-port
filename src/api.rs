@@ -43,9 +43,14 @@ pub async fn get_core_settings() -> Json<Value> {
 }
 
 use crate::{AppState, auth::{CurrentUser, generate_jwt, verify_password}};
-use crate::entities::{user, channel, m3u_account, epg_source};
-use axum::{extract::State, http::StatusCode};
-use sea_orm::{EntityTrait, QueryFilter, ColumnTrait};
+use crate::entities::{user, channel, m3u_account, epg_source, channel_group, channel_profile, stream};
+use axum::{
+    extract::{Query, State},
+    http::StatusCode,
+    response::IntoResponse,
+    Json,
+};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, ConnectionTrait, Statement, PaginatorTrait};
 use std::sync::Arc;
 
 pub async fn get_current_user(current_user: CurrentUser) -> Json<Value> {
@@ -170,12 +175,48 @@ pub async fn get_channels(State(state): State<Arc<AppState>>) -> Json<Value> {
 
     let mut results = vec![];
     for ch in channels {
-        let mut ch_json = serde_json::to_value(ch).unwrap();
-        // Inject missing M2M array structures so React UI doesn't crash
-        ch_json["channel_profiles"] = json!([]);
-        ch_json["groups"] = json!([]);
-        ch_json["epg_sources"] = json!([]);
-        ch_json["streams"] = json!([]);
+        let mut ch_json = serde_json::to_value(&ch).unwrap();
+        
+        let groups = state.db.query_all(Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            "SELECT channelgroup_id FROM dispatcharr_channels_channel_groups WHERE channel_id = $1",
+            vec![ch.id.into()]
+        )).await.unwrap_or_default();
+        let group_ids: Vec<i64> = groups.into_iter().filter_map(|gr| gr.try_get("", "channelgroup_id").ok()).collect();
+        ch_json["groups"] = json!(group_ids);
+
+        let profiles = state.db.query_all(Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            "SELECT channelprofile_id FROM dispatcharr_channels_channel_channel_profiles WHERE channel_id = $1",
+            vec![ch.id.into()]
+        )).await.unwrap_or_default();
+        let profile_ids: Vec<i64> = profiles.into_iter().filter_map(|pr| pr.try_get("", "channelprofile_id").ok()).collect();
+        ch_json["channel_profiles"] = json!(profile_ids);
+
+        let epg = state.db.query_all(Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            "SELECT epgsource_id FROM dispatcharr_channels_channel_epg_sources WHERE channel_id = $1",
+            vec![ch.id.into()]
+        )).await.unwrap_or_default();
+        let epg_ids: Vec<i64> = epg.into_iter().filter_map(|e| e.try_get("", "epgsource_id").ok()).collect();
+        ch_json["epg_sources"] = json!(epg_ids);
+
+        let stream_links = state.db.query_all(Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            "SELECT stream_id FROM dispatcharr_channels_channelstream WHERE channel_id = $1",
+            vec![ch.id.into()]
+        )).await.unwrap_or_default();
+        
+        let mut streams_arr = vec![];
+        for link in stream_links {
+            if let Ok(stream_id) = link.try_get::<i64>("", "stream_id") {
+                if let Ok(Some(stream_obj)) = stream::Entity::find_by_id(stream_id).one(&state.db).await {
+                    streams_arr.push(stream_obj);
+                }
+            }
+        }
+        ch_json["streams"] = json!(streams_arr);
+
         results.push(ch_json);
     }
 
@@ -197,19 +238,54 @@ pub async fn post_stub() -> Json<Value> {
 
 pub async fn get_useragents() -> Json<Value> { get_paginated_object().await }
 pub async fn get_streamprofiles() -> Json<Value> { get_paginated_object().await }
-pub async fn get_dashboard_stats() -> Json<Value> {
+pub async fn get_dashboard_stats(State(state): State<Arc<AppState>>) -> Json<Value> {
+    let channels_count = channel::Entity::find().count(&state.db).await.unwrap_or(0);
+    let streams_count = stream::Entity::find().count(&state.db).await.unwrap_or(0);
+    let accounts_count = m3u_account::Entity::find().count(&state.db).await.unwrap_or(0);
+    let sources_count = epg_source::Entity::find().count(&state.db).await.unwrap_or(0);
+    
     Json(json!({
-        "channels": 0,
-        "streams": 0,
-        "m3u_accounts": 0,
-        "epg_sources": 0,
-        "active_connections": 0
+        "channels": channels_count,
+        "streams": streams_count,
+        "m3u_accounts": accounts_count,
+        "epg_sources": sources_count,
+        "active_users": 1,
+        "system_health": "Healthy",
+        "cpu_usage": 0,
+        "memory_usage": 0
     }))
 }
 
-// THESE REQUIRE FLAT ARRAYS []
-pub async fn get_channel_groups() -> Json<Value> { get_flat_array().await }
-pub async fn get_profiles() -> Json<Value> { get_flat_array().await }
+pub async fn get_channel_groups(State(state): State<Arc<AppState>>) -> Json<Value> {
+    let results = channel_group::Entity::find().all(&state.db).await.unwrap_or_default();
+    Json(json!({
+        "count": results.len(),
+        "next": null,
+        "previous": null,
+        "results": results
+    }))
+}
+
+pub async fn get_channel_profiles(State(state): State<Arc<AppState>>) -> Json<Value> {
+    let results = channel_profile::Entity::find().all(&state.db).await.unwrap_or_default();
+    Json(json!({
+        "count": results.len(),
+        "next": null,
+        "previous": null,
+        "results": results
+    }))
+}
+
+pub async fn get_streams(State(state): State<Arc<AppState>>) -> Json<Value> {
+    let results = stream::Entity::find().all(&state.db).await.unwrap_or_default();
+    Json(json!({
+        "count": results.len(),
+        "next": null,
+        "previous": null,
+        "results": results
+    }))
+}
+
 pub async fn get_ids_stub() -> Json<Value> { get_flat_array().await }
 
 pub async fn get_m3u_accounts(State(state): State<Arc<AppState>>) -> Json<Value> {

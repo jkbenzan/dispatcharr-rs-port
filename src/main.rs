@@ -77,7 +77,7 @@ async fn main() {
         // --- CHANNELS & M3U ---
         .route("/api/channels/channels/", get(api::get_channels))
         .route("/api/channels/groups/", get(api::get_channel_groups))
-        .route("/api/channels/profiles/", get(api::get_profiles))
+        .route("/api/channels/profiles/", get(api::get_channel_profiles))
         .route("/api/channels/channels/ids/", get(api::get_ids_stub))
         .route("/api/m3u/accounts/", get(api::get_m3u_accounts))
         
@@ -91,7 +91,7 @@ async fn main() {
         .route("/api/channels/streams/ids/", get(api::get_flat_array))
         .route("/api/channels/streams/filter-options/", get(api::get_flat_array))
         .route("/api/channels/dashboard-stats/", get(api::get_dashboard_stats))
-        .route("/api/channels/streams/", get(api::get_paginated_object).post(api::post_stub))
+        .route("/api/channels/streams/", get(api::get_streams).post(api::post_stub))
         .route("/api/core/system-events/", get(api::get_paginated_object))
         .route("/api/core/timezones/", get(api::get_flat_array))
         .route("/api/connect/integrations/", get(api::get_paginated_object))
