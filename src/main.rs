@@ -14,6 +14,9 @@ mod proxy;
 mod api;
 mod entities;
 mod epg;
+mod auth;
+mod m3u;
+mod outputs;
 
 pub struct AppState {
     pub db: DatabaseConnection,
@@ -55,9 +58,9 @@ async fn main() {
         // --- AUTH ---
         .route("/api/accounts/initialize-superuser/", get(api::check_superuser))
         .route("/api/accounts/users/me/", get(api::get_current_user))
-        .route("/api/accounts/token/", post(api::auth_placeholder))
+        .route("/api/accounts/token/", post(api::login))
         .route("/api/accounts/token/refresh/", post(api::refresh_token)) 
-        .route("/api/accounts/auth/logout/", post(api::auth_placeholder))
+        .route("/api/accounts/auth/logout/", post(api::logout))
 
         // --- CORE & SETTINGS ---
         .route("/api/core/version/", get(api::get_core_version))
@@ -77,6 +80,10 @@ async fn main() {
         // --- EPG ---
         .route("/api/epg/sources/", get(api::get_epg_sources))
         .route("/api/epg/epgdata/", get(api::get_epgdata))
+
+        // --- OUTPUTS & PROVISIONING ---
+        .route("/m3u/:token", get(outputs::generate_m3u))
+        .route("/xmltv/:token", get(outputs::generate_xmltv))
 
         // --- SYSTEM & PROXY ---
         .route("/api/config/", get(api::get_config))

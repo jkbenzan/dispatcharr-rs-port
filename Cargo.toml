@@ -14,12 +14,23 @@ tower-http = { version = "0.5", features = ["cors", "fs", "trace"] }
 sea-orm = { version = "0.12", features = [
     "sqlx-postgres", 
     "runtime-tokio-rustls", 
-    "macros"
+    "macros",
+    "with-chrono",
+    "with-json",
+    "with-uuid"
 ] }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+
+# Authentication
+jsonwebtoken = "9.3"
+djangohashers = "1.6"
+
+# Parsing (M3U & XMLTV)
+quick-xml = "0.31"
+regex = "1.10"
 
 # Networking & Streaming
 reqwest = { version = "0.12", features = ["json", "stream"] }
