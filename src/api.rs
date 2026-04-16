@@ -1,4 +1,4 @@
-use axum::{extract::State, Json};
+use axum::{extract::State, http::StatusCode, Json};
 use serde::{Serialize, Deserialize};
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -10,6 +10,11 @@ pub struct Channel {
     pub name: String,
     pub stream_url: Option<String>,
     pub logo: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct RefreshTokenRequest {
+    pub refresh: String,
 }
 
 pub async fn get_core_version() -> Json<Value> {
@@ -50,6 +55,25 @@ pub async fn auth_placeholder() -> Json<Value> {
             "is_superuser": true
         }
     }))
+}
+
+pub async fn refresh_token(
+    State(_state): State<Arc<AppState>>,
+    Json(payload): Json<RefreshTokenRequest>,
+) -> Result<Json<Value>, StatusCode> {
+    // 1. In a production environment, you would verify the refresh token cryptographically
+    // (e.g., using a library like `jsonwebtoken`) and ensure it hasn't expired.
+    if payload.refresh.is_empty() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    // 2. You would then typically look up the user associated with this refresh token
+    // in the database using `state.db` to ensure the user is still active.
+
+    // 3. Finally, you'd generate and return a new access token.
+    Ok(Json(json!({
+        "access": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.refreshed-access-token"
+    })))
 }
 
 pub async fn get_core_settings() -> Json<Value> {
