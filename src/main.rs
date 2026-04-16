@@ -52,7 +52,7 @@ async fn main() {
         .not_found_service(ServeFile::new("dist/index.html"));
 
     let app = Router::new()
-        // Auth Handlers
+        // --- AUTH ---
         .route("/api/accounts/initialize-superuser/", get(api::check_superuser))
         .route("/api/accounts/users/me/", get(api::get_current_user))
         .route("/api/accounts/token/", post(api::auth_placeholder))
@@ -63,18 +63,22 @@ async fn main() {
         .route("/api/core/version/", get(api::get_core_version))
         .route("/api/core/settings/", get(api::get_core_settings))
         .route("/api/core/settings/env/", get(api::get_env_settings))
-        .route("/api/core/notifications/", get(api::get_notifications)) // Added missing route
+        .route("/api/core/notifications/", get(api::get_notifications))
+        .route("/api/core/useragents/", get(api::get_useragents))
+        .route("/api/core/streamprofiles/", get(api::get_streamprofiles))
 
-        // --- CHANNELS, M3U & EPG ---
+        // --- CHANNELS & M3U ---
         .route("/api/channels/channels/", get(api::get_channels))
         .route("/api/channels/groups/", get(api::get_channel_groups))
         .route("/api/channels/profiles/", get(api::get_profiles))
         .route("/api/channels/channels/ids/", get(api::get_ids_stub))
         .route("/api/m3u/accounts/", get(api::get_m3u_accounts))
+        
+        // --- EPG ---
         .route("/api/epg/sources/", get(api::get_epg_sources))
-        .route("/api/epg/epgdata/", get(api::get_epg_sources))
+        .route("/api/epg/epgdata/", get(api::get_epgdata))
 
-        // System & Proxy
+        // --- SYSTEM & PROXY ---
         .route("/api/config/", get(api::get_config))
         .route("/ws/", get(ws_handler))
         .route("/play/:token/:channel_id", get(proxy::handle_proxy))

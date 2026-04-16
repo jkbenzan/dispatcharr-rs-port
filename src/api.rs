@@ -96,21 +96,19 @@ pub async fn get_config() -> Json<Value> {
 // STRICT ENDPOINT MAPPINGS
 // --------------------------------------------------------
 
-pub async fn get_channels() -> Json<Value> {
-    get_paginated_object().await
-}
+// THESE REQUIRE DRF PAGINATED OBJECTS {"count": 0, "results": []}
+pub async fn get_channels() -> Json<Value> { get_paginated_object().await }
+pub async fn get_notifications() -> Json<Value> { get_paginated_object().await }
+pub async fn get_useragents() -> Json<Value> { get_paginated_object().await }
+pub async fn get_streamprofiles() -> Json<Value> { get_paginated_object().await }
 
-// Routes called by fetchChannelGroups, fetchChannelProfiles, fetchPlaylists, fetchEPGs
+// THESE REQUIRE FLAT ARRAYS []
 pub async fn get_channel_groups() -> Json<Value> { get_flat_array().await }
 pub async fn get_profiles() -> Json<Value> { get_flat_array().await }
 pub async fn get_ids_stub() -> Json<Value> { get_flat_array().await }
 pub async fn get_m3u_accounts() -> Json<Value> { get_flat_array().await }
 pub async fn get_epg_sources() -> Json<Value> { get_flat_array().await }
-
-// Route called by getNotifications
-pub async fn get_notifications() -> Json<Value> {
-    get_paginated_object().await
-}
+pub async fn get_epgdata() -> Json<Value> { get_flat_array().await }
 
 #[cfg(test)]
 mod tests {
