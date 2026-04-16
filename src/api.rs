@@ -49,7 +49,10 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, ConnectionTrait, Statement, PaginatorTrait};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, 
+    ConnectionTrait, Statement, PaginatorTrait, QuerySelect, QueryOrder
+};
 use std::sync::Arc;
 
 pub async fn get_current_user(current_user: CurrentUser) -> Json<Value> {
@@ -166,11 +169,24 @@ pub async fn get_config() -> Json<Value> {
 // --------------------------------------------------------
 
 // THESE REQUIRE DRF PAGINATED OBJECTS {"count": 0, "results": []}
-pub async fn get_channels(State(state): State<Arc<AppState>>) -> Json<Value> {
-    let channels = match channel::Entity::find().all(&state.db).await {
-        Ok(c) => c,
-        Err(_) => vec![],
-    };
+pub async fn get_channels(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Json<Value> {
+    let page: u64 = params.get("page").and_then(|p| p.parse().ok()).unwrap_or(1);
+    let page_size: u64 = 50; 
+    let offset = (page.saturating_sub(1)) * page_size;
+
+    let count = channel::Entity::find().count(&state.db).await.unwrap_or(0);
+
+    let channels = match channel::Entity::find()
+        .order_by_asc(channel::Column::Id)
+        .limit(page_size)
+        .offset(offset)
+        .all(&state.db).await {
+            Ok(c) => c,
+            Err(_) => vec![],
+        };
 
     let mut results = vec![];
     for ch in channels {
@@ -219,10 +235,15 @@ pub async fn get_channels(State(state): State<Arc<AppState>>) -> Json<Value> {
         results.push(ch_json);
     }
 
+    let has_next = (offset + page_size) < count;
+    let next_page = if has_next { Some(format!("/api/channels/channels/?page={}", page + 1)) } else { None };
+    let prev_page = if page > 1 { Some(format!("/api/channels/channels/?page={}", page - 1)) } else { None };
+
+    // Important: React heavily relies on exact counts to build datagrid pagination.
     Json(json!({
-        "count": results.len(),
-        "next": null,
-        "previous": null,
+        "count": count,
+        "next": next_page,
+        "previous": prev_page,
         "results": results
     }))
 }
@@ -275,12 +296,31 @@ pub async fn get_channel_profiles(State(state): State<Arc<AppState>>) -> Json<Va
     }))
 }
 
-pub async fn get_streams(State(state): State<Arc<AppState>>) -> Json<Value> {
-    let results = stream::Entity::find().all(&state.db).await.unwrap_or_default();
+pub async fn get_streams(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Json<Value> {
+    let page: u64 = params.get("page").and_then(|p| p.parse().ok()).unwrap_or(1);
+    let page_size: u64 = 50; 
+    let offset = (page.saturating_sub(1)) * page_size;
+
+    let count = stream::Entity::find().count(&state.db).await.unwrap_or(0);
+
+    let results = stream::Entity::find()
+        .order_by_asc(stream::Column::Id)
+        .limit(page_size)
+        .offset(offset)
+        .all(&state.db).await.unwrap_or_default();
+
+    let has_next = (offset + page_size) < count;
+    let next_page = if has_next { Some(format!("/api/channels/streams/?page={}", page + 1)) } else { None };
+    let prev_page = if page > 1 { Some(format!("/api/channels/streams/?page={}", page - 1)) } else { None };
+
+    // Standard paginator string mapping for DataGrids
     Json(json!({
-        "count": results.len(),
-        "next": null,
-        "previous": null,
+        "count": count,
+        "next": next_page,
+        "previous": prev_page,
         "results": results
     }))
 }
