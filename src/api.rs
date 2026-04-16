@@ -48,7 +48,6 @@ use axum::{
     extract::{Query, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, ConnectionTrait, Statement, PaginatorTrait};
 use std::sync::Arc;
