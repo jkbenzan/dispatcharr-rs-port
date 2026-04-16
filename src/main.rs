@@ -64,18 +64,14 @@ async fn main() {
         .route("/api/core/settings/", get(api::get_core_settings))
         .route("/api/core/settings/env/", get(api::get_env_settings))
 
-        // REQUIRES OBJECT WRAPPER (Fixes .filter() on undefined)
-        .route("/api/core/notifications/", get(api::get_paginated_object))
-        .route("/api/channels/channels/ids/", get(api::get_paginated_object))
-        .route("/api/core/useragents/", get(api::get_paginated_object))
-        .route("/api/core/streamprofiles/", get(api::get_paginated_object))
-
-        // REQUIRES FLAT ARRAY (Fixes .reduce() is not a function)
-        .route("/api/channels/groups/", get(api::get_flat_array))
-        .route("/api/channels/profiles/", get(api::get_flat_array))
-        .route("/api/m3u/accounts/", get(api::get_flat_array))
-        .route("/api/epg/sources/", get(api::get_flat_array))
-        .route("/api/epg/epgdata/", get(api::get_flat_array))
+        // --- CHANNELS, M3U & EPG ---
+        .route("/api/channels/channels/", get(api::get_channels))
+        .route("/api/channels/groups/", get(api::get_channel_groups))
+        .route("/api/channels/profiles/", get(api::get_profiles))
+        .route("/api/channels/channels/ids/", get(api::get_ids_stub))
+        .route("/api/m3u/accounts/", get(api::get_m3u_accounts))
+        .route("/api/epg/sources/", get(api::get_epg_sources))
+        .route("/api/epg/epgdata/", get(api::get_epg_sources))
 
         // System & Proxy
         .route("/api/config/", get(api::get_config))
