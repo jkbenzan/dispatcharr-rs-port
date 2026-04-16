@@ -175,6 +175,7 @@ pub async fn get_channels(State(state): State<Arc<AppState>>) -> Json<Value> {
         ch_json["channel_profiles"] = json!([]);
         ch_json["groups"] = json!([]);
         ch_json["epg_sources"] = json!([]);
+        ch_json["streams"] = json!([]);
         results.push(ch_json);
     }
 
