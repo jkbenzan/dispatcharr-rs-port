@@ -35,7 +35,11 @@ async fn handle_socket(mut socket: WebSocket) {
 
 #[tokio::main]
 async fn main() {
-    println!("🚀 BACKEND STARTING...");
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::DEBUG)
+        .init();
+
+    tracing::info!("🚀 BACKEND STARTING...");
     dotenvy::dotenv().ok();
     
     let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL missing");
@@ -98,13 +102,14 @@ async fn main() {
         .route("/ws/", get(ws_handler))
         .route("/play/:token/:channel_id", get(proxy::handle_proxy))
         
-        // Serve the compiled React frontend
+        // Serve the compiled React frontend for non-API routes
         .fallback_service(spa_service)
         .layer(CorsLayer::permissive())
+        .layer(tower_http::trace::TraceLayer::new_for_http())
         .with_state(state);
 
     let addr = "0.0.0.0:8080";
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    println!("🚀 LISTENING ON {}", addr);
+    tracing::info!("🚀 LISTENING ON {}", addr);
     axum::serve(listener, app).await.unwrap();
 }
