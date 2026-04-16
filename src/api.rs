@@ -80,12 +80,36 @@ pub async fn auth_placeholder() -> Json<Value> {
     }))
 }
 
+pub async fn refresh_token() -> Json<Value> {
+    auth_placeholder().await
+}
+
 pub async fn get_env_settings() -> Json<Value> {
     Json(json!({ "DEBUG": "false", "ENV": "production" }))
 }
 
 pub async fn get_config() -> Json<Value> {
     Json(json!({ "auth_enabled": false, "theme": "dark", "base_url": "/" }))
+}
+
+// --------------------------------------------------------
+// STRICT ENDPOINT MAPPINGS
+// --------------------------------------------------------
+
+pub async fn get_channels() -> Json<Value> {
+    get_paginated_object().await
+}
+
+// Routes called by fetchChannelGroups, fetchChannelProfiles, fetchPlaylists, fetchEPGs
+pub async fn get_channel_groups() -> Json<Value> { get_flat_array().await }
+pub async fn get_profiles() -> Json<Value> { get_flat_array().await }
+pub async fn get_ids_stub() -> Json<Value> { get_flat_array().await }
+pub async fn get_m3u_accounts() -> Json<Value> { get_flat_array().await }
+pub async fn get_epg_sources() -> Json<Value> { get_flat_array().await }
+
+// Route called by getNotifications
+pub async fn get_notifications() -> Json<Value> {
+    get_paginated_object().await
 }
 
 #[cfg(test)]
@@ -99,34 +123,5 @@ mod tests {
 
         assert_eq!(body["version"], "0.22.1");
         assert_eq!(body["name"], "Dispatcharr");
-
     }
-}
-
-pub async fn refresh_token() -> Json<Value> {
-    auth_placeholder().await
-}
-
-pub async fn get_channels() -> Json<Value> {
-    get_paginated_object().await
-}
-
-pub async fn get_channel_groups() -> Json<Value> {
-    get_paginated_object().await
-}
-
-pub async fn get_profiles() -> Json<Value> {
-    get_flat_array().await
-}
-
-pub async fn get_ids_stub() -> Json<Value> {
-    get_flat_array().await
-}
-
-pub async fn get_m3u_accounts() -> Json<Value> {
-    get_paginated_object().await
-}
-
-pub async fn get_epg_sources() -> Json<Value> {
-    get_paginated_object().await
 }
