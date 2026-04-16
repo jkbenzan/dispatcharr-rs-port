@@ -27,7 +27,7 @@ pub async fn handle_proxy(
 
     // Convert the reqwest bytes_stream into an Axum-compatible Body stream
     let stream = resp.bytes_stream().map(|result| {
-        result.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+        result.map_err(std::io::Error::other)
     });
 
     Ok(Response::builder()
