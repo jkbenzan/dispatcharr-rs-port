@@ -91,3 +91,23 @@ pub async fn get_config() -> Json<Value> {
 pub async fn logout_stub() -> Json<Value> {
     Json(json!({ "detail": "Successfully logged out." }))
 }
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_get_current_user() {
+        let response = get_current_user().await;
+        let Json(value) = response;
+
+        assert_eq!(value["id"], 1);
+        assert_eq!(value["username"], "admin");
+        assert_eq!(value["email"], "admin@example.com");
+        assert_eq!(value["is_superuser"], true);
+        assert_eq!(value["is_active"], true);
+        assert_eq!(value["is_staff"], true);
+        assert_eq!(value["permissions"][0], "*");
+        assert_eq!(value["profile"]["theme"], "dark");
+        assert_eq!(value["profile"]["language"], "en");
+    }
+}
