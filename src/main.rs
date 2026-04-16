@@ -87,7 +87,7 @@ async fn main() {
 
         // --- DASHBOARD MISSING DEPENDENCIES ---
         .route("/api/accounts/users/", get(api::get_paginated_object))
-        .route("/api/channels/logos/", get(api::get_paginated_object))
+        .route("/api/channels/logos/", get(api::get_flat_array))
         .route("/api/channels/streams/ids/", get(api::get_flat_array))
         .route("/api/channels/streams/filter-options/", get(api::get_flat_array))
         .route("/api/channels/dashboard-stats/", get(api::get_dashboard_stats))
