@@ -91,3 +91,84 @@ pub async fn get_config() -> Json<Value> {
 pub async fn logout_stub() -> Json<Value> {
     Json(json!({ "detail": "Successfully logged out." }))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[tokio::test]
+    async fn test_get_flat_array() {
+        let Json(val) = get_flat_array().await;
+        assert_eq!(val, json!([]));
+    }
+
+    #[tokio::test]
+    async fn test_get_paginated_object() {
+        let Json(val) = get_paginated_object().await;
+        assert_eq!(val["count"], 0);
+        assert_eq!(val["results"], json!([]));
+        assert_eq!(val["next"], serde_json::Value::Null);
+        assert_eq!(val["previous"], serde_json::Value::Null);
+    }
+
+    #[tokio::test]
+    async fn test_get_core_settings() {
+        let Json(val) = get_core_settings().await;
+        assert_eq!(val["app_name"], "Dispatcharr");
+        assert_eq!(val["proxy_enabled"], true);
+        assert_eq!(val["version"], "0.22.1");
+        assert_eq!(val["channel_profiles"], json!([]));
+    }
+
+    #[tokio::test]
+    async fn test_get_current_user() {
+        let Json(val) = get_current_user().await;
+        assert_eq!(val["username"], "admin");
+        assert_eq!(val["is_superuser"], true);
+        assert_eq!(val["email"], "admin@example.com");
+    }
+
+    #[tokio::test]
+    async fn test_get_core_version() {
+        let Json(val) = get_core_version().await;
+        assert_eq!(val["version"], "0.22.1");
+        assert_eq!(val["name"], "Dispatcharr");
+    }
+
+    #[tokio::test]
+    async fn test_check_superuser() {
+        let Json(val) = check_superuser().await;
+        assert_eq!(val["initialized"], true);
+    }
+
+    #[tokio::test]
+    async fn test_auth_placeholder() {
+        let Json(val) = auth_placeholder().await;
+        assert!(val.get("access").is_some());
+        assert!(val.get("refresh").is_some());
+        assert_eq!(val["user"]["username"], "admin");
+        assert_eq!(val["user"]["id"], 1);
+    }
+
+    #[tokio::test]
+    async fn test_get_env_settings() {
+        let Json(val) = get_env_settings().await;
+        assert_eq!(val["ENV"], "production");
+        assert_eq!(val["DEBUG"], "false");
+    }
+
+    #[tokio::test]
+    async fn test_get_config() {
+        let Json(val) = get_config().await;
+        assert_eq!(val["theme"], "dark");
+        assert_eq!(val["auth_enabled"], false);
+        assert_eq!(val["base_url"], "/");
+    }
+
+    #[tokio::test]
+    async fn test_logout_stub() {
+        let Json(val) = logout_stub().await;
+        assert_eq!(val["detail"], "Successfully logged out.");
+    }
+}
