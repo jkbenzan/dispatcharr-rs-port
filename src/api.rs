@@ -164,15 +164,25 @@ pub async fn get_channels(State(state): State<Arc<AppState>>) -> Json<Value> {
         Err(_) => vec![],
     };
 
+    let mut results = vec![];
+    for ch in channels {
+        let mut ch_json = serde_json::to_value(ch).unwrap();
+        // Inject missing M2M array structures so React UI doesn't crash
+        ch_json["channel_profiles"] = json!([]);
+        ch_json["groups"] = json!([]);
+        ch_json["epg_sources"] = json!([]);
+        results.push(ch_json);
+    }
+
     Json(json!({
-        "count": channels.len(),
+        "count": results.len(),
         "next": null,
         "previous": null,
-        "results": channels
+        "results": results
     }))
 }
 
-pub async fn get_notifications() -> Json<Value> { get_paginated_object().await }
+pub async fn get_notifications() -> Json<Value> { get_flat_array().await }
 pub async fn get_useragents() -> Json<Value> { get_paginated_object().await }
 pub async fn get_streamprofiles() -> Json<Value> { get_paginated_object().await }
 
