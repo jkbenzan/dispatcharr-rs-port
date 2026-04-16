@@ -80,3 +80,18 @@ pub async fn get_ids_stub() -> Json<Value> { Json(json!([])) }
 pub async fn get_config() -> Json<Value> {
     Json(json!({ "auth_enabled": false, "theme": "dark", "base_url": "/" }))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_get_core_version() {
+        let response = get_core_version().await;
+        let body = response.0;
+
+        assert_eq!(body["version"], "0.22.1");
+        assert_eq!(body["name"], "Dispatcharr");
+        assert_eq!(body["description"], "Rust Backend");
+    }
+}
