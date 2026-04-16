@@ -44,7 +44,7 @@ pub async fn get_core_settings() -> Json<Value> {
 
 use crate::{AppState, auth::{CurrentUser, generate_jwt, verify_password}};
 use crate::entities::{user, channel, m3u_account, epg_source};
-use axum::{extract::State, http::StatusCode};
+use axum::{extract::State, Json, http::StatusCode};
 use sea_orm::{EntityTrait, QueryFilter, ColumnTrait};
 use std::sync::Arc;
 
@@ -80,7 +80,7 @@ pub async fn check_superuser(State(state): State<Arc<AppState>>) -> Result<Json<
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .is_some();
 
-    Ok(Json(json!({ "initialized": has_superuser })))
+    Json(json!({ "initialized": has_superuser }))
 }
 
 #[derive(serde::Deserialize)]

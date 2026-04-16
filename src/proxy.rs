@@ -5,7 +5,7 @@ use axum::{
     response::Response,
 };
 use futures_util::StreamExt; 
-use sea_orm::EntityTrait;
+use sea_orm::{EntityTrait, QueryFilter, ColumnTrait};
 use std::sync::Arc;
 use crate::{AppState, entities::channel};
 use jsonwebtoken::{decode, DecodingKey, Validation};

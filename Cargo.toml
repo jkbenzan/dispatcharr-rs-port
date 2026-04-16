@@ -31,7 +31,6 @@ djangohashers = "1.6"
 # Parsing (M3U & XMLTV)
 quick-xml = "0.31"
 regex = "1.10"
-uuid = { version = "1.8", features = ["v4"] }
 
 # Networking & Streaming
 reqwest = { version = "0.12", features = ["json", "stream"] }

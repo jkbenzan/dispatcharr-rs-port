@@ -1,6 +1,6 @@
 use crate::entities::channel;
 use regex::Regex;
-use sea_orm::{DatabaseConnection, Set};
+use sea_orm::{ActiveModelTrait, DatabaseConnection, Set};
 use std::error::Error;
 use uuid::Uuid;
 
