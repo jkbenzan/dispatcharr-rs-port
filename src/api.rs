@@ -86,6 +86,17 @@ pub async fn get_epg_sources() -> Json<Value> { Json(json!([])) }
 pub async fn get_notifications() -> Json<Value> { Json(json!([])) }
 pub async fn get_ids_stub() -> Json<Value> { Json(json!([])) }
 
+pub async fn get_channels() -> Json<Vec<Channel>> {
+    Json(vec![
+        Channel {
+            id: 1,
+            name: "Example Channel".to_string(),
+            stream_url: Some("http://example.com/stream/1".to_string()),
+            logo: None,
+        }
+    ])
+}
+
 pub async fn get_config() -> Json<Value> {
     Json(json!({ "auth_enabled": false, "theme": "dark", "base_url": "/" }))
 }

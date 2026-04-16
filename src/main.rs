@@ -66,6 +66,7 @@ async fn main() {
         .route("/api/core/useragents/", get(api::get_profiles))
 
         // --- CHANNELS, M3U & EPG ---
+        .route("/api/channels/channels/", get(api::get_channels))
         .route("/api/channels/groups/", get(api::get_channel_groups))
         .route("/api/channels/profiles/", get(api::get_profiles))
         .route("/api/channels/channels/ids/", get(api::get_ids_stub))
