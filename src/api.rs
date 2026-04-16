@@ -186,7 +186,14 @@ pub async fn get_channels(State(state): State<Arc<AppState>>) -> Json<Value> {
     }))
 }
 
-pub async fn get_notifications() -> Json<Value> { get_flat_array().await }
+pub async fn get_notifications() -> Json<Value> { 
+    Json(json!({ "notifications": [] }))
+}
+
+pub async fn post_stub() -> Json<Value> {
+    Json(json!({ "id": 9999, "success": true, "message": "created mock" }))
+}
+
 pub async fn get_useragents() -> Json<Value> { get_paginated_object().await }
 pub async fn get_streamprofiles() -> Json<Value> { get_paginated_object().await }
 pub async fn get_dashboard_stats() -> Json<Value> {
