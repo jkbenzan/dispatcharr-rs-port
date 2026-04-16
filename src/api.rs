@@ -57,6 +57,10 @@ pub async fn get_current_user(current_user: CurrentUser) -> Json<Value> {
         "is_superuser": u.is_superuser,
         "is_active": u.is_active,
         "is_staff": u.is_staff,
+        "user_level": u.user_level,
+        "stream_limit": u.stream_limit,
+        "channel_profiles": [],
+        "hide_adult_content": false,
         "permissions": ["*"], 
         "profile": u.custom_properties.unwrap_or(json!({
             "theme": "dark",
@@ -182,7 +186,7 @@ pub async fn get_channels(State(state): State<Arc<AppState>>) -> Json<Value> {
     }))
 }
 
-pub async fn get_notifications() -> Json<Value> { get_flat_array().await }
+pub async fn get_notifications() -> Json<Value> { get_paginated_object().await }
 pub async fn get_useragents() -> Json<Value> { get_paginated_object().await }
 pub async fn get_streamprofiles() -> Json<Value> { get_paginated_object().await }
 
