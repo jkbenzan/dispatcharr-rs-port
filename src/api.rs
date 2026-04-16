@@ -189,6 +189,15 @@ pub async fn get_channels(State(state): State<Arc<AppState>>) -> Json<Value> {
 pub async fn get_notifications() -> Json<Value> { get_paginated_object().await }
 pub async fn get_useragents() -> Json<Value> { get_paginated_object().await }
 pub async fn get_streamprofiles() -> Json<Value> { get_paginated_object().await }
+pub async fn get_dashboard_stats() -> Json<Value> {
+    Json(json!({
+        "channels": 0,
+        "streams": 0,
+        "m3u_accounts": 0,
+        "epg_sources": 0,
+        "active_connections": 0
+    }))
+}
 
 // THESE REQUIRE FLAT ARRAYS []
 pub async fn get_channel_groups() -> Json<Value> { get_flat_array().await }
