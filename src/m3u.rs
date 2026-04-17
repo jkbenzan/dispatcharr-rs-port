@@ -1,4 +1,4 @@
-use crate::entities::{stream, m3u_account};
+use crate::entities::stream;
 use regex::Regex;
 use sea_orm::{DatabaseConnection, Set, EntityTrait, QueryFilter, ColumnTrait};
 use std::collections::HashSet;

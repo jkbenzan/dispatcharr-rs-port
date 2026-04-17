@@ -52,7 +52,7 @@ use axum::{
     response::IntoResponse,
 };
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, 
+    ColumnTrait, EntityTrait, QueryFilter,
     ConnectionTrait, Statement, PaginatorTrait, QuerySelect, QueryOrder
 };
 use std::sync::Arc;

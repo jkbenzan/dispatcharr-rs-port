@@ -36,7 +36,8 @@ pub async fn refresh_all_guides(db: &DatabaseConnection, url: &str, source_id: i
     loop {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => {
-                let name = std::str::from_utf8(e.name().as_ref()).unwrap_or("");
+                let qname = e.name();
+                let name = std::str::from_utf8(qname.into_inner()).unwrap_or("");
                 current_tag = name.to_string();
 
                 match name {
@@ -92,7 +93,8 @@ pub async fn refresh_all_guides(db: &DatabaseConnection, url: &str, source_id: i
                 }
             }
             Ok(Event::Empty(ref e)) => {
-                let name = std::str::from_utf8(e.name().as_ref()).unwrap_or("");
+                let qname = e.name();
+                let name = std::str::from_utf8(qname.into_inner()).unwrap_or("");
                 if name == "icon" && in_channel {
                     for attr in e.attributes() {
                         if let Ok(a) = attr {
@@ -132,7 +134,8 @@ pub async fn refresh_all_guides(db: &DatabaseConnection, url: &str, source_id: i
                 }
             }
             Ok(Event::End(ref e)) => {
-                let name = std::str::from_utf8(e.name().as_ref()).unwrap_or("");
+                let qname = e.name();
+                let name = std::str::from_utf8(qname.into_inner()).unwrap_or("");
                 match name {
                     "channel" => {
                         in_channel = false;
