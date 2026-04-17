@@ -146,7 +146,7 @@ pub async fn refresh_all_guides(db: &DatabaseConnection, url: &str, source_id: i
                 match name {
                     "channel" => {
                         in_channel = false;
-                        if let Some(mut ch) = current_channel.take() {
+                        if let Some(ch) = current_channel.take() {
                             if let sea_orm::ActiveValue::Set(Some(tvg)) = ch.tvg_id.clone() {
                                 if !epg_channel_map.contains_key(&tvg) {
                                     epg_channel_map.insert(tvg, 0); // Mark processed
