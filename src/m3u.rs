@@ -19,7 +19,13 @@ pub async fn fetch_and_parse_m3u(
     }
 
     println!("Fetching M3U from {}", url);
-    let body = reqwest::get(url).await?.text().await?;
+    let client = reqwest::Client::builder()
+        .user_agent("Dispatcharr/1.0")
+        .timeout(std::time::Duration::from_secs(60))
+        .local_address(std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)))
+        .build()?;
+
+    let body = client.get(url).send().await?.text().await?;
 
     let existing_records = stream::Entity::find()
         .filter(stream::Column::M3uAccountId.eq(account_id))
