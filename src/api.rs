@@ -467,7 +467,7 @@ pub async fn add_m3u_account(
         is_active: sea_orm::Set(true),
         status: sea_orm::Set("pending".to_string()),
         created_at: sea_orm::Set(chrono::Utc::now().into()),
-        updated_at: sea_orm::Set(chrono::Utc::now().into()),
+        updated_at: sea_orm::Set(Some(chrono::Utc::now().into())),
         stale_stream_days: sea_orm::Set(7),
         ..Default::default()
     };
@@ -639,6 +639,90 @@ pub async fn refresh_epg_source(
     } else {
         (StatusCode::BAD_REQUEST, Json(json!({"error": "No server URL"})))
     }
+}
+
+pub async fn update_m3u_account(
+    State(state): State<Arc<AppState>>,
+    Path(account_id): Path<i64>,
+    Json(payload): Json<Value>,
+) -> impl IntoResponse {
+    let acc = match m3u_account::Entity::find_by_id(account_id).one(&state.db).await {
+        Ok(Some(a)) => a,
+        _ => return (StatusCode::NOT_FOUND, Json(json!({"error": "Account not found"}))),
+    };
+    
+    let mut active: m3u_account::ActiveModel = acc.clone().into();
+    
+    if let Some(is_active) = payload.get("is_active").and_then(|v| v.as_bool()) {
+        active.is_active = sea_orm::Set(is_active);
+    }
+    
+    if let Some(name) = payload.get("name").and_then(|v| v.as_str()) {
+        active.name = sea_orm::Set(name.to_string());
+    }
+    
+    if let Some(url) = payload.get("server_url").and_then(|v| v.as_str()) {
+        active.server_url = sea_orm::Set(Some(url.to_string()));
+    }
+    
+    if let Some(user) = payload.get("username").and_then(|v| v.as_str()) {
+        active.username = sea_orm::Set(Some(user.to_string()));
+    }
+    
+    if let Some(pass) = payload.get("password").and_then(|v| v.as_str()) {
+        active.password = sea_orm::Set(Some(pass.to_string()));
+    }
+    
+    if let Ok(updated) = active.update(&state.db).await {
+        let mut acc_json = serde_json::to_value(&updated).unwrap();
+        acc_json["profiles"] = json!([]);
+        acc_json["filters"] = json!([]);
+        acc_json["groups"] = json!([]);
+        acc_json["channel_groups"] = json!(get_channel_groups_for_account(updated.id, &state.db).await);
+        acc_json["streams"] = json!([]);
+        (StatusCode::OK, Json(acc_json))
+    } else {
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Failed to update"})))
+    }
+}
+
+pub async fn update_m3u_group_settings(
+    State(state): State<Arc<AppState>>,
+    Path(account_id): Path<i64>,
+    Json(payload): Json<Value>,
+) -> impl IntoResponse {
+    use crate::entities::channel_group_m3u_account;
+    
+    if let Some(group_settings) = payload.get("group_settings").and_then(|v| v.as_array()) {
+        for setting in group_settings {
+            let cg_id = setting.get("channel_group").and_then(|v| {
+                if let Some(obj) = v.as_object() {
+                    obj.get("id").and_then(|i| i.as_i64())
+                } else {
+                    v.as_i64()
+                }
+            });
+            
+            if let Some(cg_id) = cg_id {
+                if let Ok(Some(mapping)) = channel_group_m3u_account::Entity::find()
+                    .filter(channel_group_m3u_account::Column::M3uAccountId.eq(account_id))
+                    .filter(channel_group_m3u_account::Column::ChannelGroupId.eq(cg_id as i32))
+                    .one(&state.db).await 
+                {
+                    let mut active: channel_group_m3u_account::ActiveModel = mapping.into();
+                    if let Some(enabled) = setting.get("enabled").and_then(|v| v.as_bool()) {
+                        active.enabled = sea_orm::Set(enabled);
+                    }
+                    if let Some(auto_sync) = setting.get("auto_channel_sync").and_then(|v| v.as_bool()) {
+                        active.auto_channel_sync = sea_orm::Set(auto_sync);
+                    }
+                    let _ = active.update(&state.db).await;
+                }
+            }
+        }
+    }
+    
+    (StatusCode::OK, Json(json!({"success": true})))
 }
 
 #[cfg(test)]
