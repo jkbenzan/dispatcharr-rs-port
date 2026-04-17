@@ -334,7 +334,22 @@ pub async fn get_m3u_accounts(State(state): State<Arc<AppState>>) -> Json<Value>
         Ok(a) => a,
         Err(_) => vec![],
     };
-    Json(json!(accounts))
+    Json(json!({
+        "count": accounts.len(),
+        "next": null,
+        "previous": null,
+        "results": accounts
+    }))
+}
+
+pub async fn get_m3u_account(
+    State(state): State<Arc<AppState>>,
+    Path(account_id): Path<i64>,
+) -> impl IntoResponse {
+    match m3u_account::Entity::find_by_id(account_id).one(&state.db).await {
+        Ok(Some(acc)) => (StatusCode::OK, Json(json!(acc))),
+        _ => (StatusCode::NOT_FOUND, Json(json!({"error": "Not Found"}))),
+    }
 }
 
 pub async fn get_epg_sources(State(state): State<Arc<AppState>>) -> Json<Value> {
@@ -342,8 +357,24 @@ pub async fn get_epg_sources(State(state): State<Arc<AppState>>) -> Json<Value> 
         Ok(s) => s,
         Err(_) => vec![],
     };
-    Json(json!(sources))
+    Json(json!({
+        "count": sources.len(),
+        "next": null,
+        "previous": null,
+        "results": sources
+    }))
 }
+
+pub async fn get_epg_source(
+    State(state): State<Arc<AppState>>,
+    Path(source_id): Path<i64>,
+) -> impl IntoResponse {
+    match epg_source::Entity::find_by_id(source_id).one(&state.db).await {
+        Ok(Some(src)) => (StatusCode::OK, Json(json!(src))),
+        _ => (StatusCode::NOT_FOUND, Json(json!({"error": "Not Found"}))),
+    }
+}
+
 
 pub async fn get_epgdata() -> Json<Value> { get_flat_array().await }
 
