@@ -469,6 +469,9 @@ pub async fn add_m3u_account(
         created_at: sea_orm::Set(chrono::Utc::now().into()),
         updated_at: sea_orm::Set(Some(chrono::Utc::now().into())),
         stale_stream_days: sea_orm::Set(7),
+        locked: sea_orm::Set(false),
+        priority: sea_orm::Set(1),
+        refresh_interval: sea_orm::Set(24),
         ..Default::default()
     };
 
