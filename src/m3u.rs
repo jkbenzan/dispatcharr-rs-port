@@ -13,7 +13,7 @@ pub async fn fetch_and_parse_m3u(
 ) -> Result<(), Box<dyn Error>> {
     if let Ok(Some(acc)) = m3u_account::Entity::find_by_id(account_id).one(db).await {
         let mut active: m3u_account::ActiveModel = acc.into();
-        active.status = Set("Updating".to_string());
+        active.status = Set("fetching".to_string());
         active.last_message = Set(Some("Downloading & parsing M3U...".to_string()));
         let _ = active.update(db).await;
     }
@@ -89,7 +89,7 @@ pub async fn fetch_and_parse_m3u(
 
     if let Ok(Some(acc)) = m3u_account::Entity::find_by_id(account_id).one(db).await {
         let mut active: m3u_account::ActiveModel = acc.into();
-        active.status = Set("Active".to_string());
+        active.status = Set("success".to_string());
         active.last_message = Set(Some("Successfully synced!".to_string()));
         active.updated_at = Set(Some(Utc::now().into()));
         let _ = active.update(db).await;

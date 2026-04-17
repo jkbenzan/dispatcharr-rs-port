@@ -387,7 +387,7 @@ pub async fn add_m3u_account(
         max_streams: Set(max_streams),
         is_active: Set(is_active),
         created_at: Set(Utc::now().into()),
-        status: Set("Created".to_string()),
+        status: Set("idle".to_string()),
         priority: Set(1),
         locked: Set(false),
         stale_stream_days: Set(3),

@@ -8,7 +8,7 @@ use crate::entities::{epg_data, epg_program, epg_source};
 pub async fn refresh_all_guides(db: &DatabaseConnection, url: &str, source_id: i64) -> Result<(), Box<dyn Error>> {
     if let Ok(Some(src)) = epg_source::Entity::find_by_id(source_id).one(db).await {
         let mut active: epg_source::ActiveModel = src.into();
-        active.status = Set("Updating".to_string());
+        active.status = Set("fetching".to_string());
         active.last_message = Set(Some("Downloading & parsing XMLTV...".to_string()));
         let _ = active.update(db).await;
     }
@@ -186,7 +186,7 @@ pub async fn refresh_all_guides(db: &DatabaseConnection, url: &str, source_id: i
 
     if let Ok(Some(src)) = epg_source::Entity::find_by_id(source_id).one(db).await {
         let mut active: epg_source::ActiveModel = src.into();
-        active.status = Set("Active".to_string());
+        active.status = Set("success".to_string());
         active.last_message = Set(Some("Successfully synced XMLTV!".to_string()));
         active.updated_at = Set(Some(Utc::now().into()));
         let _ = active.update(db).await;
