@@ -193,9 +193,9 @@ pub async fn fetch_and_parse_xc(
     active.last_message = Set(Some("Fetching XC API categories...".to_string()));
     let _ = active.update(db).await;
 
-    let server_url = acc.server_url.unwrap_or_default();
-    let username = acc.username.unwrap_or_default();
-    let password = acc.password.unwrap_or_default();
+    let server_url = acc.server_url.clone().unwrap_or_default();
+    let username = acc.username.clone().unwrap_or_default();
+    let password = acc.password.clone().unwrap_or_default();
 
     let client = reqwest::Client::builder()
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
