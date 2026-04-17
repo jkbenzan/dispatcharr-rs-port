@@ -353,7 +353,17 @@ pub async fn get_m3u_accounts(State(state): State<Arc<AppState>>) -> Json<Value>
         Ok(a) => a,
         Err(_) => vec![],
     };
-    Json(json!(accounts))
+    let mut results = vec![];
+    for acc in accounts {
+        let mut acc_json = serde_json::to_value(&acc).unwrap();
+        acc_json["profiles"] = json!([]);
+        acc_json["filters"] = json!([]);
+        acc_json["groups"] = json!([]);
+        acc_json["channel_groups"] = json!([]);
+        acc_json["streams"] = json!([]);
+        results.push(acc_json);
+    }
+    Json(json!(results))
 }
 
 pub async fn add_m3u_account(
@@ -424,7 +434,15 @@ pub async fn get_m3u_account(
     Path(account_id): Path<i64>,
 ) -> impl IntoResponse {
     match m3u_account::Entity::find_by_id(account_id).one(&state.db).await {
-        Ok(Some(acc)) => (StatusCode::OK, Json(json!(acc))),
+        Ok(Some(acc)) => {
+            let mut acc_json = serde_json::to_value(&acc).unwrap();
+            acc_json["profiles"] = json!([]);
+            acc_json["filters"] = json!([]);
+            acc_json["groups"] = json!([]);
+            acc_json["channel_groups"] = json!([]);
+            acc_json["streams"] = json!([]);
+            (StatusCode::OK, Json(acc_json))
+        },
         _ => (StatusCode::NOT_FOUND, Json(json!({"error": "Not Found"}))),
     }
 }
