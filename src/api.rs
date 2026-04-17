@@ -325,13 +325,31 @@ pub async fn get_streams(
     let page_size: u64 = 50; 
     let offset = (page.saturating_sub(1)) * page_size;
 
-    let count = stream::Entity::find().count(&state.db).await.unwrap_or(0);
+    let mut q = stream::Entity::find();
+    if let Some(acc_id) = params.get("m3u_account").and_then(|p| p.parse::<i64>().ok()) {
+        q = q.filter(stream::Column::M3uAccountId.eq(acc_id));
+    }
 
-    let results = stream::Entity::find()
-        .order_by_asc(stream::Column::Id)
-        .limit(page_size)
-        .offset(offset)
+    let streams = q.order_by_asc(stream::Column::Id)
         .all(&state.db).await.unwrap_or_default();
+
+    let mut filtered_streams = vec![];
+    let group_filter = params.get("group").cloned();
+    
+    for s in streams {
+        if let Some(ref g) = group_filter {
+            let matches = s.custom_properties.as_ref()
+                .and_then(|p| p.get("group_title"))
+                .and_then(|v| v.as_str())
+                .map(|v| v == g)
+                .unwrap_or(false);
+            if !matches { continue; }
+        }
+        filtered_streams.push(s);
+    }
+    
+    let count = filtered_streams.len() as u64;
+    let paginated = filtered_streams.into_iter().skip(offset as usize).take(page_size as usize).collect::<Vec<_>>();
 
     let has_next = (offset + page_size) < count;
     let next_page = if has_next { Some(format!("/api/channels/streams/?page={}", page + 1)) } else { None };
@@ -342,7 +360,38 @@ pub async fn get_streams(
         "count": count,
         "next": next_page,
         "previous": prev_page,
-        "results": results
+        "results": paginated
+    }))
+}
+
+pub async fn get_stream_filter_options(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Json<Value> {
+    let mut q = stream::Entity::find();
+    if let Some(acc_id) = params.get("m3u_account").and_then(|v| v.parse::<i64>().ok()) {
+        q = q.filter(stream::Column::M3uAccountId.eq(acc_id));
+    }
+    
+    let streams = q.all(&state.db).await.unwrap_or_default();
+    let mut groups_set = std::collections::HashSet::new();
+    
+    for s in streams {
+        if let Some(props) = s.custom_properties {
+            if let Some(gt) = props.get("group_title").and_then(|v| v.as_str()) {
+                if !gt.is_empty() {
+                    groups_set.insert(gt.to_string());
+                }
+            }
+        }
+    }
+    
+    let mut groups: Vec<String> = groups_set.into_iter().collect();
+    groups.sort();
+    
+    Json(json!({
+        "groups": groups,
+        "m3u_accounts": []
     }))
 }
 

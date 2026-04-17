@@ -53,11 +53,18 @@ pub async fn fetch_and_parse_m3u(
                 let name = caps.get(4).map_or("Unknown", |m| m.as_str()).to_string();
                 let tvg_id = caps.get(1).map(|m| m.as_str().to_string());
                 let logo_url = caps.get(2).map(|m| m.as_str().to_string());
+                let group_title = caps.get(3).map(|m| m.as_str().to_string());
+                
+                let mut cp = serde_json::Map::new();
+                if let Some(gt) = group_title {
+                    cp.insert("group_title".to_string(), serde_json::Value::String(gt));
+                }
                 
                 current_extinf = Some(stream::ActiveModel {
                     name: Set(name),
                     tvg_id: Set(tvg_id),
                     logo_url: Set(logo_url),
+                    custom_properties: Set(Some(serde_json::Value::Object(cp))),
                     m3u_account_id: Set(Some(account_id)),
                     is_custom: Set(false),
                     current_viewers: Set(0),
