@@ -7,3 +7,4 @@ pub mod channel_profile;
 pub mod stream;
 pub mod epg_data;
 pub mod epg_program;
+pub mod channel_group_m3u_account;

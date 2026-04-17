@@ -397,6 +397,21 @@ pub async fn get_stream_filter_options(
 
 pub async fn get_ids_stub() -> Json<Value> { get_flat_array().await }
 
+async fn get_channel_groups_for_account(account_id: i64, db: &sea_orm::DatabaseConnection) -> Vec<Value> {
+    use crate::entities::channel_group_m3u_account;
+    let mappings = channel_group_m3u_account::Entity::find()
+        .filter(channel_group_m3u_account::Column::M3uAccountId.eq(account_id))
+        .all(db)
+        .await
+        .unwrap_or_default();
+    
+    mappings.into_iter().map(|m| {
+        let mut v = serde_json::to_value(&m).unwrap();
+        v["channel_group"] = json!(m.channel_group_id);
+        v
+    }).collect()
+}
+
 pub async fn get_m3u_accounts(State(state): State<Arc<AppState>>) -> Json<Value> {
     let accounts = match m3u_account::Entity::find().all(&state.db).await {
         Ok(a) => a,
@@ -408,7 +423,7 @@ pub async fn get_m3u_accounts(State(state): State<Arc<AppState>>) -> Json<Value>
         acc_json["profiles"] = json!([]);
         acc_json["filters"] = json!([]);
         acc_json["groups"] = json!([]);
-        acc_json["channel_groups"] = json!([]);
+        acc_json["channel_groups"] = json!(get_channel_groups_for_account(acc.id, &state.db).await);
         acc_json["streams"] = json!([]);
         results.push(acc_json);
     }
@@ -488,7 +503,7 @@ pub async fn get_m3u_account(
             acc_json["profiles"] = json!([]);
             acc_json["filters"] = json!([]);
             acc_json["groups"] = json!([]);
-            acc_json["channel_groups"] = json!([]);
+            acc_json["channel_groups"] = json!(get_channel_groups_for_account(acc.id, &state.db).await);
             acc_json["streams"] = json!([]);
             (StatusCode::OK, Json(acc_json))
         },
