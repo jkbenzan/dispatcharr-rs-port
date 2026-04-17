@@ -491,10 +491,18 @@ pub async fn add_m3u_account(
 
                 if !url.is_empty() {
                     let db_clone = state.db.clone();
+                    let is_xc = acc.account_type == "XC";
                     tokio::spawn(async move {
-                        let error_msg = match crate::m3u::fetch_and_parse_m3u(&db_clone, &url, account_id).await {
-                            Err(e) => Some(format!("Failed to parse: {}", e)),
-                            Ok(_) => None,
+                        let error_msg = if is_xc {
+                            match crate::m3u::fetch_and_parse_xc(&db_clone, account_id).await {
+                                Err(e) => Some(format!("Failed to parse XC API: {}", e)),
+                                Ok(_) => None,
+                            }
+                        } else {
+                            match crate::m3u::fetch_and_parse_m3u(&db_clone, &url, account_id).await {
+                                Err(e) => Some(format!("Failed to parse M3U: {}", e)),
+                                Ok(_) => None,
+                            }
                         };
                         
                         if let Some(msg) = error_msg {
@@ -583,10 +591,18 @@ pub async fn refresh_m3u_account(
 
     if !url.is_empty() {
         let db_clone = state.db.clone();
+        let is_xc = account.account_type == "XC";
         tokio::spawn(async move {
-            let error_msg = match m3u::fetch_and_parse_m3u(&db_clone, &url, account_id).await {
-                Err(e) => Some(format!("Failed to parse: {}", e)),
-                Ok(_) => None,
+            let error_msg = if is_xc {
+                match m3u::fetch_and_parse_xc(&db_clone, account_id).await {
+                    Err(e) => Some(format!("Failed to parse XC API: {}", e)),
+                    Ok(_) => None,
+                }
+            } else {
+                match m3u::fetch_and_parse_m3u(&db_clone, &url, account_id).await {
+                    Err(e) => Some(format!("Failed to parse M3U: {}", e)),
+                    Ok(_) => None,
+                }
             };
             
             if let Some(msg) = error_msg {

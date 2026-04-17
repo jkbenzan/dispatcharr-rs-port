@@ -17,6 +17,7 @@ mod epg;
 mod auth;
 mod m3u;
 mod outputs;
+mod xtream_codes;
 
 pub struct AppState {
     pub db: DatabaseConnection,
