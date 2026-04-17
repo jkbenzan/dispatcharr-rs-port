@@ -472,12 +472,42 @@ pub async fn add_m3u_account(
 
     match m3u_account::Entity::insert(new_account).exec(&state.db).await {
         Ok(insert_res) => {
-            let inserted_acc = m3u_account::Entity::find_by_id(insert_res.last_insert_id)
+            let account_id = insert_res.last_insert_id;
+            let inserted_acc = m3u_account::Entity::find_by_id(account_id)
                 .one(&state.db)
                 .await
                 .unwrap_or(None);
             
             if let Some(acc) = inserted_acc {
+                let url = if acc.account_type == "XC" {
+                    format!("{}/get.php?username={}&password={}&type=m3u_plus&output=ts",
+                        acc.server_url.as_deref().unwrap_or_default().trim_end_matches('/'),
+                        acc.username.as_deref().unwrap_or_default(),
+                        acc.password.as_deref().unwrap_or_default()
+                    )
+                } else {
+                    acc.server_url.clone().unwrap_or_default()
+                };
+
+                if !url.is_empty() {
+                    let db_clone = state.db.clone();
+                    tokio::spawn(async move {
+                        let error_msg = match crate::m3u::fetch_and_parse_m3u(&db_clone, &url, account_id).await {
+                            Err(e) => Some(format!("Failed to parse: {}", e)),
+                            Ok(_) => None,
+                        };
+                        
+                        if let Some(msg) = error_msg {
+                            eprintln!("{}", msg);
+                            if let Ok(Some(acc_err)) = m3u_account::Entity::find_by_id(account_id).one(&db_clone).await {
+                                let mut active: m3u_account::ActiveModel = acc_err.into();
+                                active.status = sea_orm::Set("failed".to_string());
+                                active.last_message = sea_orm::Set(Some(msg.chars().take(255).collect()));
+                                let _ = active.update(&db_clone).await;
+                            }
+                        }
+                    });
+                }
                 let mut acc_json = serde_json::to_value(&acc).unwrap();
                 // Add empty relation arrays that the UI expects on creation
                 acc_json["profiles"] = json!([]);
@@ -487,7 +517,7 @@ pub async fn add_m3u_account(
                 acc_json["streams"] = json!([]);
                 return (StatusCode::CREATED, Json(acc_json));
             }
-            (StatusCode::CREATED, Json(json!({"id": insert_res.last_insert_id})))
+            (StatusCode::CREATED, Json(json!({"id": account_id})))
         }
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))),
     }
