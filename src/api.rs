@@ -14,15 +14,17 @@ pub async fn get_flat_array() -> Json<Value> {
 }
 
 pub async fn get_timezones() -> Json<Value> {
-    Json(json!([
-        {"value": "UTC", "label": "UTC/GMT"},
-        {"value": "America/New_York", "label": "America/New_York"},
-        {"value": "America/Chicago", "label": "America/Chicago"},
-        {"value": "America/Denver", "label": "America/Denver"},
-        {"value": "America/Los_Angeles", "label": "America/Los_Angeles"},
-        {"value": "Europe/London", "label": "Europe/London"},
-        {"value": "Europe/Berlin", "label": "Europe/Berlin"}
-    ]))
+    Json(json!({
+        "timezones": [
+            {"value": "UTC", "label": "UTC/GMT"},
+            {"value": "America/New_York", "label": "America/New_York"},
+            {"value": "America/Chicago", "label": "America/Chicago"},
+            {"value": "America/Denver", "label": "America/Denver"},
+            {"value": "America/Los_Angeles", "label": "America/Los_Angeles"},
+            {"value": "Europe/London", "label": "Europe/London"},
+            {"value": "Europe/Berlin", "label": "Europe/Berlin"}
+        ]
+    }))
 }
 
 /// 2. DRF OBJECT: Solves the `TypeError: Cannot read properties of undefined (reading 'filter')`
@@ -276,8 +278,8 @@ pub async fn post_stub() -> Json<Value> {
     Json(json!({ "id": 9999, "success": true, "message": "created mock" }))
 }
 
-pub async fn get_useragents() -> Json<Value> { get_paginated_object().await }
-pub async fn get_streamprofiles() -> Json<Value> { get_paginated_object().await }
+pub async fn get_useragents() -> Json<Value> { get_flat_array().await }
+pub async fn get_streamprofiles() -> Json<Value> { get_flat_array().await }
 pub async fn get_dashboard_stats(State(state): State<Arc<AppState>>) -> Json<Value> {
     let channels_count = channel::Entity::find().count(&state.db).await.unwrap_or(0);
     let streams_count = stream::Entity::find().count(&state.db).await.unwrap_or(0);
