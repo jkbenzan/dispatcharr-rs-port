@@ -405,11 +405,21 @@ async fn get_channel_groups_for_account(account_id: i64, db: &sea_orm::DatabaseC
         .await
         .unwrap_or_default();
     
-    mappings.into_iter().map(|m| {
+    let mut results = Vec::new();
+    for m in mappings {
+        let cg = crate::entities::channel_group::Entity::find_by_id(m.channel_group_id).one(db).await.unwrap_or_default();
         let mut v = serde_json::to_value(&m).unwrap();
-        v["channel_group"] = json!(m.channel_group_id);
-        v
-    }).collect()
+        if let Some(cg) = cg {
+            v["channel_group"] = json!({
+                "id": cg.id,
+                "name": cg.name
+            });
+        } else {
+            v["channel_group"] = json!(m.channel_group_id);
+        }
+        results.push(v);
+    }
+    results
 }
 
 pub async fn get_m3u_accounts(State(state): State<Arc<AppState>>) -> Json<Value> {
@@ -446,39 +456,26 @@ pub async fn add_m3u_account(
         Some(Value::String(s)) => s.parse::<i32>().unwrap_or(1),
         _ => 1,
     };
-    
-    let is_active = match payload.get("is_active") {
-        Some(Value::Bool(b)) => *b,
-        Some(Value::String(s)) => s.to_lowercase() == "true" || s == "1",
-        _ => true,
-    };
 
-    let new_account = m3u_account::ActiveModel {
-        name: Set(name),
-        account_type: Set(account_type),
-        server_url: Set(server_url),
-        username: Set(username),
-        password: Set(password),
-        max_streams: Set(max_streams),
-        is_active: Set(is_active),
-        created_at: Set(Utc::now().into()),
-        status: Set("idle".to_string()),
-        priority: Set(1),
-        locked: Set(false),
-        stale_stream_days: Set(3),
-        refresh_interval: Set(24),
+    let new_acc = m3u_account::ActiveModel {
+        name: sea_orm::Set(name),
+        account_type: sea_orm::Set(account_type),
+        server_url: sea_orm::Set(server_url),
+        username: sea_orm::Set(username),
+        password: sea_orm::Set(password),
+        max_streams: sea_orm::Set(max_streams),
+        is_active: sea_orm::Set(true),
+        status: sea_orm::Set("pending".to_string()),
+        created_at: sea_orm::Set(chrono::Utc::now().into()),
+        updated_at: sea_orm::Set(chrono::Utc::now().into()),
+        stale_stream_days: sea_orm::Set(7),
         ..Default::default()
     };
 
-    match m3u_account::Entity::insert(new_account).exec(&state.db).await {
-        Ok(insert_res) => {
-            let account_id = insert_res.last_insert_id;
-            let inserted_acc = m3u_account::Entity::find_by_id(account_id)
-                .one(&state.db)
-                .await
-                .unwrap_or(None);
-            
-            if let Some(acc) = inserted_acc {
+    match m3u_account::Entity::insert(new_acc).exec(&state.db).await {
+        Ok(res) => {
+            let account_id = res.last_insert_id;
+            if let Ok(Some(acc)) = m3u_account::Entity::find_by_id(account_id).one(&state.db).await {
                 let url = if acc.account_type == "XC" {
                     format!("{}/get.php?username={}&password={}&type=m3u_plus&output=ts",
                         acc.server_url.as_deref().unwrap_or_default().trim_end_matches('/'),
@@ -507,8 +504,8 @@ pub async fn add_m3u_account(
                         
                         if let Some(msg) = error_msg {
                             eprintln!("{}", msg);
-                            if let Ok(Some(acc_err)) = m3u_account::Entity::find_by_id(account_id).one(&db_clone).await {
-                                let mut active: m3u_account::ActiveModel = acc_err.into();
+                            if let Ok(Some(acc)) = m3u_account::Entity::find_by_id(account_id).one(&db_clone).await {
+                                let mut active: m3u_account::ActiveModel = acc.into();
                                 active.status = sea_orm::Set("failed".to_string());
                                 active.last_message = sea_orm::Set(Some(msg.chars().take(255).collect()));
                                 let _ = active.update(&db_clone).await;
@@ -516,17 +513,18 @@ pub async fn add_m3u_account(
                         }
                     });
                 }
+                
                 let mut acc_json = serde_json::to_value(&acc).unwrap();
-                // Add empty relation arrays that the UI expects on creation
                 acc_json["profiles"] = json!([]);
                 acc_json["filters"] = json!([]);
                 acc_json["groups"] = json!([]);
-                acc_json["channel_groups"] = json!([]);
+                acc_json["channel_groups"] = json!(get_channel_groups_for_account(acc.id, &state.db).await);
                 acc_json["streams"] = json!([]);
-                return (StatusCode::CREATED, Json(acc_json));
+                (StatusCode::OK, Json(acc_json))
+            } else {
+                (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Failed to retrieve saved account"})))
             }
-            (StatusCode::CREATED, Json(json!({"id": account_id})))
-        }
+        },
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))),
     }
 }

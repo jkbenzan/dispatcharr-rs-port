@@ -82,7 +82,8 @@ async fn main() {
         .route("/api/channels/profiles/", get(api::get_channel_profiles))
         .route("/api/channels/channels/ids/", get(api::get_ids_stub))
         .route("/api/m3u/accounts/", get(api::get_m3u_accounts).post(api::add_m3u_account))
-        .route("/api/m3u/accounts/:id/", get(api::get_m3u_account))
+        .route("/api/m3u/accounts/:id/", get(api::get_m3u_account).patch(api::update_m3u_account))
+        .route("/api/m3u/accounts/:id/group-settings/", axum::routing::patch(api::update_m3u_group_settings))
         .route("/api/m3u/refresh/:id/", post(api::refresh_m3u_account))
         
         // --- EPG ---
