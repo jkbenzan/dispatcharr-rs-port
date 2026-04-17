@@ -98,7 +98,6 @@ async fn main() {
         .route("/api/channels/dashboard-stats/", get(api::get_dashboard_stats))
         .route("/api/channels/streams/", get(api::get_streams).post(api::post_stub))
         .route("/api/core/system-events/", get(api::get_paginated_object))
-        .route("/api/core/timezones/", get(api::get_flat_array))
         .route("/api/connect/integrations/", get(api::get_paginated_object))
         .route("/api/plugins/plugins/", get(api::get_paginated_object))
 
