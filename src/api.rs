@@ -386,12 +386,9 @@ pub async fn add_m3u_account(
     };
 
     match m3u_account::Entity::insert(new_account).exec(&state.db).await {
-        Ok(insert_res) => {
-            let inserted_acc = m3u_account::Entity::find_by_id(insert_res.last_insert_id)
-                .one(&state.db)
-                .await
-                .unwrap_or(None);
-            (StatusCode::CREATED, Json(json!(inserted_acc)))
+        Ok(_) => {
+            let accounts = m3u_account::Entity::find().all(&state.db).await.unwrap_or_default();
+            (StatusCode::CREATED, Json(json!(accounts)))
         }
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))),
     }
