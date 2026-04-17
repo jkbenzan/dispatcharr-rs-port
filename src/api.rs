@@ -355,31 +355,37 @@ pub async fn get_m3u_accounts(State(state): State<Arc<AppState>>) -> Json<Value>
     Json(json!(accounts))
 }
 
-#[derive(serde::Deserialize, Default)]
-pub struct AddM3UAccountPayload {
-    pub name: String,
-    pub account_type: String,
-    pub server_url: Option<String>,
-    pub username: Option<String>,
-    pub password: Option<String>,
-    #[serde(default)]
-    pub max_streams: Option<i32>,
-    #[serde(default)]
-    pub is_active: Option<bool>,
-}
-
 pub async fn add_m3u_account(
     State(state): State<Arc<AppState>>,
-    Json(payload): Json<AddM3UAccountPayload>,
+    Json(payload): Json<Value>,
 ) -> impl IntoResponse {
+    let name = payload.get("name").and_then(|v| v.as_str()).unwrap_or("Undefined").to_string();
+    let account_type = payload.get("account_type").and_then(|v| v.as_str()).unwrap_or("XC").to_string();
+    
+    let server_url = payload.get("server_url").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(String::from);
+    let username = payload.get("username").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(String::from);
+    let password = payload.get("password").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(String::from);
+    
+    let max_streams = match payload.get("max_streams") {
+        Some(Value::Number(n)) => n.as_i64().unwrap_or(1) as i32,
+        Some(Value::String(s)) => s.parse::<i32>().unwrap_or(1),
+        _ => 1,
+    };
+    
+    let is_active = match payload.get("is_active") {
+        Some(Value::Bool(b)) => *b,
+        Some(Value::String(s)) => s.to_lowercase() == "true" || s == "1",
+        _ => true,
+    };
+
     let new_account = m3u_account::ActiveModel {
-        name: Set(payload.name),
-        account_type: Set(payload.account_type),
-        server_url: Set(payload.server_url),
-        username: Set(payload.username),
-        password: Set(payload.password),
-        max_streams: Set(payload.max_streams.unwrap_or(1)),
-        is_active: Set(payload.is_active.unwrap_or(true)),
+        name: Set(name),
+        account_type: Set(account_type),
+        server_url: Set(server_url),
+        username: Set(username),
+        password: Set(password),
+        max_streams: Set(max_streams),
+        is_active: Set(is_active),
         created_at: Set(Utc::now().into()),
         status: Set("Created".to_string()),
         priority: Set(1),
