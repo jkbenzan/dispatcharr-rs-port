@@ -304,7 +304,16 @@ pub async fn get_channel_groups(State(state): State<Arc<AppState>>) -> Json<Valu
 }
 
 pub async fn get_channel_profiles(State(state): State<Arc<AppState>>) -> Json<Value> {
-    let results = channel_profile::Entity::find().all(&state.db).await.unwrap_or_default();
+    let profiles = channel_profile::Entity::find().all(&state.db).await.unwrap_or_default();
+    let mut results = vec![];
+    for p in profiles {
+        let mut p_json = serde_json::to_value(&p).unwrap();
+        p_json["channel_groups"] = json!([]);
+        p_json["auto_enable_new_groups_live"] = json!(true);
+        p_json["auto_enable_new_groups_vod"] = json!(true);
+        p_json["auto_enable_new_groups_series"] = json!(true);
+        results.push(p_json);
+    }
     Json(json!(results))
 }
 
@@ -400,6 +409,7 @@ pub async fn add_m3u_account(
                 acc_json["profiles"] = json!([]);
                 acc_json["filters"] = json!([]);
                 acc_json["groups"] = json!([]);
+                acc_json["channel_groups"] = json!([]);
                 acc_json["streams"] = json!([]);
                 return (StatusCode::CREATED, Json(acc_json));
             }
