@@ -11,6 +11,18 @@ pub async fn get_flat_array() -> Json<Value> {
     Json(json!([]))
 }
 
+pub async fn get_timezones() -> Json<Value> {
+    Json(json!([
+        "UTC",
+        "America/New_York",
+        "America/Chicago",
+        "America/Denver",
+        "America/Los_Angeles",
+        "Europe/London",
+        "Europe/Berlin"
+    ]))
+}
+
 /// 2. DRF OBJECT: Solves the `TypeError: Cannot read properties of undefined (reading 'filter')`
 pub async fn get_paginated_object() -> Json<Value> {
     Json(json!({
@@ -149,9 +161,13 @@ pub async fn login(
     })))
 }
 
-pub async fn refresh_token() -> Json<Value> {
-    // Simple stub: require re-login for real refresh logic later
-    Json(json!({}))
+#[derive(serde::Deserialize)]
+pub struct RefreshRequest {
+    pub refresh: String,
+}
+
+pub async fn refresh_token(Json(payload): Json<RefreshRequest>) -> Json<Value> {
+    Json(json!({ "access": payload.refresh }))
 }
 
 pub async fn logout() -> Json<Value> {
@@ -334,12 +350,7 @@ pub async fn get_m3u_accounts(State(state): State<Arc<AppState>>) -> Json<Value>
         Ok(a) => a,
         Err(_) => vec![],
     };
-    Json(json!({
-        "count": accounts.len(),
-        "next": null,
-        "previous": null,
-        "results": accounts
-    }))
+    Json(json!(accounts))
 }
 
 pub async fn get_m3u_account(
@@ -357,12 +368,7 @@ pub async fn get_epg_sources(State(state): State<Arc<AppState>>) -> Json<Value> 
         Ok(s) => s,
         Err(_) => vec![],
     };
-    Json(json!({
-        "count": sources.len(),
-        "next": null,
-        "previous": null,
-        "results": sources
-    }))
+    Json(json!(sources))
 }
 
 pub async fn get_epg_source(

@@ -70,6 +70,7 @@ async fn main() {
         .route("/api/core/version/", get(api::get_core_version))
         .route("/api/core/settings/", get(api::get_core_settings))
         .route("/api/core/settings/env/", get(api::get_env_settings))
+        .route("/api/core/timezones/", get(api::get_timezones))
         .route("/api/core/notifications/", get(api::get_notifications))
         .route("/api/core/useragents/", get(api::get_useragents))
         .route("/api/core/streamprofiles/", get(api::get_streamprofiles))
