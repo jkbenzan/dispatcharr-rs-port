@@ -69,7 +69,7 @@ use axum::{
 };
 use sea_orm::{
     ColumnTrait, EntityTrait, QueryFilter,
-    ConnectionTrait, Statement, PaginatorTrait, QuerySelect, QueryOrder
+    ConnectionTrait, Statement, PaginatorTrait, QuerySelect, QueryOrder, ActiveModelTrait
 };
 use std::sync::Arc;
 
@@ -539,8 +539,19 @@ pub async fn refresh_m3u_account(
     if !url.is_empty() {
         let db_clone = state.db.clone();
         tokio::spawn(async move {
-            if let Err(e) = m3u::fetch_and_parse_m3u(&db_clone, &url, account_id).await {
-                eprintln!("Failed to parse M3U Task: {}", e);
+            let error_msg = match m3u::fetch_and_parse_m3u(&db_clone, &url, account_id).await {
+                Err(e) => Some(format!("Failed to parse: {}", e)),
+                Ok(_) => None,
+            };
+            
+            if let Some(msg) = error_msg {
+                eprintln!("{}", msg);
+                if let Ok(Some(acc)) = m3u_account::Entity::find_by_id(account_id).one(&db_clone).await {
+                    let mut active: m3u_account::ActiveModel = acc.into();
+                    active.status = sea_orm::Set("failed".to_string());
+                    active.last_message = sea_orm::Set(Some(msg.chars().take(255).collect()));
+                    let _ = active.update(&db_clone).await;
+                }
             }
         });
         (StatusCode::ACCEPTED, Json(json!({"status": "M3U refresh task started"})))
