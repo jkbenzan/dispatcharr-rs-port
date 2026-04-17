@@ -15,13 +15,13 @@ pub async fn get_flat_array() -> Json<Value> {
 
 pub async fn get_timezones() -> Json<Value> {
     Json(json!([
-        "UTC",
-        "America/New_York",
-        "America/Chicago",
-        "America/Denver",
-        "America/Los_Angeles",
-        "Europe/London",
-        "Europe/Berlin"
+        {"value": "UTC", "label": "UTC/GMT"},
+        {"value": "America/New_York", "label": "America/New_York"},
+        {"value": "America/Chicago", "label": "America/Chicago"},
+        {"value": "America/Denver", "label": "America/Denver"},
+        {"value": "America/Los_Angeles", "label": "America/Los_Angeles"},
+        {"value": "Europe/London", "label": "Europe/London"},
+        {"value": "Europe/Berlin", "label": "Europe/Berlin"}
     ]))
 }
 
@@ -298,22 +298,12 @@ pub async fn get_dashboard_stats(State(state): State<Arc<AppState>>) -> Json<Val
 
 pub async fn get_channel_groups(State(state): State<Arc<AppState>>) -> Json<Value> {
     let results = channel_group::Entity::find().all(&state.db).await.unwrap_or_default();
-    Json(json!({
-        "count": results.len(),
-        "next": null,
-        "previous": null,
-        "results": results
-    }))
+    Json(json!(results))
 }
 
 pub async fn get_channel_profiles(State(state): State<Arc<AppState>>) -> Json<Value> {
     let results = channel_profile::Entity::find().all(&state.db).await.unwrap_or_default();
-    Json(json!({
-        "count": results.len(),
-        "next": null,
-        "previous": null,
-        "results": results
-    }))
+    Json(json!(results))
 }
 
 pub async fn get_streams(
