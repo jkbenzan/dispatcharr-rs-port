@@ -353,6 +353,52 @@ pub async fn get_m3u_accounts(State(state): State<Arc<AppState>>) -> Json<Value>
     Json(json!(accounts))
 }
 
+#[derive(serde::Deserialize, Default)]
+pub struct AddM3UAccountPayload {
+    pub name: String,
+    pub account_type: String,
+    pub server_url: Option<String>,
+    pub username: Option<String>,
+    pub password: Option<String>,
+    #[serde(default)]
+    pub max_streams: Option<i32>,
+    #[serde(default)]
+    pub is_active: Option<bool>,
+}
+
+pub async fn add_m3u_account(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<AddM3UAccountPayload>,
+) -> impl IntoResponse {
+    let new_account = m3u_account::ActiveModel {
+        name: Set(payload.name),
+        account_type: Set(payload.account_type),
+        server_url: Set(payload.server_url),
+        username: Set(payload.username),
+        password: Set(payload.password),
+        max_streams: Set(payload.max_streams.unwrap_or(1)),
+        is_active: Set(payload.is_active.unwrap_or(true)),
+        created_at: Set(Utc::now().into()),
+        status: Set("Created".to_string()),
+        priority: Set(1),
+        locked: Set(false),
+        stale_stream_days: Set(3),
+        refresh_interval: Set(24),
+        ..Default::default()
+    };
+
+    match m3u_account::Entity::insert(new_account).exec(&state.db).await {
+        Ok(insert_res) => {
+            let inserted_acc = m3u_account::Entity::find_by_id(insert_res.last_insert_id)
+                .one(&state.db)
+                .await
+                .unwrap_or(None);
+            (StatusCode::CREATED, Json(json!(inserted_acc)))
+        }
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))),
+    }
+}
+
 pub async fn get_m3u_account(
     State(state): State<Arc<AppState>>,
     Path(account_id): Path<i64>,
@@ -393,7 +439,17 @@ pub async fn refresh_m3u_account(
         _ => return (StatusCode::NOT_FOUND, Json(json!({"error": "Account not found"}))),
     };
 
-    if let Some(url) = account.server_url.clone() {
+    let url = if account.account_type == "XC" {
+        format!("{}/get.php?username={}&password={}&type=m3u_plus&output=ts",
+            account.server_url.as_deref().unwrap_or_default().trim_end_matches('/'),
+            account.username.as_deref().unwrap_or_default(),
+            account.password.as_deref().unwrap_or_default()
+        )
+    } else {
+        account.server_url.clone().unwrap_or_default()
+    };
+
+    if !url.is_empty() {
         let db_clone = state.db.clone();
         tokio::spawn(async move {
             if let Err(e) = m3u::fetch_and_parse_m3u(&db_clone, &url, account_id).await {

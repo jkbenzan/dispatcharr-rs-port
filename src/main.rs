@@ -80,7 +80,7 @@ async fn main() {
         .route("/api/channels/groups/", get(api::get_channel_groups))
         .route("/api/channels/profiles/", get(api::get_channel_profiles))
         .route("/api/channels/channels/ids/", get(api::get_ids_stub))
-        .route("/api/m3u/accounts/", get(api::get_m3u_accounts))
+        .route("/api/m3u/accounts/", get(api::get_m3u_accounts).post(api::add_m3u_account))
         .route("/api/m3u/accounts/:id/", get(api::get_m3u_account))
         .route("/api/m3u/refresh/:id/", post(api::refresh_m3u_account))
         
