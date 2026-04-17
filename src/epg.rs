@@ -1,11 +1,18 @@
 use quick_xml::events::Event;
 use quick_xml::reader::Reader;
-use sea_orm::{DatabaseConnection, Set, EntityTrait, QueryFilter, ColumnTrait};
+use sea_orm::{DatabaseConnection, Set, EntityTrait, QueryFilter, ColumnTrait, ActiveModelTrait};
 use std::error::Error;
 use chrono::Utc;
-use crate::entities::{epg_data, epg_program};
+use crate::entities::{epg_data, epg_program, epg_source};
 
 pub async fn refresh_all_guides(db: &DatabaseConnection, url: &str, source_id: i64) -> Result<(), Box<dyn Error>> {
+    if let Ok(Some(src)) = epg_source::Entity::find_by_id(source_id).one(db).await {
+        let mut active: epg_source::ActiveModel = src.into();
+        active.status = Set("Updating".to_string());
+        active.last_message = Set(Some("Downloading & parsing XMLTV...".to_string()));
+        let _ = active.update(db).await;
+    }
+
     println!("Fetching XMLTV EPG from {}", url);
     let xml_data = reqwest::get(url).await?.text().await?;
 
@@ -175,6 +182,14 @@ pub async fn refresh_all_guides(db: &DatabaseConnection, url: &str, source_id: i
     }
     if !programs_batch.is_empty() {
         let _ = epg_program::Entity::insert_many(programs_batch).exec(db).await;
+    }
+
+    if let Ok(Some(src)) = epg_source::Entity::find_by_id(source_id).one(db).await {
+        let mut active: epg_source::ActiveModel = src.into();
+        active.status = Set("Active".to_string());
+        active.last_message = Set(Some("Successfully synced XMLTV!".to_string()));
+        active.updated_at = Set(Some(Utc::now().into()));
+        let _ = active.update(db).await;
     }
 
     println!("EPG Parsing Complete for Source {}", source_id);

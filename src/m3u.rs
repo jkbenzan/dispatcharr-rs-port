@@ -1,6 +1,6 @@
-use crate::entities::stream;
+use crate::entities::{stream, m3u_account};
 use regex::Regex;
-use sea_orm::{DatabaseConnection, Set, EntityTrait, QueryFilter, ColumnTrait};
+use sea_orm::{DatabaseConnection, Set, EntityTrait, QueryFilter, ColumnTrait, ActiveModelTrait};
 use std::collections::HashSet;
 use std::error::Error;
 use sha2::{Sha256, Digest};
@@ -11,6 +11,13 @@ pub async fn fetch_and_parse_m3u(
     url: &str,
     account_id: i64,
 ) -> Result<(), Box<dyn Error>> {
+    if let Ok(Some(acc)) = m3u_account::Entity::find_by_id(account_id).one(db).await {
+        let mut active: m3u_account::ActiveModel = acc.into();
+        active.status = Set("Updating".to_string());
+        active.last_message = Set(Some("Downloading & parsing M3U...".to_string()));
+        let _ = active.update(db).await;
+    }
+
     println!("Fetching M3U from {}", url);
     let body = reqwest::get(url).await?.text().await?;
 
@@ -78,6 +85,14 @@ pub async fn fetch_and_parse_m3u(
 
     if !streams_batch.is_empty() {
         let _ = stream::Entity::insert_many(streams_batch).exec(db).await;
+    }
+
+    if let Ok(Some(acc)) = m3u_account::Entity::find_by_id(account_id).one(db).await {
+        let mut active: m3u_account::ActiveModel = acc.into();
+        active.status = Set("Active".to_string());
+        active.last_message = Set(Some("Successfully synced!".to_string()));
+        active.updated_at = Set(Some(Utc::now().into()));
+        let _ = active.update(db).await;
     }
 
     println!("M3U Parsing Complete for M3U Account {}", account_id);
