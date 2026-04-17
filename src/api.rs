@@ -220,7 +220,7 @@ pub async fn get_channels(
             vec![ch.id.into()]
         )).await.unwrap_or_default();
         let group_ids: Vec<i64> = groups.into_iter().filter_map(|gr| gr.try_get("", "channelgroup_id").ok()).collect();
-        ch_json["groups"] = json!(group_ids);
+        ch_json["channel_groups"] = json!(group_ids);
 
         let profiles = state.db.query_all(Statement::from_sql_and_values(
             sea_orm::DatabaseBackend::Postgres,
