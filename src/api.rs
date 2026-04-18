@@ -505,14 +505,16 @@ pub async fn add_m3u_account(
                     let is_xc = acc.account_type == "XC";
                     tokio::spawn(async move {
                         let error_msg = if is_xc {
-                            match crate::m3u::fetch_and_parse_xc(&db_clone, account_id).await {
-                                Err(e) => Some(format!("Failed to parse XC API: {}", e)),
-                                Ok(_) => {
-                                    let _ = crate::m3u::fetch_and_parse_xc_vod(&db_clone, account_id).await;
-                                    let _ = crate::m3u::fetch_and_parse_xc_series(&db_clone, account_id).await;
-                                    None
-                                }
+                            let xc_err = if let Err(e) = crate::m3u::fetch_and_parse_xc(&db_clone, account_id).await {
+                                Some(format!("Failed to parse XC API: {}", e))
+                            } else {
+                                None
+                            };
+                            if xc_err.is_none() {
+                                let _ = crate::m3u::fetch_and_parse_xc_vod(&db_clone, account_id).await;
+                                let _ = crate::m3u::fetch_and_parse_xc_series(&db_clone, account_id).await;
                             }
+                            xc_err
                         } else {
                             match crate::m3u::fetch_and_parse_m3u(&db_clone, &url, account_id).await {
                                 Err(e) => Some(format!("Failed to parse M3U: {}", e)),
@@ -613,14 +615,16 @@ pub async fn refresh_m3u_account(
         let is_xc = account.account_type == "XC";
         tokio::spawn(async move {
             let error_msg = if is_xc {
-                match m3u::fetch_and_parse_xc(&db_clone, account_id).await {
-                    Err(e) => Some(format!("Failed to parse XC API: {}", e)),
-                    Ok(_) => {
-                        let _ = m3u::fetch_and_parse_xc_vod(&db_clone, account_id).await;
-                        let _ = m3u::fetch_and_parse_xc_series(&db_clone, account_id).await;
-                        None
-                    }
+                let xc_err = if let Err(e) = m3u::fetch_and_parse_xc(&db_clone, account_id).await {
+                    Some(format!("Failed to parse XC API: {}", e))
+                } else {
+                    None
+                };
+                if xc_err.is_none() {
+                    let _ = m3u::fetch_and_parse_xc_vod(&db_clone, account_id).await;
+                    let _ = m3u::fetch_and_parse_xc_series(&db_clone, account_id).await;
                 }
+                xc_err
             } else {
                 match m3u::fetch_and_parse_m3u(&db_clone, &url, account_id).await {
                     Err(e) => Some(format!("Failed to parse M3U: {}", e)),

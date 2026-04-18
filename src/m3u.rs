@@ -1,7 +1,7 @@
 use crate::entities::{
     stream, m3u_account, channel_group, channel_group_m3u_account,
-    vod_category, vod_movie, vod_series, vod_episode,
-    vod_m3uvodcategoryrelation, vod_m3umovierelation, vod_m3useriesrelation, vod_m3uepisoderelation
+    vod_category, vod_movie, vod_series,
+    vod_m3uvodcategoryrelation, vod_m3umovierelation, vod_m3useriesrelation
 };
 use regex::Regex;
 use sea_orm::{DatabaseConnection, Set, EntityTrait, QueryFilter, ColumnTrait, ActiveModelTrait};
@@ -330,7 +330,7 @@ pub async fn fetch_and_parse_xc(
 
     Ok(())
 }
-use uuid::Uuid;
+
 
 pub async fn fetch_and_parse_xc_vod(
     db: &DatabaseConnection,
