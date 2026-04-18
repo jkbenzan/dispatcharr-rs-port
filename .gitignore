@@ -1,6 +1,7 @@
 # Rust
 /target
-Cargo.lock
+# Note: Cargo.lock is intentionally NOT ignored for binaries.
+# Committing it ensures reproducible Docker builds.
 
 # Data & Secrets
 .env
