@@ -405,21 +405,35 @@ async fn get_channel_groups_for_account(account_id: i64, db: &sea_orm::DatabaseC
         .await
         .unwrap_or_default();
     
-    let mut results = Vec::new();
-    for m in mappings {
-        let cg = crate::entities::channel_group::Entity::find_by_id(m.channel_group_id).one(db).await.unwrap_or_default();
-        let mut v = serde_json::to_value(&m).unwrap();
-        if let Some(cg) = cg {
-            v["channel_group"] = json!({
-                "id": cg.id,
-                "name": cg.name
-            });
-        } else {
-            v["channel_group"] = json!(m.channel_group_id);
-        }
-        results.push(v);
-    }
-    results
+    mappings.into_iter().map(|m| {
+        // The frontend uses channel_group as a plain integer key into the channelGroups store
+        json!({
+            "id": m.id,
+            "channel_group": m.channel_group_id,
+            "m3u_account_id": m.m3u_account_id,
+            "enabled": m.enabled,
+            "auto_channel_sync": m.auto_channel_sync,
+            "is_stale": m.is_stale,
+            "last_seen": m.last_seen,
+        })
+    }).collect()
+}
+
+async fn create_default_profile(account_id: i64, account_name: &str, max_streams: i32, db: &sea_orm::DatabaseConnection) {
+    use crate::entities::m3u_account_profile;
+    let profile_name = format!("{} Default", account_name);
+    let new_profile = m3u_account_profile::ActiveModel {
+        name: sea_orm::Set(profile_name),
+        m3u_account_id: sea_orm::Set(account_id),
+        is_default: sea_orm::Set(true),
+        is_active: sea_orm::Set(true),
+        max_streams: sea_orm::Set(max_streams),
+        current_viewers: sea_orm::Set(0),
+        search_pattern: sea_orm::Set("^(.*)$".to_string()),
+        replace_pattern: sea_orm::Set("$1".to_string()),
+        ..Default::default()
+    };
+    let _ = m3u_account_profile::Entity::insert(new_profile).exec(db).await;
 }
 
 pub async fn get_m3u_accounts(State(state): State<Arc<AppState>>) -> Json<Value> {
@@ -516,6 +530,9 @@ pub async fn add_m3u_account(
                         }
                     });
                 }
+                
+                // Create default profile (mirrors Django post_save signal)
+                create_default_profile(acc.id, &acc.name, acc.max_streams, &state.db).await;
                 
                 let mut acc_json = serde_json::to_value(&acc).unwrap();
                 acc_json["profiles"] = json!([]);
