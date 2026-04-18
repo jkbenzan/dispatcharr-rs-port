@@ -131,7 +131,6 @@ const M3UTable = () => {
   const [playlist, setPlaylist] = useState(null);
   const [playlistModalOpen, setPlaylistModalOpen] = useState(false);
   const [rowSelection, setRowSelection] = useState([]);
-  const [playlistCreated, setPlaylistCreated] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [playlistToDelete, setPlaylistToDelete] = useState(null);
@@ -745,15 +744,9 @@ const M3UTable = () => {
 
   const [isLoading, setIsLoading] = useState(true);
 
-  const closeModal = (newPlaylist = null) => {
-    if (newPlaylist) {
-      setPlaylistCreated(true);
-      setPlaylist(newPlaylist);
-    } else {
-      setPlaylistModalOpen(false);
-      setPlaylist(null);
-      setPlaylistCreated(false);
-    }
+  const closeModal = () => {
+    setPlaylistModalOpen(false);
+    setPlaylist(null);
   };
 
   useEffect(() => {
@@ -1017,7 +1010,6 @@ const M3UTable = () => {
         m3uAccount={playlist}
         isOpen={playlistModalOpen}
         onClose={closeModal}
-        playlistCreated={playlistCreated}
       />
 
       <ConfirmationDialog
