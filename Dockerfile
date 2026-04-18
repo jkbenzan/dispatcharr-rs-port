@@ -1,5 +1,5 @@
 # STEP 1: Build the Rust Binary
-FROM rust:1.88-slim AS builder
+FROM rust:latest AS builder
 
 # Install OpenSSL development headers and pkg-config
 RUN apt-get update && apt-get install -y \
