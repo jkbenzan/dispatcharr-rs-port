@@ -48,8 +48,11 @@ const M3U = ({
   const [groupFilterModalOpen, setGroupFilterModalOpen] = useState(false);
   const [filterModalOpen, setFilterModalOpen] = useState(false);
   const [loadingText, setLoadingText] = useState('');
+  const [isWaitingForGroups, setIsWaitingForGroups] = useState(false);
   const [showCredentialFields, setShowCredentialFields] = useState(false);
   const [scheduleType, setScheduleType] = useState('interval');
+
+  const refreshProgress = usePlaylistsStore((s) => s.refreshProgress);
 
   const form = useForm({
     mode: 'uncontrolled',
@@ -129,6 +132,46 @@ const M3U = ({
     }
   }, [form.values.account_type]);
 
+  // Watch for progress completion when waiting for groups on a new account
+  useEffect(() => {
+    if (isWaitingForGroups && playlist?.id) {
+      const progress = refreshProgress[playlist.id];
+      if (progress) {
+        if (progress.status === 'pending_setup') {
+          setIsWaitingForGroups(false);
+          setLoadingText('');
+          
+          // Fetch the fully updated playlist so we have the parsed groups
+          API.getPlaylist(playlist.id).then((updatedPlaylist) => {
+             // If VOD is enabled, fetch VOD categories
+             if (updatedPlaylist.account_type === 'XC' && updatedPlaylist.enable_vod) {
+                fetchCategories();
+             }
+             setPlaylist(updatedPlaylist);
+             setGroupFilterModalOpen(true);
+          });
+        } else if (progress.status === 'error') {
+          setIsWaitingForGroups(false);
+          setLoadingText('');
+          notifications.show({
+            title: 'Error Fetching Groups',
+            message: progress.error || 'Failed to fetch groups.',
+            color: 'red',
+          });
+        } else {
+           // Update loading text with current progress
+           if (progress.action === 'downloading') {
+              setLoadingText(`Downloading... ${parseInt(progress.progress || 0)}%`);
+           } else if (progress.action === 'processing_groups') {
+              setLoadingText(`Processing Groups... ${parseInt(progress.progress || 0)}%`);
+           } else {
+              setLoadingText(`${progress.action || 'Processing'}... ${parseInt(progress.progress || 0)}%`);
+           }
+        }
+      }
+    }
+  }, [refreshProgress, isWaitingForGroups, playlist?.id, fetchCategories]);
+
   const onSubmit = async () => {
     const { create_epg, ...values } = form.getValues();
 
@@ -187,21 +230,9 @@ const M3U = ({
         });
       }
 
-      if (values.account_type != 'XC') {
-        notifications.show({
-          title: 'Fetching M3U Groups',
-          message:
-            'Configure group filters and auto sync settings once complete.',
-        });
-      } else {
-        notifications.show({
-          title: 'Fetching XC Groups',
-          message:
-            'XC categories are being loaded. Click the provider row\'s Groups button once status shows "Pending Setup" to configure.',
-        });
-      }
-
-      onClose();
+      setPlaylist(newPlaylist);
+      setIsWaitingForGroups(true);
+      setLoadingText('Initializing... Please wait.');
       return;
     }
 
@@ -219,7 +250,6 @@ const M3U = ({
 
   const closeGroupFilter = () => {
     setGroupFilterModalOpen(false);
-    // After group filter setup for a new account, reset everything
     form.reset();
     setFile(null);
     setPlaylist(null);
