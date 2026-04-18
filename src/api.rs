@@ -505,18 +505,12 @@ pub async fn add_m3u_account(
                     let is_xc = acc.account_type == "XC";
                     tokio::spawn(async move {
                         let error_msg = if is_xc {
-                            let xc_err = if let Err(e) = crate::m3u::fetch_and_parse_xc(&db_clone, account_id).await {
-                                Some(format!("Failed to parse XC API: {}", e))
-                            } else {
-                                None
-                            };
-                            if xc_err.is_none() {
-                                let _ = crate::m3u::fetch_and_parse_xc_vod(&db_clone, account_id).await;
-                                let _ = crate::m3u::fetch_and_parse_xc_series(&db_clone, account_id).await;
+                            match crate::m3u::fetch_and_parse_xc_categories(&db_clone, account_id).await {
+                                Err(e) => Some(format!("Failed to parse XC categories: {}", e)),
+                                Ok(_) => None,
                             }
-                            xc_err
                         } else {
-                            match crate::m3u::fetch_and_parse_m3u(&db_clone, &url, account_id).await {
+                            match crate::m3u::fetch_and_parse_m3u(&db_clone, &url, account_id, true).await {
                                 Err(e) => Some(format!("Failed to parse M3U: {}", e)),
                                 Ok(_) => None,
                             }
@@ -626,7 +620,7 @@ pub async fn refresh_m3u_account(
                 }
                 xc_err
             } else {
-                match m3u::fetch_and_parse_m3u(&db_clone, &url, account_id).await {
+                match m3u::fetch_and_parse_m3u(&db_clone, &url, account_id, false).await {
                     Err(e) => Some(format!("Failed to parse M3U: {}", e)),
                     Ok(_) => None,
                 }
@@ -701,6 +695,20 @@ pub async fn update_m3u_account(
     if let Some(pass) = payload.get("password").and_then(|v| v.as_str()) {
         active.password = sea_orm::Set(Some(pass.to_string()));
     }
+
+    if let Some(max_streams) = payload.get("max_streams") {
+        if let Some(n) = max_streams.as_i64() {
+            active.max_streams = sea_orm::Set(n as i32);
+        } else if let Some(s) = max_streams.as_str() {
+            if let Ok(n) = s.parse::<i32>() {
+                active.max_streams = sea_orm::Set(n);
+            }
+        }
+    }
+
+    if let Some(account_type) = payload.get("account_type").and_then(|v| v.as_str()) {
+        active.account_type = sea_orm::Set(account_type.to_string());
+    }
     
     if let Ok(updated) = active.update(&state.db).await {
         let mut acc_json = serde_json::to_value(&updated).unwrap();
@@ -719,8 +727,60 @@ pub async fn delete_m3u_account(
     State(state): State<Arc<AppState>>,
     Path(account_id): Path<i64>,
 ) -> impl IntoResponse {
-    let _ = m3u_account::Entity::delete_by_id(account_id).exec(&state.db).await;
-    (StatusCode::NO_CONTENT, Json(json!({})))
+    use sea_orm::{EntityTrait, ColumnTrait, QueryFilter, ConnectionTrait};
+    use sea_orm::Statement;
+    
+    // channelstream using raw sql
+    let _ = state.db.execute(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        "DELETE FROM dispatcharr_channels_channelstream WHERE stream_id IN (SELECT id FROM dispatcharr_channels_stream WHERE m3u_account_id = $1)",
+        vec![account_id.into()]
+    )).await;
+
+    // stream
+    let _ = crate::entities::stream::Entity::delete_many()
+        .filter(crate::entities::stream::Column::M3uAccountId.eq(account_id))
+        .exec(&state.db).await;
+
+    // channelgroupm3uaccount
+    let _ = crate::entities::channel_group_m3u_account::Entity::delete_many()
+        .filter(crate::entities::channel_group_m3u_account::Column::M3uAccountId.eq(account_id))
+        .exec(&state.db).await;
+
+    // m3u_account_profile
+    let _ = crate::entities::m3u_account_profile::Entity::delete_many()
+        .filter(crate::entities::m3u_account_profile::Column::M3uAccountId.eq(account_id))
+        .exec(&state.db).await;
+
+    // m3u_filter
+    let _ = crate::entities::m3u_filter::Entity::delete_many()
+        .filter(crate::entities::m3u_filter::Column::M3uAccountId.eq(account_id))
+        .exec(&state.db).await;
+
+    // vod_m3uepisoderelation
+    let _ = crate::entities::vod_m3uepisoderelation::Entity::delete_many()
+        .filter(crate::entities::vod_m3uepisoderelation::Column::M3uAccountId.eq(account_id))
+        .exec(&state.db).await;
+
+    // vod_m3umovierelation
+    let _ = crate::entities::vod_m3umovierelation::Entity::delete_many()
+        .filter(crate::entities::vod_m3umovierelation::Column::M3uAccountId.eq(account_id))
+        .exec(&state.db).await;
+
+    // vod_m3useriesrelation
+    let _ = crate::entities::vod_m3useriesrelation::Entity::delete_many()
+        .filter(crate::entities::vod_m3useriesrelation::Column::M3uAccountId.eq(account_id))
+        .exec(&state.db).await;
+
+    // vod_m3uvodcategoryrelation
+    let _ = crate::entities::vod_m3uvodcategoryrelation::Entity::delete_many()
+        .filter(crate::entities::vod_m3uvodcategoryrelation::Column::M3uAccountId.eq(account_id))
+        .exec(&state.db).await;
+
+    match m3u_account::Entity::delete_by_id(account_id).exec(&state.db).await {
+        Ok(_) => (StatusCode::NO_CONTENT, Json(json!({}))),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))),
+    }
 }
 
 pub async fn update_m3u_group_settings(
@@ -976,9 +1036,62 @@ pub async fn delete_server_group(
 
 // --- Refresh Endpoints ---
 pub async fn refresh_m3u_all(
-    State(_state): State<Arc<AppState>>,
+    State(state): State<Arc<AppState>>,
 ) -> impl IntoResponse {
-    // In a full implementation, iterate all active accounts and spawn fetches
+    use sea_orm::{EntityTrait, ColumnTrait, QueryFilter};
+    let accounts = match m3u_account::Entity::find().filter(m3u_account::Column::IsActive.eq(true)).all(&state.db).await {
+        Ok(a) => a,
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))),
+    };
+
+    for account in accounts {
+        let db_clone = state.db.clone();
+        let account_id = account.id;
+        let is_xc = account.account_type == "XC";
+        let url = if is_xc {
+            format!("{}/get.php?username={}&password={}&type=m3u_plus&output=ts",
+                account.server_url.as_deref().unwrap_or_default().trim_end_matches('/'),
+                account.username.as_deref().unwrap_or_default(),
+                account.password.as_deref().unwrap_or_default()
+            )
+        } else {
+            account.server_url.clone().unwrap_or_default()
+        };
+
+        if !url.is_empty() {
+            tokio::spawn(async move {
+                let error_msg = if is_xc {
+                    let xc_err = if let Err(e) = crate::m3u::fetch_and_parse_xc(&db_clone, account_id).await {
+                        Some(format!("Failed to parse XC API: {}", e))
+                    } else {
+                        None
+                    };
+                    if xc_err.is_none() {
+                        let _ = crate::m3u::fetch_and_parse_xc_vod(&db_clone, account_id).await;
+                        let _ = crate::m3u::fetch_and_parse_xc_series(&db_clone, account_id).await;
+                    }
+                    xc_err
+                } else {
+                    match crate::m3u::fetch_and_parse_m3u(&db_clone, &url, account_id, false).await {
+                        Err(e) => Some(format!("Failed to parse M3U: {}", e)),
+                        Ok(_) => None,
+                    }
+                };
+                
+                if let Some(msg) = error_msg {
+                    eprintln!("{}", msg);
+                    if let Ok(Some(acc)) = crate::entities::m3u_account::Entity::find_by_id(account_id).one(&db_clone).await {
+                        use sea_orm::ActiveModelTrait;
+                        let mut active: crate::entities::m3u_account::ActiveModel = acc.into();
+                        active.status = sea_orm::Set("failed".to_string());
+                        active.last_message = sea_orm::Set(Some(msg.chars().take(255).collect()));
+                        let _ = active.update(&db_clone).await;
+                    }
+                }
+            });
+        }
+    }
+    
     (StatusCode::ACCEPTED, Json(json!({"success": true, "message": "M3U refresh initiated."})))
 }
 

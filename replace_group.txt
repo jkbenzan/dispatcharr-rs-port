@@ -1,0 +1,15 @@
+﻿    let mut results = Vec::new();
+    for m in mappings {
+        let cg = crate::entities::channel_group::Entity::find_by_id(m.channel_group_id).one(db).await.unwrap_or_default();
+        let mut v = serde_json::to_value(&m).unwrap();
+        if let Some(cg) = cg {
+            v["channel_group"] = json!({
+                "id": cg.id,
+                "name": cg.name
+            });
+        } else {
+            v["channel_group"] = json!(m.channel_group_id);
+        }
+        results.push(v);
+    }
+    results

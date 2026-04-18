@@ -15,6 +15,7 @@ pub async fn fetch_and_parse_m3u(
     db: &DatabaseConnection,
     url: &str,
     account_id: i64,
+    is_initial: bool,
 ) -> Result<(), Box<dyn Error>> {
     if let Ok(Some(acc)) = m3u_account::Entity::find_by_id(account_id).one(db).await {
         let mut active: m3u_account::ActiveModel = acc.into();
@@ -175,8 +176,13 @@ pub async fn fetch_and_parse_m3u(
 
     if let Ok(Some(acc)) = m3u_account::Entity::find_by_id(account_id).one(db).await {
         let mut active: m3u_account::ActiveModel = acc.into();
-        active.status = Set("success".to_string());
-        active.last_message = Set(Some("Successfully synced!".to_string()));
+        if is_initial {
+            active.status = Set("pending_setup".to_string());
+            active.last_message = Set(Some("M3U groups loaded. Please select groups to complete setup.".to_string()));
+        } else {
+            active.status = Set("success".to_string());
+            active.last_message = Set(Some("Successfully synced!".to_string()));
+        }
         active.updated_at = Set(Some(Utc::now().into()));
         let _ = active.update(db).await;
     }
@@ -578,6 +584,212 @@ pub async fn fetch_and_parse_xc_series(
         let mut final_active: m3u_account::ActiveModel = acc.into();
         final_active.status = Set("success".to_string());
         final_active.last_message = Set(Some("Successfully synced Series!".to_string()));
+        final_active.updated_at = Set(Some(Utc::now().into()));
+        let _ = final_active.update(db).await;
+    }
+
+    Ok(())
+}
+
+pub async fn fetch_and_parse_xc_categories(
+    db: &DatabaseConnection,
+    account_id: i64,
+) -> Result<(), Box<dyn Error>> {
+    let acc = match m3u_account::Entity::find_by_id(account_id).one(db).await {
+        Ok(Some(a)) => a,
+        _ => return Err("Account not found".into()),
+    };
+
+    let mut server_url_raw = acc.server_url.clone().unwrap_or_default();
+    server_url_raw = server_url_raw.trim_end_matches('/').to_string();
+    
+    let server_url = if let Some(idx) = server_url_raw.find("://") {
+        let protocol = &server_url_raw[..idx];
+        let rest = &server_url_raw[idx + 3..];
+        let domain = rest.split('/').next().unwrap_or(rest);
+        format!("{}://{}", protocol, domain)
+    } else {
+        let domain = server_url_raw.split('/').next().unwrap_or(&server_url_raw);
+        format!("http://{}", domain)
+    };
+    let username = acc.username.clone().unwrap_or_default();
+    let password = acc.password.clone().unwrap_or_default();
+
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        .timeout(std::time::Duration::from_secs(60))
+        .build()?;
+
+    // Fetch Live Categories
+    if let Ok(Some(acc)) = m3u_account::Entity::find_by_id(account_id).one(db).await {
+        let mut active: m3u_account::ActiveModel = acc.into();
+        active.status = Set("fetching".to_string());
+        active.last_message = Set(Some("Fetching XC Live categories...".to_string()));
+        let _ = active.update(db).await;
+    }
+
+    let live_categories = match crate::xtream_codes::get_live_categories(&client, &server_url, &username, &password).await {
+        Ok(c) => c,
+        Err(_) => vec![],
+    };
+
+    for cat in live_categories {
+            let group_name = cat.category_name;
+            let cg = match channel_group::Entity::find()
+                .filter(channel_group::Column::Name.eq(&group_name))
+                .one(db).await.unwrap_or(None) {
+                Some(g) => g,
+                None => {
+                    let new_cg = channel_group::ActiveModel {
+                        name: Set(group_name.clone()),
+                        ..Default::default()
+                    };
+                    if let Ok(res) = channel_group::Entity::insert(new_cg).exec(db).await {
+                        channel_group::Model { id: res.last_insert_id, name: group_name.clone() }
+                    } else {
+                        continue;
+                    }
+                }
+            };
+
+            let existing_mapping = channel_group_m3u_account::Entity::find()
+                .filter(channel_group_m3u_account::Column::ChannelGroupId.eq(cg.id))
+                .filter(channel_group_m3u_account::Column::M3uAccountId.eq(account_id))
+                .one(db).await.unwrap_or(None);
+
+            if existing_mapping.is_none() {
+                let new_mapping = channel_group_m3u_account::ActiveModel {
+                    enabled: Set(false),
+                    channel_group_id: Set(cg.id),
+                    m3u_account_id: Set(account_id),
+                    auto_channel_sync: Set(false),
+                    is_stale: Set(false),
+                    last_seen: Set(Utc::now().into()),
+                    ..Default::default()
+                };
+                let _ = channel_group_m3u_account::Entity::insert(new_mapping).exec(db).await;
+            }
+        }
+    // Fetch VOD Categories
+    if let Ok(Some(acc)) = m3u_account::Entity::find_by_id(account_id).one(db).await {
+        let mut active: m3u_account::ActiveModel = acc.into();
+        active.last_message = Set(Some("Fetching XC VOD categories...".to_string()));
+        let _ = active.update(db).await;
+    }
+
+    let vod_categories = match crate::xtream_codes::get_vod_categories(&client, &server_url, &username, &password).await {
+        Ok(c) => c,
+        Err(_) => vec![],
+    };
+
+    for cat in vod_categories {
+            let vc = match vod_category::Entity::find()
+                .filter(vod_category::Column::Name.eq(&cat.category_name))
+                .filter(vod_category::Column::CategoryType.eq("movie"))
+                .one(db).await.unwrap_or(None) {
+                Some(c) => c,
+                None => {
+                    let new_vc = vod_category::ActiveModel {
+                        name: Set(cat.category_name.clone()),
+                        category_type: Set("movie".to_string()),
+                        created_at: Set(Utc::now().into()),
+                        updated_at: Set(Utc::now().into()),
+                        ..Default::default()
+                    };
+                    if let Ok(res) = vod_category::Entity::insert(new_vc).exec(db).await {
+                        vod_category::Model {
+                            id: res.last_insert_id,
+                            name: cat.category_name.clone(),
+                            category_type: "movie".to_string(),
+                            created_at: Utc::now().into(),
+                            updated_at: Utc::now().into(),
+                        }
+                    } else {
+                        continue;
+                    }
+                }
+            };
+
+            let relation = vod_m3uvodcategoryrelation::Entity::find()
+                .filter(vod_m3uvodcategoryrelation::Column::CategoryId.eq(vc.id))
+                .filter(vod_m3uvodcategoryrelation::Column::M3uAccountId.eq(account_id))
+                .one(db).await.unwrap_or(None);
+            if relation.is_none() {
+                let new_rel = vod_m3uvodcategoryrelation::ActiveModel {
+                    enabled: Set(false),
+                    m3u_account_id: Set(account_id),
+                    category_id: Set(vc.id),
+                    created_at: Set(Utc::now().into()),
+                    updated_at: Set(Utc::now().into()),
+                    ..Default::default()
+                };
+                let _ = vod_m3uvodcategoryrelation::Entity::insert(new_rel).exec(db).await;
+            }
+        }
+
+
+    // Fetch Series Categories
+    if let Ok(Some(acc)) = m3u_account::Entity::find_by_id(account_id).one(db).await {
+        let mut active: m3u_account::ActiveModel = acc.into();
+        active.last_message = Set(Some("Fetching XC Series categories...".to_string()));
+        let _ = active.update(db).await;
+    }
+
+    let series_categories = match crate::xtream_codes::get_series_categories(&client, &server_url, &username, &password).await {
+        Ok(c) => c,
+        Err(_) => vec![],
+    };
+
+    for cat in series_categories {
+            let vc = match vod_category::Entity::find()
+                .filter(vod_category::Column::Name.eq(&cat.category_name))
+                .filter(vod_category::Column::CategoryType.eq("series"))
+                .one(db).await.unwrap_or(None) {
+                Some(c) => c,
+                None => {
+                    let new_vc = vod_category::ActiveModel {
+                        name: Set(cat.category_name.clone()),
+                        category_type: Set("series".to_string()),
+                        created_at: Set(Utc::now().into()),
+                        updated_at: Set(Utc::now().into()),
+                        ..Default::default()
+                    };
+                    if let Ok(res) = vod_category::Entity::insert(new_vc).exec(db).await {
+                        vod_category::Model {
+                            id: res.last_insert_id,
+                            name: cat.category_name.clone(),
+                            category_type: "series".to_string(),
+                            created_at: Utc::now().into(),
+                            updated_at: Utc::now().into(),
+                        }
+                    } else {
+                        continue;
+                    }
+                }
+            };
+
+            let relation = vod_m3uvodcategoryrelation::Entity::find()
+                .filter(vod_m3uvodcategoryrelation::Column::CategoryId.eq(vc.id))
+                .filter(vod_m3uvodcategoryrelation::Column::M3uAccountId.eq(account_id))
+                .one(db).await.unwrap_or(None);
+            if relation.is_none() {
+                let new_rel = vod_m3uvodcategoryrelation::ActiveModel {
+                    enabled: Set(false),
+                    m3u_account_id: Set(account_id),
+                    category_id: Set(vc.id),
+                    created_at: Set(Utc::now().into()),
+                    updated_at: Set(Utc::now().into()),
+                    ..Default::default()
+                };
+                let _ = vod_m3uvodcategoryrelation::Entity::insert(new_rel).exec(db).await;
+            }
+        }
+
+
+    if let Ok(Some(acc)) = m3u_account::Entity::find_by_id(account_id).one(db).await {
+        let mut final_active: m3u_account::ActiveModel = acc.into();
+        final_active.status = Set("pending_setup".to_string());
+        final_active.last_message = Set(Some("Groups loaded. Please select groups to complete setup.".to_string()));
         final_active.updated_at = Set(Some(Utc::now().into()));
         let _ = final_active.update(db).await;
     }
