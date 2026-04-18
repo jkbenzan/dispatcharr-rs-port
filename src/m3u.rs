@@ -193,12 +193,21 @@ pub async fn fetch_and_parse_xc(
     active.last_message = Set(Some("Fetching XC API categories...".to_string()));
     let _ = active.update(db).await;
 
-    let server_url = acc.server_url.clone().unwrap_or_default();
+    let server_url_raw = acc.server_url.clone().unwrap_or_default();
+    // Ensure the URL has a scheme
+    let server_url = if server_url_raw.starts_with("http://") || server_url_raw.starts_with("https://") {
+        server_url_raw.clone()
+    } else {
+        format!("http://{}", server_url_raw)
+    };
     let username = acc.username.clone().unwrap_or_default();
     let password = acc.password.clone().unwrap_or_default();
 
+    eprintln!("[XC] Connecting to server: {}", server_url);
+
     let client = reqwest::Client::builder()
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        .timeout(std::time::Duration::from_secs(60))
         .build()?;
 
     let categories = crate::xtream_codes::get_live_categories(&client, &server_url, &username, &password).await?;
