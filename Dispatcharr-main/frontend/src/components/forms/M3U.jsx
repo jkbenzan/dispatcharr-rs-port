@@ -193,31 +193,15 @@ const M3U = ({
           message:
             'Configure group filters and auto sync settings once complete.',
         });
-
-        // Don't prompt for group filters, but keeping this here
-        // in case we want to revive it
-        newPlaylist = null;
-        close();
-        return;
+      } else {
+        notifications.show({
+          title: 'Fetching XC Groups',
+          message:
+            'XC categories are being loaded. Click the provider row\'s Groups button once status shows "Pending Setup" to configure.',
+        });
       }
 
-      // Fetch the updated playlist details (this also updates the store via API)
-      const updatedPlaylist = await API.getPlaylist(newPlaylist.id);
-
-      // Note: We don't call fetchPlaylists() here because API.addPlaylist()
-      // already added the playlist to the store. Calling fetchPlaylists() creates
-      // a race condition where the store is temporarily cleared/replaced while
-      // websocket updates for the new playlist's refresh task are arriving.
-      await Promise.all([fetchChannelGroups(), fetchEPGs()]);
-
-      // If this is an XC account with VOD enabled, also fetch VOD categories
-      if (values.account_type === 'XC' && values.enable_vod) {
-        fetchCategories();
-      }
-
-      console.log('opening group options');
-      setPlaylist(updatedPlaylist);
-      setGroupFilterModalOpen(true);
+      onClose();
       return;
     }
 
@@ -246,11 +230,13 @@ const M3U = ({
     setFilterModalOpen(false);
   };
 
-  useEffect(() => {
-    if (playlistCreated) {
-      setGroupFilterModalOpen(true);
-    }
-  }, [playlist, playlistCreated]);
+  // Note: playlistCreated is no longer used to auto-open the group filter.
+  // The group filter is opened by the user clicking the Groups button on an existing account.
+  // useEffect(() => {
+  //   if (playlistCreated) {
+  //     setGroupFilterModalOpen(true);
+  //   }
+  // }, [playlist, playlistCreated]);
 
   if (!isOpen) {
     return <></>;
