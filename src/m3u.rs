@@ -365,7 +365,7 @@ pub async fn fetch_and_parse_xc_vod(
     active.last_message = Set(Some("Fetching XC VOD categories...".to_string()));
     let _ = active.update(db).await;
 
-    if let Ok(vod_cats) = crate::xtream_codes::get_vod_categories(&client, &server_url, &username, &password).await {
+    if let Some(vod_cats) = crate::xtream_codes::get_vod_categories(&client, &server_url, &username, &password).await.ok() {
         for cat in vod_cats {
             let vc = match vod_category::Entity::find()
                 .filter(vod_category::Column::Name.eq(&cat.category_name))
@@ -417,7 +417,7 @@ pub async fn fetch_and_parse_xc_vod(
     active.last_message = Set(Some("Fetching XC VOD streams...".to_string()));
     let _ = active.update(db).await;
 
-    if let Ok(vod_streams) = crate::xtream_codes::get_vod_streams(&client, &server_url, &username, &password).await {
+    if let Some(vod_streams) = crate::xtream_codes::get_vod_streams(&client, &server_url, &username, &password).await.ok() {
         for s in vod_streams.into_iter() {
             let rel = vod_m3umovierelation::Entity::find()
                 .filter(vod_m3umovierelation::Column::StreamId.eq(s.stream_id.to_string()))
@@ -492,7 +492,7 @@ pub async fn fetch_and_parse_xc_series(
     active.last_message = Set(Some("Fetching XC Series categories...".to_string()));
     let _ = active.update(db).await;
 
-    if let Ok(series_cats) = crate::xtream_codes::get_series_categories(&client, &server_url, &username, &password).await {
+    if let Some(series_cats) = crate::xtream_codes::get_series_categories(&client, &server_url, &username, &password).await.ok() {
         for cat in series_cats {
             let vc = match vod_category::Entity::find()
                 .filter(vod_category::Column::Name.eq(&cat.category_name))
@@ -543,7 +543,7 @@ pub async fn fetch_and_parse_xc_series(
     active.last_message = Set(Some("Fetching XC Series...".to_string()));
     let _ = active.update(db).await;
 
-    if let Ok(series_list) = crate::xtream_codes::get_series(&client, &server_url, &username, &password).await {
+    if let Some(series_list) = crate::xtream_codes::get_series(&client, &server_url, &username, &password).await.ok() {
         for s in series_list.into_iter() {
             let rel = vod_m3useriesrelation::Entity::find()
                 .filter(vod_m3useriesrelation::Column::ExternalSeriesId.eq(s.series_id.to_string()))
