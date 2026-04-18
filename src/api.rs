@@ -1,9 +1,6 @@
 use axum::Json;
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use sea_orm::Set;
-use chrono::Utc;
-
 // --------------------------------------------------------
 // DATA SHAPES FOR THE FRONTEND
 // --------------------------------------------------------
@@ -777,7 +774,7 @@ pub async fn create_m3u_profile(
         ..Default::default()
     };
     if let Ok(inserted) = m3u_account_profile::Entity::insert(active).exec_with_returning(&state.db).await {
-        (StatusCode::CREATED, Json(inserted))
+        (StatusCode::CREATED, Json(json!(inserted)))
     } else {
         (StatusCode::BAD_REQUEST, Json(json!({"error": "Failed to create profile"})))
     }
@@ -812,7 +809,7 @@ pub async fn update_m3u_profile(
         }
         
         if let Ok(updated) = active.update(&state.db).await {
-            return (StatusCode::OK, Json(updated));
+            return (StatusCode::OK, Json(json!(updated)));
         }
     }
     (StatusCode::BAD_REQUEST, Json(json!({"error": "Failed to update profile"})))
@@ -856,7 +853,7 @@ pub async fn create_m3u_filter(
         ..Default::default()
     };
     if let Ok(inserted) = m3u_filter::Entity::insert(active).exec_with_returning(&state.db).await {
-        (StatusCode::CREATED, Json(inserted))
+        (StatusCode::CREATED, Json(json!(inserted)))
     } else {
         (StatusCode::BAD_REQUEST, Json(json!({"error": "Failed to create filter"})))
     }
@@ -885,7 +882,7 @@ pub async fn update_m3u_filter(
         }
         
         if let Ok(updated) = active.update(&state.db).await {
-            return (StatusCode::OK, Json(updated));
+            return (StatusCode::OK, Json(json!(updated)));
         }
     }
     (StatusCode::BAD_REQUEST, Json(json!({"error": "Failed to update filter"})))
@@ -922,7 +919,7 @@ pub async fn create_server_group(
         ..Default::default()
     };
     if let Ok(inserted) = server_group::Entity::insert(active).exec_with_returning(&state.db).await {
-        (StatusCode::CREATED, Json(inserted))
+        (StatusCode::CREATED, Json(json!(inserted)))
     } else {
         (StatusCode::BAD_REQUEST, Json(json!({"error": "Failed to create server group"})))
     }
@@ -942,7 +939,7 @@ pub async fn update_server_group(
         }
         
         if let Ok(updated) = active.update(&state.db).await {
-            return (StatusCode::OK, Json(updated));
+            return (StatusCode::OK, Json(json!(updated)));
         }
     }
     (StatusCode::BAD_REQUEST, Json(json!({"error": "Failed to update server group"})))

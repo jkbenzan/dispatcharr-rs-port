@@ -1,7 +1,7 @@
 use axum::{
     extract::ws::{WebSocket, WebSocketUpgrade},
     response::IntoResponse,
-    routing::{get, post, patch, delete},
+    routing::{get, post, patch},
     Router,
 };
 use sea_orm::{Database, ConnectOptions, DatabaseConnection};
