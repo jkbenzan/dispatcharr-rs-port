@@ -715,6 +715,14 @@ pub async fn update_m3u_account(
     }
 }
 
+pub async fn delete_m3u_account(
+    State(state): State<Arc<AppState>>,
+    Path(account_id): Path<i64>,
+) -> impl IntoResponse {
+    let _ = m3u_account::Entity::delete_by_id(account_id).exec(&state.db).await;
+    (StatusCode::NO_CONTENT, Json(json!({})))
+}
+
 pub async fn update_m3u_group_settings(
     State(state): State<Arc<AppState>>,
     Path(account_id): Path<i64>,
