@@ -731,51 +731,94 @@ pub async fn delete_m3u_account(
     use sea_orm::Statement;
     
     // channelstream using raw sql
-    let _ = state.db.execute(Statement::from_sql_and_values(
+    if let Err(e) = state.db.execute(Statement::from_sql_and_values(
         sea_orm::DatabaseBackend::Postgres,
         "DELETE FROM dispatcharr_channels_channelstream WHERE stream_id IN (SELECT id FROM dispatcharr_channels_stream WHERE m3u_account_id = $1)",
         vec![account_id.into()]
-    )).await;
+    )).await {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": format!("Failed to delete channelstream by stream: {}", e)})));
+    }
+
+    // channelstream by channel
+    if let Err(e) = state.db.execute(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        "DELETE FROM dispatcharr_channels_channelstream WHERE channel_id IN (SELECT id FROM dispatcharr_channels_channel WHERE auto_created_by_id = $1)",
+        vec![account_id.into()]
+    )).await {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": format!("Failed to delete channelstream by channel: {}", e)})));
+    }
+
+    // channelprofilemembership
+    if let Err(e) = state.db.execute(Statement::from_sql_and_values(
+        sea_orm::DatabaseBackend::Postgres,
+        "DELETE FROM dispatcharr_channels_channelprofilemembership WHERE channel_id IN (SELECT id FROM dispatcharr_channels_channel WHERE auto_created_by_id = $1)",
+        vec![account_id.into()]
+    )).await {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": format!("Failed to delete channelprofilemembership: {}", e)})));
+    }
+
+    // channel
+    if let Err(e) = crate::entities::channel::Entity::delete_many()
+        .filter(crate::entities::channel::Column::AutoCreatedById.eq(account_id))
+        .exec(&state.db).await {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": format!("Failed to delete auto-created channels: {}", e)})));
+    }
 
     // stream
-    let _ = crate::entities::stream::Entity::delete_many()
+    if let Err(e) = crate::entities::stream::Entity::delete_many()
         .filter(crate::entities::stream::Column::M3uAccountId.eq(account_id))
-        .exec(&state.db).await;
+        .exec(&state.db).await {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": format!("Failed to delete stream: {}", e)})));
+    }
 
     // channelgroupm3uaccount
-    let _ = crate::entities::channel_group_m3u_account::Entity::delete_many()
+    if let Err(e) = crate::entities::channel_group_m3u_account::Entity::delete_many()
         .filter(crate::entities::channel_group_m3u_account::Column::M3uAccountId.eq(account_id))
-        .exec(&state.db).await;
+        .exec(&state.db).await {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": format!("Failed to delete channel_group_m3u_account: {}", e)})));
+    }
 
     // m3u_account_profile
-    let _ = crate::entities::m3u_account_profile::Entity::delete_many()
+    if let Err(e) = crate::entities::m3u_account_profile::Entity::delete_many()
         .filter(crate::entities::m3u_account_profile::Column::M3uAccountId.eq(account_id))
-        .exec(&state.db).await;
+        .exec(&state.db).await {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": format!("Failed to delete m3u_account_profile: {}", e)})));
+    }
 
     // m3u_filter
-    let _ = crate::entities::m3u_filter::Entity::delete_many()
+    if let Err(e) = crate::entities::m3u_filter::Entity::delete_many()
         .filter(crate::entities::m3u_filter::Column::M3uAccountId.eq(account_id))
-        .exec(&state.db).await;
+        .exec(&state.db).await {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": format!("Failed to delete m3u_filter: {}", e)})));
+    }
 
     // vod_m3uepisoderelation
-    let _ = crate::entities::vod_m3uepisoderelation::Entity::delete_many()
+    if let Err(e) = crate::entities::vod_m3uepisoderelation::Entity::delete_many()
         .filter(crate::entities::vod_m3uepisoderelation::Column::M3uAccountId.eq(account_id))
-        .exec(&state.db).await;
+        .exec(&state.db).await {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": format!("Failed to delete vod_m3uepisoderelation: {}", e)})));
+    }
 
     // vod_m3umovierelation
-    let _ = crate::entities::vod_m3umovierelation::Entity::delete_many()
+    if let Err(e) = crate::entities::vod_m3umovierelation::Entity::delete_many()
         .filter(crate::entities::vod_m3umovierelation::Column::M3uAccountId.eq(account_id))
-        .exec(&state.db).await;
+        .exec(&state.db).await {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": format!("Failed to delete vod_m3umovierelation: {}", e)})));
+    }
 
     // vod_m3useriesrelation
-    let _ = crate::entities::vod_m3useriesrelation::Entity::delete_many()
+    if let Err(e) = crate::entities::vod_m3useriesrelation::Entity::delete_many()
         .filter(crate::entities::vod_m3useriesrelation::Column::M3uAccountId.eq(account_id))
-        .exec(&state.db).await;
+        .exec(&state.db).await {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": format!("Failed to delete vod_m3useriesrelation: {}", e)})));
+    }
 
     // vod_m3uvodcategoryrelation
-    let _ = crate::entities::vod_m3uvodcategoryrelation::Entity::delete_many()
+    if let Err(e) = crate::entities::vod_m3uvodcategoryrelation::Entity::delete_many()
         .filter(crate::entities::vod_m3uvodcategoryrelation::Column::M3uAccountId.eq(account_id))
-        .exec(&state.db).await;
+        .exec(&state.db).await {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": format!("Failed to delete vod_m3uvodcategoryrelation: {}", e)})));
+    }
 
     match m3u_account::Entity::delete_by_id(account_id).exec(&state.db).await {
         Ok(_) => (StatusCode::NO_CONTENT, Json(json!({}))),
