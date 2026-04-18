@@ -193,12 +193,18 @@ pub async fn fetch_and_parse_xc(
     active.last_message = Set(Some("Fetching XC API categories...".to_string()));
     let _ = active.update(db).await;
 
-    let server_url_raw = acc.server_url.clone().unwrap_or_default();
-    // Ensure the URL has a scheme
-    let server_url = if server_url_raw.starts_with("http://") || server_url_raw.starts_with("https://") {
-        server_url_raw.clone()
+    let mut server_url_raw = acc.server_url.clone().unwrap_or_default();
+    server_url_raw = server_url_raw.trim_end_matches('/').to_string();
+    
+    // Remove any path after domain
+    let server_url = if let Some(idx) = server_url_raw.find("://") {
+        let protocol = &server_url_raw[..idx];
+        let rest = &server_url_raw[idx + 3..];
+        let domain = rest.split('/').next().unwrap_or(rest);
+        format!("{}://{}", protocol, domain)
     } else {
-        format!("http://{}", server_url_raw)
+        let domain = server_url_raw.split('/').next().unwrap_or(&server_url_raw);
+        format!("http://{}", domain)
     };
     let username = acc.username.clone().unwrap_or_default();
     let password = acc.password.clone().unwrap_or_default();
