@@ -745,6 +745,234 @@ pub async fn update_m3u_group_settings(
     (StatusCode::OK, Json(json!({"success": true})))
 }
 
+// --- Profiles ---
+pub async fn get_m3u_profiles(
+    State(state): State<Arc<AppState>>,
+    Path(account_id): Path<i64>,
+) -> impl IntoResponse {
+    use crate::entities::m3u_account_profile;
+    let profiles = m3u_account_profile::Entity::find()
+        .filter(m3u_account_profile::Column::M3uAccountId.eq(account_id))
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+    (StatusCode::OK, Json(profiles))
+}
+
+pub async fn create_m3u_profile(
+    State(state): State<Arc<AppState>>,
+    Path(account_id): Path<i64>,
+    Json(payload): Json<Value>,
+) -> impl IntoResponse {
+    use crate::entities::m3u_account_profile;
+    let active = m3u_account_profile::ActiveModel {
+        m3u_account_id: sea_orm::Set(account_id),
+        name: sea_orm::Set(payload.get("name").and_then(|v| v.as_str()).unwrap_or("New Profile").to_string()),
+        is_default: sea_orm::Set(payload.get("is_default").and_then(|v| v.as_bool()).unwrap_or(false)),
+        max_streams: sea_orm::Set(payload.get("max_streams").and_then(|v| v.as_i64()).unwrap_or(1) as i32),
+        is_active: sea_orm::Set(payload.get("is_active").and_then(|v| v.as_bool()).unwrap_or(true)),
+        search_pattern: sea_orm::Set(payload.get("search_pattern").and_then(|v| v.as_str()).unwrap_or("^(.*)$").to_string()),
+        replace_pattern: sea_orm::Set(payload.get("replace_pattern").and_then(|v| v.as_str()).unwrap_or("$1").to_string()),
+        current_viewers: sea_orm::Set(0),
+        ..Default::default()
+    };
+    if let Ok(inserted) = m3u_account_profile::Entity::insert(active).exec_with_returning(&state.db).await {
+        (StatusCode::CREATED, Json(inserted))
+    } else {
+        (StatusCode::BAD_REQUEST, Json(json!({"error": "Failed to create profile"})))
+    }
+}
+
+pub async fn update_m3u_profile(
+    State(state): State<Arc<AppState>>,
+    Path((_account_id, profile_id)): Path<(i64, i64)>,
+    Json(payload): Json<Value>,
+) -> impl IntoResponse {
+    use crate::entities::m3u_account_profile;
+    if let Ok(Some(profile)) = m3u_account_profile::Entity::find_by_id(profile_id).one(&state.db).await {
+        let mut active: m3u_account_profile::ActiveModel = profile.into();
+        
+        if let Some(name) = payload.get("name").and_then(|v| v.as_str()) {
+            active.name = sea_orm::Set(name.to_string());
+        }
+        if let Some(is_default) = payload.get("is_default").and_then(|v| v.as_bool()) {
+            active.is_default = sea_orm::Set(is_default);
+        }
+        if let Some(max_streams) = payload.get("max_streams").and_then(|v| v.as_i64()) {
+            active.max_streams = sea_orm::Set(max_streams as i32);
+        }
+        if let Some(is_active) = payload.get("is_active").and_then(|v| v.as_bool()) {
+            active.is_active = sea_orm::Set(is_active);
+        }
+        if let Some(search_pattern) = payload.get("search_pattern").and_then(|v| v.as_str()) {
+            active.search_pattern = sea_orm::Set(search_pattern.to_string());
+        }
+        if let Some(replace_pattern) = payload.get("replace_pattern").and_then(|v| v.as_str()) {
+            active.replace_pattern = sea_orm::Set(replace_pattern.to_string());
+        }
+        
+        if let Ok(updated) = active.update(&state.db).await {
+            return (StatusCode::OK, Json(updated));
+        }
+    }
+    (StatusCode::BAD_REQUEST, Json(json!({"error": "Failed to update profile"})))
+}
+
+pub async fn delete_m3u_profile(
+    State(state): State<Arc<AppState>>,
+    Path((_account_id, profile_id)): Path<(i64, i64)>,
+) -> impl IntoResponse {
+    use crate::entities::m3u_account_profile;
+    let _ = m3u_account_profile::Entity::delete_by_id(profile_id).exec(&state.db).await;
+    (StatusCode::NO_CONTENT, Json(json!({})))
+}
+
+// --- Filters ---
+pub async fn get_m3u_filters(
+    State(state): State<Arc<AppState>>,
+    Path(account_id): Path<i64>,
+) -> impl IntoResponse {
+    use crate::entities::m3u_filter;
+    let filters = m3u_filter::Entity::find()
+        .filter(m3u_filter::Column::M3uAccountId.eq(account_id))
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+    (StatusCode::OK, Json(filters))
+}
+
+pub async fn create_m3u_filter(
+    State(state): State<Arc<AppState>>,
+    Path(account_id): Path<i64>,
+    Json(payload): Json<Value>,
+) -> impl IntoResponse {
+    use crate::entities::m3u_filter;
+    let active = m3u_filter::ActiveModel {
+        m3u_account_id: sea_orm::Set(account_id),
+        filter_type: sea_orm::Set(payload.get("filter_type").and_then(|v| v.as_str()).unwrap_or("regex").to_string()),
+        regex_pattern: sea_orm::Set(payload.get("regex_pattern").and_then(|v| v.as_str()).unwrap_or("").to_string()),
+        exclude: sea_orm::Set(payload.get("exclude").and_then(|v| v.as_bool()).unwrap_or(true)),
+        order: sea_orm::Set(payload.get("order").and_then(|v| v.as_i64()).unwrap_or(0) as i32),
+        ..Default::default()
+    };
+    if let Ok(inserted) = m3u_filter::Entity::insert(active).exec_with_returning(&state.db).await {
+        (StatusCode::CREATED, Json(inserted))
+    } else {
+        (StatusCode::BAD_REQUEST, Json(json!({"error": "Failed to create filter"})))
+    }
+}
+
+pub async fn update_m3u_filter(
+    State(state): State<Arc<AppState>>,
+    Path((_account_id, filter_id)): Path<(i64, i64)>,
+    Json(payload): Json<Value>,
+) -> impl IntoResponse {
+    use crate::entities::m3u_filter;
+    if let Ok(Some(filter)) = m3u_filter::Entity::find_by_id(filter_id).one(&state.db).await {
+        let mut active: m3u_filter::ActiveModel = filter.into();
+        
+        if let Some(ftype) = payload.get("filter_type").and_then(|v| v.as_str()) {
+            active.filter_type = sea_orm::Set(ftype.to_string());
+        }
+        if let Some(pattern) = payload.get("regex_pattern").and_then(|v| v.as_str()) {
+            active.regex_pattern = sea_orm::Set(pattern.to_string());
+        }
+        if let Some(exclude) = payload.get("exclude").and_then(|v| v.as_bool()) {
+            active.exclude = sea_orm::Set(exclude);
+        }
+        if let Some(order) = payload.get("order").and_then(|v| v.as_i64()) {
+            active.order = sea_orm::Set(order as i32);
+        }
+        
+        if let Ok(updated) = active.update(&state.db).await {
+            return (StatusCode::OK, Json(updated));
+        }
+    }
+    (StatusCode::BAD_REQUEST, Json(json!({"error": "Failed to update filter"})))
+}
+
+pub async fn delete_m3u_filter(
+    State(state): State<Arc<AppState>>,
+    Path((_account_id, filter_id)): Path<(i64, i64)>,
+) -> impl IntoResponse {
+    use crate::entities::m3u_filter;
+    let _ = m3u_filter::Entity::delete_by_id(filter_id).exec(&state.db).await;
+    (StatusCode::NO_CONTENT, Json(json!({})))
+}
+
+// --- Server Groups ---
+pub async fn get_server_groups(
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    use crate::entities::server_group;
+    let groups = server_group::Entity::find()
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+    (StatusCode::OK, Json(groups))
+}
+
+pub async fn create_server_group(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<Value>,
+) -> impl IntoResponse {
+    use crate::entities::server_group;
+    let active = server_group::ActiveModel {
+        name: sea_orm::Set(payload.get("name").and_then(|v| v.as_str()).unwrap_or("New Group").to_string()),
+        ..Default::default()
+    };
+    if let Ok(inserted) = server_group::Entity::insert(active).exec_with_returning(&state.db).await {
+        (StatusCode::CREATED, Json(inserted))
+    } else {
+        (StatusCode::BAD_REQUEST, Json(json!({"error": "Failed to create server group"})))
+    }
+}
+
+pub async fn update_server_group(
+    State(state): State<Arc<AppState>>,
+    Path(group_id): Path<i64>,
+    Json(payload): Json<Value>,
+) -> impl IntoResponse {
+    use crate::entities::server_group;
+    if let Ok(Some(group)) = server_group::Entity::find_by_id(group_id).one(&state.db).await {
+        let mut active: server_group::ActiveModel = group.into();
+        
+        if let Some(name) = payload.get("name").and_then(|v| v.as_str()) {
+            active.name = sea_orm::Set(name.to_string());
+        }
+        
+        if let Ok(updated) = active.update(&state.db).await {
+            return (StatusCode::OK, Json(updated));
+        }
+    }
+    (StatusCode::BAD_REQUEST, Json(json!({"error": "Failed to update server group"})))
+}
+
+pub async fn delete_server_group(
+    State(state): State<Arc<AppState>>,
+    Path(group_id): Path<i64>,
+) -> impl IntoResponse {
+    use crate::entities::server_group;
+    let _ = server_group::Entity::delete_by_id(group_id).exec(&state.db).await;
+    (StatusCode::NO_CONTENT, Json(json!({})))
+}
+
+// --- Refresh Endpoints ---
+pub async fn refresh_m3u_all(
+    State(_state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    // In a full implementation, iterate all active accounts and spawn fetches
+    (StatusCode::ACCEPTED, Json(json!({"success": true, "message": "M3U refresh initiated."})))
+}
+
+pub async fn refresh_m3u_account_info(
+    State(_state): State<Arc<AppState>>,
+    Path(profile_id): Path<i64>,
+) -> impl IntoResponse {
+    // In a full implementation, spawn fetch for specific account metadata
+    (StatusCode::ACCEPTED, Json(json!({"success": true, "message": format!("Account info refresh initiated for profile {}", profile_id)})))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

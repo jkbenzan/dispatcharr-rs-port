@@ -1,7 +1,7 @@
 use axum::{
     extract::ws::{WebSocket, WebSocketUpgrade},
     response::IntoResponse,
-    routing::{get, post},
+    routing::{get, post, patch, delete},
     Router,
 };
 use sea_orm::{Database, ConnectOptions, DatabaseConnection};
@@ -83,8 +83,16 @@ async fn main() {
         .route("/api/channels/channels/ids/", get(api::get_ids_stub))
         .route("/api/m3u/accounts/", get(api::get_m3u_accounts).post(api::add_m3u_account))
         .route("/api/m3u/accounts/:id/", get(api::get_m3u_account).patch(api::update_m3u_account))
-        .route("/api/m3u/accounts/:id/group-settings/", axum::routing::patch(api::update_m3u_group_settings))
+        .route("/api/m3u/accounts/:id/group-settings/", patch(api::update_m3u_group_settings))
+        .route("/api/m3u/accounts/:id/profiles/", get(api::get_m3u_profiles).post(api::create_m3u_profile))
+        .route("/api/m3u/accounts/:id/profiles/:profile_id/", patch(api::update_m3u_profile).delete(api::delete_m3u_profile))
+        .route("/api/m3u/accounts/:id/filters/", get(api::get_m3u_filters).post(api::create_m3u_filter))
+        .route("/api/m3u/accounts/:id/filters/:filter_id/", patch(api::update_m3u_filter).delete(api::delete_m3u_filter))
+        .route("/api/m3u/server-groups/", get(api::get_server_groups).post(api::create_server_group))
+        .route("/api/m3u/server-groups/:group_id/", patch(api::update_server_group).delete(api::delete_server_group))
+        .route("/api/m3u/refresh/", post(api::refresh_m3u_all))
         .route("/api/m3u/refresh/:id/", post(api::refresh_m3u_account))
+        .route("/api/m3u/refresh-account-info/:profile_id/", post(api::refresh_m3u_account_info))
         
         // --- EPG ---
         .route("/api/epg/sources/", get(api::get_epg_sources))
