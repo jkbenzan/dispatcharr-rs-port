@@ -176,7 +176,55 @@ pub async fn logout() -> Json<Value> {
 }
 
 pub async fn get_env_settings() -> Json<Value> {
-    Json(json!({ "DEBUG": "false", "ENV": "production" }))
+    let mut public_ip = "Unknown".to_string();
+    let mut country_code = "Unknown".to_string();
+    let mut country_name = "Unknown".to_string();
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(3))
+        .build()
+        .unwrap_or_default();
+
+    if let Ok(res) = client.get("http://ip-api.com/json/").send().await {
+        if let Ok(json) = res.json::<serde_json::Value>().await {
+            if let Some(ip) = json.get("query").and_then(|v| v.as_str()) {
+                public_ip = ip.to_string();
+            }
+            if let Some(code) = json.get("countryCode").and_then(|v| v.as_str()) {
+                country_code = code.to_string();
+            }
+            if let Some(name) = json.get("country").and_then(|v| v.as_str()) {
+                country_name = name.to_string();
+            }
+        }
+    }
+
+    let local_ip = std::net::UdpSocket::bind("0.0.0.0:0")
+        .and_then(|s| {
+            s.connect("8.8.8.8:80")?;
+            s.local_addr()
+        })
+        .map(|addr| addr.ip().to_string())
+        .unwrap_or_else(|_| "Unknown".to_string());
+
+    Json(json!({
+        "authenticated": true,
+        "public_ip": public_ip,
+        "local_ip": local_ip,
+        "country_code": country_code,
+        "country_name": country_name,
+        "env_mode": std::env::var("DISPATCHARR_ENV").unwrap_or_else(|_| "aio".to_string()),
+        "redis_tls": {
+            "enabled": false,
+            "verify": true,
+            "mtls": false
+        },
+        "postgres_tls": {
+            "enabled": false,
+            "ssl_mode": null,
+            "mtls": false
+        }
+    }))
 }
 
 pub async fn get_config() -> Json<Value> {
