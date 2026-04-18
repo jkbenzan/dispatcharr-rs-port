@@ -40,20 +40,16 @@ pub async fn get_paginated_object() -> Json<Value> {
 // --------------------------------------------------------
 
 pub async fn get_core_settings() -> Json<Value> {
-    Json(json!({
-        "app_name": "Dispatcharr",
-        "proxy_enabled": true,
-        "registration_enabled": false,
-        "backend_url": "",
-        "version": "0.22.1",
-        "maintenance_mode": false,
-        // Empty arrays prevent the UI from crashing when mapping/measuring length
-        "channel_profiles": [],
-        "stream_profiles": [],
-        "user_agents": [],
-        "notification_types": [],
-        "providers": [] 
-    }))
+    // Django returns an array of {key, name, value} objects.
+    // The frontend does settings.reduce((acc, s) => acc[s.key] = s) so we must match this format.
+    Json(json!([
+        { "key": "app_name", "name": "App Name", "value": "Dispatcharr" },
+        { "key": "proxy_enabled", "name": "Proxy Enabled", "value": true },
+        { "key": "registration_enabled", "name": "Registration Enabled", "value": false },
+        { "key": "backend_url", "name": "Backend URL", "value": "" },
+        { "key": "version", "name": "Version", "value": "0.22.1" },
+        { "key": "maintenance_mode", "name": "Maintenance Mode", "value": false }
+    ]))
 }
 
 use crate::{AppState, auth::{CurrentUser, generate_jwt, verify_password}};
