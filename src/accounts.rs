@@ -31,6 +31,7 @@ pub fn serialize_user(u: &user::Model, groups: Vec<i32>) -> Value {
         "user_level": u.user_level,
         "api_key": u.api_key,
         "groups": groups,
+        "channel_profiles": [],
         "custom_properties": u.custom_properties,
         "date_joined": u.date_joined,
         "last_login": u.last_login,
