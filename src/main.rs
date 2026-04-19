@@ -124,7 +124,6 @@ async fn main() {
     let settings_routes = Router::new()
         .route("/env/", get(api::get_env_settings))
         .route("/", get(settings::list_settings).post(settings::create_setting))
-        .route("", get(settings::list_settings).post(settings::create_setting))
         .route("/:id/", get(settings::get_setting).put(settings::update_setting).patch(settings::update_setting))
         .route("/:id/check/", get(settings::get_setting)); // Stub for checkSetting
 
