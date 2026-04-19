@@ -1,5 +1,6 @@
 // Modal.js
 import React, { useState, useEffect } from 'react';
+import usePlaylistsStore from '../../store/playlists';
 import API from '../../api';
 import useUserAgentsStore from '../../store/userAgents';
 import M3UProfiles from './M3UProfiles';
