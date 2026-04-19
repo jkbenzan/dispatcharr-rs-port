@@ -43,12 +43,7 @@ pub async fn list_settings(
         }));
     }
     
-    Ok(Json(json!({
-        "count": result.len(),
-        "next": null,
-        "previous": null,
-        "results": result
-    })))
+    Ok(Json(json!(result)))
 }
 
 pub async fn create_setting(
