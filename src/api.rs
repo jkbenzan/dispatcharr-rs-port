@@ -474,8 +474,48 @@ pub async fn get_m3u_accounts(State(state): State<Arc<AppState>>) -> Json<Value>
 
 pub async fn add_m3u_account(
     State(state): State<Arc<AppState>>,
-    Json(payload): Json<Value>,
+    req: axum::extract::Request,
 ) -> impl IntoResponse {
+    let content_type = req.headers().get(axum::http::header::CONTENT_TYPE).and_then(|v| v.to_str().ok()).unwrap_or("");
+    
+    let mut payload = json!({});
+    let mut file_path: Option<String> = None;
+    
+    if content_type.starts_with("multipart/form-data") {
+        use axum::extract::FromRequest;
+        if let Ok(mut multipart) = axum::extract::Multipart::from_request(req, &state).await {
+            while let Ok(Some(field)) = multipart.next_field().await {
+                let name = field.name().unwrap_or("").to_string();
+                if name == "file" {
+                    if let Some(file_name) = field.file_name().map(|s| s.to_string()) {
+                        if let Ok(data) = field.bytes().await {
+                            let path = format!("./data/uploads/m3us/{}", file_name);
+                            let _ = std::fs::create_dir_all("./data/uploads/m3us");
+                            let _ = std::fs::write(&path, data);
+                            file_path = Some(path);
+                        }
+                    }
+                } else {
+                    if let Ok(text) = field.text().await {
+                        if text == "true" {
+                            payload[&name] = json!(true);
+                        } else if text == "false" {
+                            payload[&name] = json!(false);
+                        } else if let Ok(num) = text.parse::<i64>() {
+                            payload[&name] = json!(num);
+                        } else {
+                            payload[&name] = json!(text);
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        if let Ok(bytes) = axum::body::to_bytes(req.into_body(), usize::MAX).await {
+            payload = serde_json::from_slice(&bytes).unwrap_or(json!({}));
+        }
+    }
+
     let name = payload.get("name").and_then(|v| v.as_str()).unwrap_or("Undefined").to_string();
     let account_type = payload.get("account_type").and_then(|v| v.as_str()).unwrap_or("XC").to_string();
     
@@ -493,6 +533,7 @@ pub async fn add_m3u_account(
         name: sea_orm::Set(name),
         account_type: sea_orm::Set(account_type),
         server_url: sea_orm::Set(server_url),
+        file_path: sea_orm::Set(file_path.clone()),
         username: sea_orm::Set(username),
         password: sea_orm::Set(password),
         max_streams: sea_orm::Set(max_streams),
@@ -521,18 +562,46 @@ pub async fn add_m3u_account(
                     acc.server_url.clone().unwrap_or_default()
                 };
 
-                if !url.is_empty() {
+                let _ = state.ws_sender.send(json!({
+                    "channel": "updates",
+                    "event": "update",
+                    "data": {
+                        "type": "playlist_created",
+                        "playlist_id": account_id
+                    }
+                }));
+
+                let enable_vod = payload.get("enable_vod").and_then(|v| {
+                    if let Some(b) = v.as_bool() { Some(b) }
+                    else if let Some(s) = v.as_str() { Some(s == "true") }
+                    else { None }
+                }).unwrap_or(false);
+
+                if !url.is_empty() || file_path.is_some() {
                     let db_clone = state.db.clone();
                     let is_xc = acc.account_type == "XC";
                     let ws_clone = state.ws_sender.clone();
+                    let final_url = url.clone();
+                    let file_path_clone = file_path.clone();
+                    
                     tokio::spawn(async move {
                         let error_msg = if is_xc {
-                            match crate::m3u::fetch_and_parse_xc_categories(&db_clone, account_id, Some(ws_clone)).await {
-                                Err(e) => Some(format!("Failed to parse XC categories: {}", e)),
-                                Ok(_) => None,
+                            let mut err = None;
+                            let is_success = match crate::m3u::fetch_and_parse_xc_categories(&db_clone, account_id, Some(ws_clone)).await {
+                                Err(e) => {
+                                    err = Some(format!("Failed to parse XC categories: {}", e));
+                                    false
+                                },
+                                Ok(_) => true,
+                            };
+                            if is_success && enable_vod {
+                                let _ = crate::m3u::fetch_and_parse_xc_vod(&db_clone, account_id).await;
+                                let _ = crate::m3u::fetch_and_parse_xc_series(&db_clone, account_id).await;
                             }
+                            err
                         } else {
-                            match crate::m3u::fetch_and_parse_m3u(&db_clone, &url, account_id, true, Some(ws_clone)).await {
+                            let parse_url = file_path_clone.unwrap_or(final_url);
+                            match crate::m3u::fetch_and_parse_m3u(&db_clone, &parse_url, account_id, true, Some(ws_clone)).await {
                                 Err(e) => Some(format!("Failed to parse M3U: {}", e)),
                                 Ok(_) => None,
                             }
@@ -667,6 +736,43 @@ pub async fn refresh_m3u_account(
     }
 }
 
+pub async fn refresh_vod(
+    State(state): State<Arc<AppState>>,
+    Path(account_id): Path<i64>,
+) -> impl IntoResponse {
+    let account = match m3u_account::Entity::find_by_id(account_id).one(&state.db).await {
+        Ok(Some(acc)) => acc,
+        _ => return (StatusCode::NOT_FOUND, Json(json!({"error": "Account not found"}))),
+    };
+
+    if account.account_type != "XC" {
+        return (StatusCode::BAD_REQUEST, Json(json!({"error": "VOD refresh is only available for XtreamCodes accounts"})));
+    }
+
+    let mut vod_enabled = false;
+    if let Some(props) = &account.custom_properties {
+        if let Some(enabled) = props.get("enable_vod").and_then(|v| v.as_bool()) {
+            vod_enabled = enabled;
+        }
+    }
+
+    if !vod_enabled {
+        return (StatusCode::BAD_REQUEST, Json(json!({"error": "VOD is not enabled for this account"})));
+    }
+
+    let db_clone = state.db.clone();
+    tokio::spawn(async move {
+        if let Err(e) = crate::m3u::fetch_and_parse_xc_vod(&db_clone, account_id).await {
+            eprintln!("Failed to refresh VOD: {}", e);
+        }
+        if let Err(e) = crate::m3u::fetch_and_parse_xc_series(&db_clone, account_id).await {
+            eprintln!("Failed to refresh Series: {}", e);
+        }
+    });
+
+    (StatusCode::ACCEPTED, Json(json!({"message": format!("VOD refresh initiated for account {}", account.name)})))
+}
+
 pub async fn refresh_epg_source(
     State(state): State<Arc<AppState>>,
     Path(source_id): Path<i64>,
@@ -692,8 +798,48 @@ pub async fn refresh_epg_source(
 pub async fn update_m3u_account(
     State(state): State<Arc<AppState>>,
     Path(account_id): Path<i64>,
-    Json(payload): Json<Value>,
+    req: axum::extract::Request,
 ) -> impl IntoResponse {
+    let content_type = req.headers().get(axum::http::header::CONTENT_TYPE).and_then(|v| v.to_str().ok()).unwrap_or("");
+    
+    let mut payload = json!({});
+    let mut file_path: Option<String> = None;
+    
+    if content_type.starts_with("multipart/form-data") {
+        use axum::extract::FromRequest;
+        if let Ok(mut multipart) = axum::extract::Multipart::from_request(req, &state).await {
+            while let Ok(Some(field)) = multipart.next_field().await {
+                let name = field.name().unwrap_or("").to_string();
+                if name == "file" {
+                    if let Some(file_name) = field.file_name().map(|s| s.to_string()) {
+                        if let Ok(data) = field.bytes().await {
+                            let path = format!("./data/uploads/m3us/{}", file_name);
+                            let _ = std::fs::create_dir_all("./data/uploads/m3us");
+                            let _ = std::fs::write(&path, data);
+                            file_path = Some(path);
+                        }
+                    }
+                } else {
+                    if let Ok(text) = field.text().await {
+                        if text == "true" {
+                            payload[&name] = json!(true);
+                        } else if text == "false" {
+                            payload[&name] = json!(false);
+                        } else if let Ok(num) = text.parse::<i64>() {
+                            payload[&name] = json!(num);
+                        } else {
+                            payload[&name] = json!(text);
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        if let Ok(bytes) = axum::body::to_bytes(req.into_body(), usize::MAX).await {
+            payload = serde_json::from_slice(&bytes).unwrap_or(json!({}));
+        }
+    }
+
     let acc = match m3u_account::Entity::find_by_id(account_id).one(&state.db).await {
         Ok(Some(a)) => a,
         _ => return (StatusCode::NOT_FOUND, Json(json!({"error": "Account not found"}))),
@@ -735,7 +881,31 @@ pub async fn update_m3u_account(
         active.account_type = sea_orm::Set(account_type.to_string());
     }
     
+    if let Some(path) = file_path {
+        active.file_path = sea_orm::Set(Some(path));
+    }
+    
+    let enable_vod = payload.get("enable_vod").and_then(|v| {
+        if let Some(b) = v.as_bool() { Some(b) }
+        else if let Some(s) = v.as_str() { Some(s == "true") }
+        else { None }
+    });
+
+    if let Some(vod) = enable_vod {
+        let mut custom = acc.custom_properties.clone().unwrap_or(json!({}));
+        custom["enable_vod"] = json!(vod);
+        active.custom_properties = sea_orm::Set(Some(custom));
+    }
+    
     if let Ok(updated) = active.update(&state.db).await {
+        if enable_vod == Some(true) && updated.account_type == "XC" {
+            let db_clone = state.db.clone();
+            tokio::spawn(async move {
+                let _ = crate::m3u::fetch_and_parse_xc_vod(&db_clone, account_id).await;
+                let _ = crate::m3u::fetch_and_parse_xc_series(&db_clone, account_id).await;
+            });
+        }
+        
         let mut acc_json = serde_json::to_value(&updated).unwrap();
         acc_json["profiles"] = json!([]);
         acc_json["filters"] = json!([]);
@@ -857,6 +1027,7 @@ pub async fn update_m3u_group_settings(
     Json(payload): Json<Value>,
 ) -> impl IntoResponse {
     use crate::entities::channel_group_m3u_account;
+    use crate::entities::vod_m3uvodcategoryrelation;
     
     if let Some(group_settings) = payload.get("group_settings").and_then(|v| v.as_array()) {
         for setting in group_settings {
@@ -880,6 +1051,26 @@ pub async fn update_m3u_group_settings(
                     }
                     if let Some(auto_sync) = setting.get("auto_channel_sync").and_then(|v| v.as_bool()) {
                         active.auto_channel_sync = sea_orm::Set(auto_sync);
+                    }
+                    let _ = active.update(&state.db).await;
+                }
+            }
+        }
+    }
+
+    if let Some(category_settings) = payload.get("category_settings").and_then(|v| v.as_array()) {
+        for setting in category_settings {
+            let cat_id = setting.get("id").and_then(|v| v.as_i64());
+            
+            if let Some(cat_id) = cat_id {
+                if let Ok(Some(mapping)) = vod_m3uvodcategoryrelation::Entity::find()
+                    .filter(vod_m3uvodcategoryrelation::Column::M3uAccountId.eq(account_id))
+                    .filter(vod_m3uvodcategoryrelation::Column::CategoryId.eq(cat_id))
+                    .one(&state.db).await 
+                {
+                    let mut active: vod_m3uvodcategoryrelation::ActiveModel = mapping.into();
+                    if let Some(enabled) = setting.get("enabled").and_then(|v| v.as_bool()) {
+                        active.enabled = sea_orm::Set(enabled);
                     }
                     let _ = active.update(&state.db).await;
                 }

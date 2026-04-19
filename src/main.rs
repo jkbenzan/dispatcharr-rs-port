@@ -162,6 +162,7 @@ async fn main() {
         .route("/api/m3u/accounts/", get(api::get_m3u_accounts).post(api::add_m3u_account))
         .route("/api/m3u/accounts/:id/", get(api::get_m3u_account).patch(api::update_m3u_account).delete(api::delete_m3u_account))
         .route("/api/m3u/accounts/:id/group-settings/", patch(api::update_m3u_group_settings))
+        .route("/api/m3u/accounts/:id/refresh-vod/", post(api::refresh_vod))
         .route("/api/m3u/accounts/:id/profiles/", get(api::get_m3u_profiles).post(api::create_m3u_profile))
         .route("/api/m3u/accounts/:id/profiles/:profile_id/", patch(api::update_m3u_profile).delete(api::delete_m3u_profile))
         .route("/api/m3u/accounts/:id/filters/", get(api::get_m3u_filters).post(api::create_m3u_filter))
