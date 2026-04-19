@@ -45,10 +45,12 @@ pub struct CreateUserReq {
     pub email: Option<String>,
     pub first_name: Option<String>,
     pub last_name: Option<String>,
-    pub user_level: Option<i32>,
+    pub user_level: Option<Value>,
+    pub stream_limit: Option<Value>,
     pub is_superuser: Option<bool>,
     pub is_staff: Option<bool>,
     pub groups: Option<Vec<i32>>,
+    pub channel_profiles: Option<Vec<Value>>,
 }
 
 #[derive(Deserialize)]
@@ -58,10 +60,12 @@ pub struct UpdateUserReq {
     pub email: Option<String>,
     pub first_name: Option<String>,
     pub last_name: Option<String>,
-    pub user_level: Option<i32>,
+    pub user_level: Option<Value>,
+    pub stream_limit: Option<Value>,
     pub is_superuser: Option<bool>,
     pub is_staff: Option<bool>,
     pub groups: Option<Vec<i32>>,
+    pub channel_profiles: Option<Vec<Value>>,
     pub custom_properties: Option<Value>,
 }
 
@@ -117,6 +121,24 @@ pub async fn create_user(
         hash_password("default123")
     };
     
+    let mut u_level = 1;
+    if let Some(val) = payload.user_level {
+        match val {
+            Value::Number(n) => u_level = n.as_i64().unwrap_or(1) as i32,
+            Value::String(s) => u_level = s.parse::<i32>().unwrap_or(1),
+            _ => {}
+        }
+    }
+    
+    let mut s_limit = 0;
+    if let Some(val) = payload.stream_limit {
+        match val {
+            Value::Number(n) => s_limit = n.as_i64().unwrap_or(0) as i32,
+            Value::String(s) => s_limit = s.parse::<i32>().unwrap_or(0),
+            _ => {}
+        }
+    }
+
     let now = Utc::now().into();
     let new_user = user::ActiveModel {
         username: Set(payload.username),
@@ -127,9 +149,9 @@ pub async fn create_user(
         is_superuser: Set(payload.is_superuser.unwrap_or(false)),
         is_staff: Set(payload.is_staff.unwrap_or(false)),
         is_active: Set(true),
-        user_level: Set(payload.user_level.unwrap_or(1)),
+        user_level: Set(u_level),
         date_joined: Set(now),
-        stream_limit: Set(0),
+        stream_limit: Set(s_limit),
         ..Default::default()
     };
     
@@ -193,7 +215,20 @@ pub async fn update_user(
     if let Some(v) = payload.last_name { u.last_name = Set(v); }
     if let Some(v) = payload.is_superuser { u.is_superuser = Set(v); }
     if let Some(v) = payload.is_staff { u.is_staff = Set(v); }
-    if let Some(v) = payload.user_level { u.user_level = Set(v); }
+    if let Some(val) = payload.user_level {
+        match val {
+            Value::Number(n) => u.user_level = Set(n.as_i64().unwrap_or(1) as i32),
+            Value::String(s) => u.user_level = Set(s.parse::<i32>().unwrap_or(1)),
+            _ => {}
+        }
+    }
+    if let Some(val) = payload.stream_limit {
+        match val {
+            Value::Number(n) => u.stream_limit = Set(n.as_i64().unwrap_or(0) as i32),
+            Value::String(s) => u.stream_limit = Set(s.parse::<i32>().unwrap_or(0)),
+            _ => {}
+        }
+    }
     if let Some(v) = payload.custom_properties { u.custom_properties = Set(Some(v)); }
     if let Some(p) = payload.password {
         if !p.is_empty() {
