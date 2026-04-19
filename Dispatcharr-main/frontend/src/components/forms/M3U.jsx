@@ -134,23 +134,37 @@ const M3U = ({
 
   // Watch for progress completion when waiting for groups on a new account
   useEffect(() => {
+    console.log('[M3U Debug] Checking refreshProgress useEffect', {
+      isWaitingForGroups,
+      playlistId: playlist?.id,
+      progressEntry: playlist?.id ? refreshProgress[playlist.id] : null
+    });
+
     if (isWaitingForGroups && playlist?.id) {
       const progress = refreshProgress[playlist.id];
       if (progress) {
+        console.log('[M3U Debug] Progress update received:', progress);
         if (progress.status === 'pending_setup') {
+          console.log('[M3U Debug] Status is pending_setup! Transitioning to group filter...');
           setIsWaitingForGroups(false);
           setLoadingText('');
           
           // Fetch the fully updated playlist so we have the parsed groups
           API.getPlaylist(playlist.id).then((updatedPlaylist) => {
+             console.log('[M3U Debug] Fetched updated playlist:', updatedPlaylist);
              // If VOD is enabled, fetch VOD categories
              if (updatedPlaylist.account_type === 'XC' && updatedPlaylist.enable_vod) {
+                console.log('[M3U Debug] XC VOD enabled, fetching categories...');
                 fetchCategories();
              }
              setPlaylist(updatedPlaylist);
              setGroupFilterModalOpen(true);
+             console.log('[M3U Debug] Group Filter Modal should now be OPEN');
+          }).catch(e => {
+             console.error('[M3U Debug] Error fetching updated playlist:', e);
           });
         } else if (progress.status === 'error') {
+          console.log('[M3U Debug] Progress reported error:', progress.error);
           setIsWaitingForGroups(false);
           setLoadingText('');
           notifications.show({
@@ -160,6 +174,7 @@ const M3U = ({
           });
         } else {
            // Update loading text with current progress
+           console.log('[M3U Debug] Updating loading text for action:', progress.action);
            if (progress.action === 'downloading') {
               setLoadingText(`Downloading... ${parseInt(progress.progress || 0)}%`);
            } else if (progress.action === 'processing_groups') {
@@ -168,6 +183,8 @@ const M3U = ({
               setLoadingText(`${progress.action || 'Processing'}... ${parseInt(progress.progress || 0)}%`);
            }
         }
+      } else {
+         console.log('[M3U Debug] No progress entry found yet for playlist ID:', playlist.id);
       }
     }
   }, [refreshProgress, isWaitingForGroups, playlist?.id, fetchCategories]);
@@ -208,18 +225,23 @@ const M3U = ({
 
     let newPlaylist;
     if (playlist?.id) {
+      console.log('[M3U Debug] Updating existing playlist:', playlist.id);
       await API.updatePlaylist({
         id: playlist.id,
         ...values,
         file,
       });
     } else {
+      console.log('[M3U Debug] Adding new playlist with values:', values);
       newPlaylist = await API.addPlaylist({
         ...values,
         file,
       });
 
+      console.log('[M3U Debug] addPlaylist returned:', newPlaylist);
+
       if (create_epg) {
+        console.log('[M3U Debug] Creating EPG...');
         API.addEPG({
           name: values.name,
           source_type: 'xmltv',
@@ -230,12 +252,14 @@ const M3U = ({
         });
       }
 
+      console.log('[M3U Debug] Setting playlist and entering waiting state');
       setPlaylist(newPlaylist);
       setIsWaitingForGroups(true);
       setLoadingText('Initializing... Please wait.');
       return;
     }
 
+    console.log('[M3U Debug] Reached end of onSubmit, closing modal normally');
     form.reset();
     setFile(null);
     onClose(newPlaylist);
