@@ -111,13 +111,15 @@ async fn main() {
 
     let accounts_routes = Router::new()
         .route("/users/", get(accounts::list_users).post(accounts::create_user))
-        .route("/users/me/", get(api::get_current_user).patch(accounts::update_me))
+        .route("/users/me/", get(accounts::get_me).patch(accounts::update_me))
         .route("/users/:id/", get(accounts::get_user).put(accounts::update_user).patch(accounts::update_user).delete(accounts::delete_user))
         .route("/groups/", get(accounts::list_groups).post(accounts::create_group))
         .route("/groups/:id/", get(accounts::get_group).put(accounts::update_group).patch(accounts::update_group).delete(accounts::delete_group))
         .route("/permissions/", get(accounts::list_permissions))
-        .route("/api-keys/", get(accounts::get_api_key).post(accounts::generate_api_key).delete(accounts::revoke_api_key))
-        .route("/init-superuser/", post(accounts::init_superuser));
+        .route("/api-keys/", get(accounts::get_api_key))
+        .route("/api-keys/generate/", post(accounts::generate_api_key))
+        .route("/api-keys/revoke/", post(accounts::revoke_api_key))
+        .route("/initialize-superuser/", get(accounts::check_superuser).post(accounts::init_superuser));
         
     let settings_routes = Router::new()
         .route("/", get(settings::list_settings).post(settings::create_setting))
@@ -134,10 +136,10 @@ async fn main() {
 
     let app = Router::new()
         // --- AUTH ---
-        .route("/api/accounts/initialize-superuser/", get(api::check_superuser))
         .route("/api/accounts/token/", post(api::login))
         .route("/api/accounts/token/refresh/", post(api::refresh_token)) 
         .route("/api/accounts/auth/logout/", post(api::logout))
+        .route("/api/accounts/auth/login/", post(api::login))
 
         // --- CORE & SETTINGS ---
         .route("/api/core/version/", get(api::get_core_version))

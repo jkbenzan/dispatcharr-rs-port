@@ -18,6 +18,25 @@ use crate::AppState;
 
 // --- User CRUD ---
 
+pub fn serialize_user(u: &user::Model, groups: Vec<i32>) -> Value {
+    json!({
+        "id": u.id,
+        "username": u.username,
+        "email": u.email,
+        "first_name": u.first_name,
+        "last_name": u.last_name,
+        "is_superuser": u.is_superuser,
+        "is_staff": u.is_staff,
+        "is_active": u.is_active,
+        "user_level": u.user_level,
+        "api_key": u.api_key,
+        "groups": groups,
+        "custom_properties": u.custom_properties,
+        "date_joined": u.date_joined,
+        "last_login": u.last_login,
+    })
+}
+
 #[derive(Deserialize)]
 pub struct CreateUserReq {
     pub username: String,
@@ -77,22 +96,7 @@ pub async fn list_users(
             .map(|g| g.group_id)
             .collect();
             
-        result.push(json!({
-            "id": u.id,
-            "username": u.username,
-            "email": u.email,
-            "first_name": u.first_name,
-            "last_name": u.last_name,
-            "is_superuser": u.is_superuser,
-            "is_staff": u.is_staff,
-            "is_active": u.is_active,
-            "user_level": u.user_level,
-            "api_key": u.api_key,
-            "groups": groups,
-            "custom_properties": u.custom_properties,
-            "date_joined": u.date_joined,
-            "last_login": u.last_login,
-        }));
+        result.push(serialize_user(&u, groups));
     }
     
     // wrap in paginated format if frontend expects it
@@ -136,17 +140,20 @@ pub async fn create_user(
     
     let inserted = new_user.insert(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     
+    let mut final_groups = Vec::new();
     if let Some(groups) = payload.groups {
-        for gid in groups {
+        for gid in &groups {
             let user_group = accounts_user_groups::ActiveModel {
                 user_id: Set(inserted.id),
-                group_id: Set(gid),
+                group_id: Set(*gid),
                 ..Default::default()
             };
             let _ = user_group.insert(&state.db).await;
         }
+        final_groups = groups;
     }
-    Ok(Json(json!({"id": inserted.id, "username": inserted.username})))
+    
+    Ok(Json(serialize_user(&inserted, final_groups)))
 }
 
 pub async fn get_user(
@@ -168,22 +175,7 @@ pub async fn get_user(
             .map(|g| g.group_id)
             .collect();
             
-        Ok(Json(json!({
-            "id": u.id,
-            "username": u.username,
-            "email": u.email,
-            "first_name": u.first_name,
-            "last_name": u.last_name,
-            "is_superuser": u.is_superuser,
-            "is_staff": u.is_staff,
-            "is_active": u.is_active,
-            "user_level": u.user_level,
-            "api_key": u.api_key,
-            "groups": groups,
-            "custom_properties": u.custom_properties,
-            "date_joined": u.date_joined,
-            "last_login": u.last_login,
-        })))
+        Ok(Json(serialize_user(&u, groups)))
     } else {
         Err(StatusCode::NOT_FOUND)
     }
@@ -231,7 +223,16 @@ pub async fn update_user(
         }
     }
     
-    Ok(Json(json!({"id": updated.id, "username": updated.username})))
+    let groups: Vec<i32> = accounts_user_groups::Entity::find()
+        .filter(accounts_user_groups::Column::UserId.eq(updated.id))
+        .all(&state.db)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|g| g.group_id)
+        .collect();
+    
+    Ok(Json(serialize_user(&updated, groups)))
 }
 
 pub async fn delete_user(
@@ -244,6 +245,23 @@ pub async fn delete_user(
     }
     user::Entity::delete_by_id(id).exec(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn get_me(
+    State(state): State<Arc<AppState>>,
+    current_user: CurrentUser,
+) -> Result<Json<Value>, StatusCode> {
+    let u = current_user.0;
+    let groups: Vec<i32> = accounts_user_groups::Entity::find()
+        .filter(accounts_user_groups::Column::UserId.eq(u.id))
+        .all(&state.db)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|g| g.group_id)
+        .collect();
+        
+    Ok(Json(serialize_user(&u, groups)))
 }
 
 pub async fn update_me(
@@ -267,14 +285,17 @@ pub async fn update_me(
     }
     
     let updated = u.update(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    Ok(Json(json!({
-        "id": updated.id,
-        "username": updated.username,
-        "email": updated.email,
-        "first_name": updated.first_name,
-        "last_name": updated.last_name,
-        "custom_properties": updated.custom_properties,
-    })))
+    
+    let groups: Vec<i32> = accounts_user_groups::Entity::find()
+        .filter(accounts_user_groups::Column::UserId.eq(updated.id))
+        .all(&state.db)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|g| g.group_id)
+        .collect();
+        
+    Ok(Json(serialize_user(&updated, groups)))
 }
 
 // --- Groups CRUD ---
@@ -483,6 +504,18 @@ pub async fn revoke_api_key(
 }
 
 // --- Initialize Superuser ---
+
+pub async fn check_superuser(State(state): State<Arc<AppState>>) -> Result<Json<Value>, StatusCode> {
+    // Check if any admin/superuser exists
+    let has_superuser = user::Entity::find()
+        .filter(user::Column::UserLevel.gte(10))
+        .one(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .is_some();
+
+    Ok(Json(json!({ "superuser_exists": has_superuser })))
+}
 
 #[derive(Deserialize)]
 pub struct InitSuperuserReq {

@@ -68,44 +68,13 @@ use std::sync::Arc;
 use std::path::Path as StdPath;
 use tokio::fs;
 
-pub async fn get_current_user(current_user: CurrentUser) -> Json<Value> {
-    let u = current_user.0;
-    Json(json!({
-        "id": u.id,
-        "username": u.username,
-        "email": u.email,
-        "is_superuser": u.is_superuser,
-        "is_active": u.is_active,
-        "is_staff": u.is_staff,
-        "user_level": u.user_level,
-        "stream_limit": u.stream_limit,
-        "channel_profiles": [],
-        "hide_adult_content": false,
-        "permissions": ["*"], 
-        "profile": u.custom_properties.unwrap_or(json!({
-            "theme": "dark",
-            "language": "en",
-            "navigation_order": [], 
-            "hidden_nav_items": []
-        }))
-    }))
-}
+
 
 pub async fn get_core_version() -> Json<Value> {
     Json(json!({ "version": "0.22.1", "name": "Dispatcharr" }))
 }
 
-pub async fn check_superuser(State(state): State<Arc<AppState>>) -> Result<Json<Value>, StatusCode> {
-    // Check if any superuser exists
-    let has_superuser = user::Entity::find()
-        .filter(user::Column::IsSuperuser.eq(true))
-        .one(&state.db)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .is_some();
 
-    Ok(Json(json!({ "initialized": has_superuser })))
-}
 
 #[derive(serde::Deserialize)]
 pub struct LoginRequest {
@@ -119,7 +88,7 @@ pub async fn login(
 ) -> Result<Json<Value>, StatusCode> {
     println!("🔐 Login attempt for user: '{}'", payload.username);
 
-    let user = match user::Entity::find()
+    let mut user = match user::Entity::find()
         .filter(user::Column::Username.eq(&payload.username))
         .one(&state.db)
         .await
@@ -150,6 +119,12 @@ pub async fn login(
     }
 
     println!("🎉 Login Success for {}", user.username);
+    
+    let mut active_user: user::ActiveModel = user.clone().into();
+    active_user.last_login = Set(Some(chrono::Utc::now().into()));
+    if let Ok(updated) = active_user.update(&state.db).await {
+        user = updated;
+    }
 
     let token = generate_jwt(&user).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
