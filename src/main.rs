@@ -121,11 +121,7 @@ async fn main() {
         .route("/api-keys/revoke/", post(accounts::revoke_api_key))
         .route("/initialize-superuser/", get(accounts::check_superuser).post(accounts::init_superuser));
         
-    let settings_routes = Router::new()
-        .route("/env/", get(api::get_env_settings))
-        .route("/", get(settings::list_settings).post(settings::create_setting))
-        .route("/:id/", get(settings::get_setting).put(settings::update_setting).patch(settings::update_setting))
-        .route("/:id/check/", get(settings::get_setting)); // Stub for checkSetting
+    // Moved settings routes directly to main router to avoid nest trailing slash issues
 
     let vod_routes = Router::new()
         .route("/all/", get(vod::get_vod_all))
@@ -148,6 +144,13 @@ async fn main() {
         .route("/api/core/notifications/", get(api::get_notifications))
         .route("/api/core/notifications/count/", get(api::get_notifications))
         .route("/api/core/useragents/", get(api::get_useragents))
+        
+        // Explicitly map settings routes to handle trailing slashes robustly
+        .route("/api/core/settings", get(settings::list_settings).post(settings::create_setting))
+        .route("/api/core/settings/", get(settings::list_settings).post(settings::create_setting))
+        .route("/api/core/settings/env/", get(api::get_env_settings))
+        .route("/api/core/settings/:id/", get(settings::get_setting).put(settings::update_setting).patch(settings::update_setting))
+        .route("/api/core/settings/:id/check/", get(settings::get_setting))
         .route("/api/core/streamprofiles/", get(api::get_streamprofiles))
 
         // --- CHANNELS & M3U ---
@@ -197,7 +200,6 @@ async fn main() {
         
         // Serve the compiled React frontend for non-API routes
         .nest("/api/accounts", accounts_routes)
-        .nest("/api/core/settings", settings_routes)
         .nest("/api/vod", vod_routes)
         .fallback_service(spa_service)
         .layer(CorsLayer::permissive())
