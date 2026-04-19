@@ -83,3 +83,7 @@ pub fn verify_password(hash: &str, password: &str) -> bool {
     // Django PBKDF2 verification using djangohashers
     djangohashers::check_password(password, hash).unwrap_or(false)
 }
+
+pub fn hash_password(password: &str) -> String {
+    djangohashers::make_password(password)
+}

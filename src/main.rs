@@ -12,6 +12,7 @@ use tower_http::services::{ServeDir, ServeFile};
 
 mod proxy;
 mod api;
+mod accounts;
 mod entities;
 mod epg;
 mod auth;
@@ -108,8 +109,16 @@ async fn main() {
 
     let app = Router::new()
         // --- AUTH ---
-        .route("/api/accounts/initialize-superuser/", get(api::check_superuser))
-        .route("/api/accounts/users/me/", get(api::get_current_user))
+        .route("/api/accounts/initialize-superuser/", get(api::check_superuser).post(accounts::init_superuser))
+        .route("/api/accounts/users/me/", get(api::get_current_user).patch(accounts::update_me))
+        .route("/api/accounts/users/", get(accounts::list_users).post(accounts::create_user))
+        .route("/api/accounts/users/:id/", get(accounts::get_user).patch(accounts::update_user).delete(accounts::delete_user))
+        .route("/api/accounts/groups/", get(accounts::list_groups).post(accounts::create_group))
+        .route("/api/accounts/groups/:id/", get(accounts::get_group).patch(accounts::update_group).delete(accounts::delete_group))
+        .route("/api/accounts/permissions/", get(accounts::list_permissions))
+        .route("/api/accounts/api-keys/", get(accounts::get_api_key))
+        .route("/api/accounts/api-keys/generate/", post(accounts::generate_api_key))
+        .route("/api/accounts/api-keys/revoke/", post(accounts::revoke_api_key))
         .route("/api/accounts/token/", post(api::login))
         .route("/api/accounts/token/refresh/", post(api::refresh_token)) 
         .route("/api/accounts/auth/logout/", post(api::logout))
@@ -148,7 +157,6 @@ async fn main() {
         .route("/api/epg/epgdata/", get(api::get_epgdata))
 
         // --- DASHBOARD MISSING DEPENDENCIES ---
-        .route("/api/accounts/users/", get(api::get_paginated_object))
         .route("/api/channels/logos/", get(api::get_flat_array))
         .route("/api/channels/streams/ids/", get(api::get_flat_array))
         .route("/api/channels/streams/filter-options/", get(api::get_stream_filter_options))
