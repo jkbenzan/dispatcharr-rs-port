@@ -36,21 +36,23 @@ impl FromRequestParts<Arc<AppState>> for CurrentUser {
             .and_then(|h| h.to_str().ok());
 
         let token = if let Some(auth) = auth_header {
-            if auth.starts_with("Bearer ") {
-                auth.trim_start_matches("Bearer ")
-            } else {
-                return Err(StatusCode::UNAUTHORIZED);
-            }
+            auth.split_whitespace().last().unwrap_or(auth)
         } else {
             return Err(StatusCode::UNAUTHORIZED);
         };
 
         // Decode the JWT
-        let token_data = decode::<Claims>(
+        let token_data = match decode::<Claims>(
             token,
             &DecodingKey::from_secret(JWT_SECRET),
             &Validation::default(),
-        ).map_err(|_| StatusCode::UNAUTHORIZED)?;
+        ) {
+            Ok(d) => d,
+            Err(e) => {
+                println!("JWT Decode error: {:?}", e);
+                return Err(StatusCode::UNAUTHORIZED);
+            }
+        };
 
         // Fetch user from DB to verify they still exist and are active
         let user = user::Entity::find_by_id(token_data.claims.user_id)

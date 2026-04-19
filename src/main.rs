@@ -122,7 +122,9 @@ async fn main() {
         .route("/initialize-superuser/", get(accounts::check_superuser).post(accounts::init_superuser));
         
     let settings_routes = Router::new()
+        .route("/env/", get(api::get_env_settings))
         .route("/", get(settings::list_settings).post(settings::create_setting))
+        .route("", get(settings::list_settings).post(settings::create_setting))
         .route("/:id/", get(settings::get_setting).put(settings::update_setting).patch(settings::update_setting))
         .route("/:id/check/", get(settings::get_setting)); // Stub for checkSetting
 
@@ -143,7 +145,6 @@ async fn main() {
 
         // --- CORE & SETTINGS ---
         .route("/api/core/version/", get(api::get_core_version))
-        .route("/api/core/settings/env/", get(api::get_env_settings))
         .route("/api/core/timezones/", get(api::get_timezones))
         .route("/api/core/notifications/", get(api::get_notifications))
         .route("/api/core/notifications/count/", get(api::get_notifications))
