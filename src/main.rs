@@ -99,9 +99,15 @@ async fn main() {
     // Create a broadcast channel for websockets with a capacity of 100
     let (ws_sender, _) = tokio::sync::broadcast::channel(100);
 
+    let http_client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .unwrap();
+
     let state = Arc::new(AppState {
         db,
-        http_client: reqwest::Client::builder().build().unwrap(),
+        http_client,
         ws_sender,
     });
 

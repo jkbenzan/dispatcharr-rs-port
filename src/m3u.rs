@@ -1,7 +1,8 @@
 use crate::entities::{
     stream, m3u_account, channel_group, channel_group_m3u_account,
     vod_category, vod_movie, vod_series,
-    vod_m3uvodcategoryrelation, vod_m3umovierelation, vod_m3useriesrelation
+    vod_m3uvodcategoryrelation, vod_m3umovierelation, vod_m3useriesrelation,
+    core_settings, core_useragent
 };
 use regex::Regex;
 use sea_orm::{DatabaseConnection, Set, EntityTrait, QueryFilter, ColumnTrait, ActiveModelTrait};
@@ -34,6 +35,28 @@ pub fn broadcast_progress(
     }
 }
 
+pub async fn get_user_agent_string(db: &DatabaseConnection, account_user_agent_id: Option<i64>) -> String {
+    let mut ua_id = account_user_agent_id;
+    
+    if ua_id.is_none() {
+        if let Ok(Some(setting)) = core_settings::Entity::find()
+            .filter(core_settings::Column::Key.eq("stream_settings"))
+            .one(db).await {
+            if let Some(default_id) = setting.value.get("default_user_agent").and_then(|v| v.as_i64()) {
+                ua_id = Some(default_id);
+            }
+        }
+    }
+
+    if let Some(id) = ua_id {
+        if let Ok(Some(ua)) = core_useragent::Entity::find_by_id(id).one(db).await {
+            return ua.user_agent;
+        }
+    }
+
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36".to_string()
+}
+
 pub async fn fetch_and_parse_m3u(
     db: &DatabaseConnection,
     url: &str,
@@ -41,7 +64,9 @@ pub async fn fetch_and_parse_m3u(
     is_initial: bool,
     ws_sender: Option<Sender<Value>>,
 ) -> Result<(), Box<dyn Error>> {
+    let mut ua_id = None;
     if let Ok(Some(acc)) = m3u_account::Entity::find_by_id(account_id).one(db).await {
+        ua_id = acc.user_agent_id;
         let mut active: m3u_account::ActiveModel = acc.into();
         active.status = Set("fetching".to_string());
         active.last_message = Set(Some("Downloading & parsing M3U...".to_string()));
@@ -51,7 +76,7 @@ pub async fn fetch_and_parse_m3u(
 
     println!("Fetching M3U from {}", url);
     let client = reqwest::Client::builder()
-        .user_agent("Dispatcharr/1.0")
+        .user_agent(get_user_agent_string(db, ua_id).await)
         .timeout(std::time::Duration::from_secs(60))
         .build()?;
 
@@ -255,7 +280,7 @@ pub async fn fetch_and_parse_xc(
     eprintln!("[XC] Connecting to server: {}", server_url);
 
     let client = reqwest::Client::builder()
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        .user_agent(get_user_agent_string(db, acc.user_agent_id).await)
         .timeout(std::time::Duration::from_secs(60))
         .build()?;
 
@@ -396,7 +421,7 @@ pub async fn fetch_and_parse_xc_vod(
     let password = acc.password.clone().unwrap_or_default();
 
     let client = reqwest::Client::builder()
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        .user_agent(get_user_agent_string(db, acc.user_agent_id).await)
         .timeout(std::time::Duration::from_secs(60))
         .build()?;
 
@@ -524,7 +549,7 @@ pub async fn fetch_and_parse_xc_series(
     let password = acc.password.clone().unwrap_or_default();
 
     let client = reqwest::Client::builder()
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        .user_agent(get_user_agent_string(db, acc.user_agent_id).await)
         .timeout(std::time::Duration::from_secs(60))
         .build()?;
 
@@ -651,7 +676,7 @@ pub async fn fetch_and_parse_xc_categories(
     let password = acc.password.clone().unwrap_or_default();
 
     let client = reqwest::Client::builder()
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        .user_agent(get_user_agent_string(db, acc.user_agent_id).await)
         .timeout(std::time::Duration::from_secs(60))
         .build()?;
 
