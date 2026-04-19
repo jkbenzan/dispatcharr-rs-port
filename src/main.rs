@@ -130,8 +130,7 @@ async fn main() {
         .route("/movies/", get(vod::get_vod_movies))
         .route("/series/", get(vod::get_vod_series));
 
-    let channels_routes = Router::new()
-        .route("/dvr/comskip-config/", get(api::get_comskip_config).post(api::upload_comskip_ini));
+
 
     let app = Router::new()
         // --- AUTH ---
@@ -145,6 +144,7 @@ async fn main() {
         .route("/api/core/settings/env/", get(api::get_env_settings))
         .route("/api/core/timezones/", get(api::get_timezones))
         .route("/api/core/notifications/", get(api::get_notifications))
+        .route("/api/core/notifications/count/", get(api::get_notifications))
         .route("/api/core/useragents/", get(api::get_useragents))
         .route("/api/core/streamprofiles/", get(api::get_streamprofiles))
 
@@ -153,6 +153,7 @@ async fn main() {
         .route("/api/channels/groups/", get(api::get_channel_groups))
         .route("/api/channels/profiles/", get(api::get_channel_profiles))
         .route("/api/channels/channels/ids/", get(api::get_ids_stub))
+        .route("/api/channels/dvr/comskip-config/", get(api::get_comskip_config).post(api::upload_comskip_ini))
         .route("/api/m3u/accounts/", get(api::get_m3u_accounts).post(api::add_m3u_account))
         .route("/api/m3u/accounts/:id/", get(api::get_m3u_account).patch(api::update_m3u_account).delete(api::delete_m3u_account))
         .route("/api/m3u/accounts/:id/group-settings/", patch(api::update_m3u_group_settings))
@@ -195,7 +196,6 @@ async fn main() {
         .nest("/api/accounts", accounts_routes)
         .nest("/api/core/settings", settings_routes)
         .nest("/api/vod", vod_routes)
-        .nest("/api/channels", channels_routes)
         .fallback_service(spa_service)
         .layer(CorsLayer::permissive())
         .layer(tower_http::trace::TraceLayer::new_for_http())
