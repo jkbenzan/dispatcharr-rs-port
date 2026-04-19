@@ -547,14 +547,15 @@ pub async fn add_m3u_account(
                 if !url.is_empty() {
                     let db_clone = state.db.clone();
                     let is_xc = acc.account_type == "XC";
+                    let ws_clone = state.ws_sender.clone();
                     tokio::spawn(async move {
                         let error_msg = if is_xc {
-                            match crate::m3u::fetch_and_parse_xc_categories(&db_clone, account_id).await {
+                            match crate::m3u::fetch_and_parse_xc_categories(&db_clone, account_id, Some(ws_clone)).await {
                                 Err(e) => Some(format!("Failed to parse XC categories: {}", e)),
                                 Ok(_) => None,
                             }
                         } else {
-                            match crate::m3u::fetch_and_parse_m3u(&db_clone, &url, account_id, true).await {
+                            match crate::m3u::fetch_and_parse_m3u(&db_clone, &url, account_id, true, Some(ws_clone)).await {
                                 Err(e) => Some(format!("Failed to parse M3U: {}", e)),
                                 Ok(_) => None,
                             }
@@ -651,9 +652,11 @@ pub async fn refresh_m3u_account(
     if !url.is_empty() {
         let db_clone = state.db.clone();
         let is_xc = account.account_type == "XC";
+        let ws_clone_outer = state.ws_sender.clone();
         tokio::spawn(async move {
             let error_msg = if is_xc {
-                let xc_err = if let Err(e) = m3u::fetch_and_parse_xc(&db_clone, account_id).await {
+                let ws_clone = ws_clone_outer.clone();
+                let xc_err = if let Err(e) = m3u::fetch_and_parse_xc(&db_clone, account_id, Some(ws_clone)).await {
                     Some(format!("Failed to parse XC API: {}", e))
                 } else {
                     None
@@ -664,7 +667,8 @@ pub async fn refresh_m3u_account(
                 }
                 xc_err
             } else {
-                match m3u::fetch_and_parse_m3u(&db_clone, &url, account_id, false).await {
+                let ws_clone = ws_clone_outer.clone();
+                match m3u::fetch_and_parse_m3u(&db_clone, &url, account_id, false, Some(ws_clone)).await {
                     Err(e) => Some(format!("Failed to parse M3U: {}", e)),
                     Ok(_) => None,
                 }
@@ -1146,9 +1150,11 @@ pub async fn refresh_m3u_all(
         };
 
         if !url.is_empty() {
+            let ws_clone_outer = state.ws_sender.clone();
             tokio::spawn(async move {
                 let error_msg = if is_xc {
-                    let xc_err = if let Err(e) = crate::m3u::fetch_and_parse_xc(&db_clone, account_id).await {
+                    let ws_clone = ws_clone_outer.clone();
+                    let xc_err = if let Err(e) = crate::m3u::fetch_and_parse_xc(&db_clone, account_id, Some(ws_clone)).await {
                         Some(format!("Failed to parse XC API: {}", e))
                     } else {
                         None
@@ -1159,7 +1165,8 @@ pub async fn refresh_m3u_all(
                     }
                     xc_err
                 } else {
-                    match crate::m3u::fetch_and_parse_m3u(&db_clone, &url, account_id, false).await {
+                    let ws_clone = ws_clone_outer.clone();
+                    match crate::m3u::fetch_and_parse_m3u(&db_clone, &url, account_id, false, Some(ws_clone)).await {
                         Err(e) => Some(format!("Failed to parse M3U: {}", e)),
                         Ok(_) => None,
                     }

@@ -10,18 +10,43 @@ use std::error::Error;
 use sha2::{Sha256, Digest};
 use chrono::Utc;
 use uuid::Uuid;
+use tokio::sync::broadcast::Sender;
+use serde_json::Value;
+
+pub fn broadcast_progress(
+    ws_sender: &Option<Sender<Value>>,
+    account_id: i64,
+    status: &str,
+    action: &str,
+    progress: i32,
+    message: &str,
+) {
+    if let Some(sender) = ws_sender {
+        let payload = serde_json::json!({
+            "type": "m3u_refresh",
+            "account": account_id,
+            "status": status,
+            "action": action,
+            "progress": progress,
+            "message": message,
+        });
+        let _ = sender.send(payload);
+    }
+}
 
 pub async fn fetch_and_parse_m3u(
     db: &DatabaseConnection,
     url: &str,
     account_id: i64,
     is_initial: bool,
+    ws_sender: Option<Sender<Value>>,
 ) -> Result<(), Box<dyn Error>> {
     if let Ok(Some(acc)) = m3u_account::Entity::find_by_id(account_id).one(db).await {
         let mut active: m3u_account::ActiveModel = acc.into();
         active.status = Set("fetching".to_string());
         active.last_message = Set(Some("Downloading & parsing M3U...".to_string()));
         let _ = active.update(db).await;
+        broadcast_progress(&ws_sender, account_id, "fetching", "downloading", 10, "Downloading M3U...");
     }
 
     println!("Fetching M3U from {}", url);
@@ -179,9 +204,14 @@ pub async fn fetch_and_parse_m3u(
         if is_initial {
             active.status = Set("pending_setup".to_string());
             active.last_message = Set(Some("M3U groups loaded. Please select groups to complete setup.".to_string()));
+            let _ = active.clone().update(db).await;
+            broadcast_progress(&ws_sender, account_id, "pending_setup", "processing_groups", 100, "M3U groups loaded. Please select groups to complete setup.");
         } else {
+            let _ = crate::channel_sync::sync_channels_for_account(db, account_id).await;
             active.status = Set("success".to_string());
             active.last_message = Set(Some("Successfully synced!".to_string()));
+            let _ = active.clone().update(db).await;
+            broadcast_progress(&ws_sender, account_id, "success", "completed", 100, "Successfully synced!");
         }
         active.updated_at = Set(Some(Utc::now().into()));
         let _ = active.update(db).await;
@@ -193,6 +223,7 @@ pub async fn fetch_and_parse_m3u(
 pub async fn fetch_and_parse_xc(
     db: &DatabaseConnection,
     account_id: i64,
+    ws_sender: Option<Sender<Value>>,
 ) -> Result<(), Box<dyn Error>> {
     let acc = match m3u_account::Entity::find_by_id(account_id).one(db).await {
         Ok(Some(a)) => a,
@@ -203,6 +234,7 @@ pub async fn fetch_and_parse_xc(
     active.status = Set("fetching".to_string());
     active.last_message = Set(Some("Fetching XC API categories...".to_string()));
     let _ = active.update(db).await;
+    broadcast_progress(&ws_sender, account_id, "fetching", "downloading", 10, "Fetching XC API categories...");
 
     let mut server_url_raw = acc.server_url.clone().unwrap_or_default();
     server_url_raw = server_url_raw.trim_end_matches('/').to_string();
@@ -329,10 +361,12 @@ pub async fn fetch_and_parse_xc(
         }
     }
 
+    let _ = crate::channel_sync::sync_channels_for_account(db, account_id).await;
     let mut final_active: m3u_account::ActiveModel = acc.into();
     final_active.status = Set("success".to_string());
     final_active.last_message = Set(Some("Groups mapped successfully".to_string()));
     let _ = final_active.update(db).await;
+    broadcast_progress(&ws_sender, account_id, "success", "completed", 100, "Groups mapped successfully");
 
     Ok(())
 }
@@ -594,6 +628,7 @@ pub async fn fetch_and_parse_xc_series(
 pub async fn fetch_and_parse_xc_categories(
     db: &DatabaseConnection,
     account_id: i64,
+    ws_sender: Option<Sender<Value>>,
 ) -> Result<(), Box<dyn Error>> {
     let acc = match m3u_account::Entity::find_by_id(account_id).one(db).await {
         Ok(Some(a)) => a,
@@ -792,6 +827,7 @@ pub async fn fetch_and_parse_xc_categories(
         final_active.last_message = Set(Some("Groups loaded. Please select groups to complete setup.".to_string()));
         final_active.updated_at = Set(Some(Utc::now().into()));
         let _ = final_active.update(db).await;
+        broadcast_progress(&ws_sender, account_id, "pending_setup", "processing_groups", 100, "Groups loaded. Please select groups to complete setup.");
     }
 
     Ok(())

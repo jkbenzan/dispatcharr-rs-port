@@ -1,5 +1,6 @@
 pub mod user;
 pub mod channel;
+pub mod channel_stream;
 pub mod epg_source;
 pub mod m3u_account;
 pub mod m3u_account_profile;

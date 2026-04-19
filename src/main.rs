@@ -18,19 +18,61 @@ mod auth;
 mod m3u;
 mod outputs;
 mod xtream_codes;
+mod channel_sync;
+
+use axum::extract::State;
 
 pub struct AppState {
     pub db: DatabaseConnection,
     pub http_client: reqwest::Client,
+    pub ws_sender: tokio::sync::broadcast::Sender<serde_json::Value>,
 }
 
-async fn ws_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
-    ws.on_upgrade(handle_socket)
+async fn ws_handler(
+    ws: WebSocketUpgrade,
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| handle_socket(socket, state))
 }
 
-async fn handle_socket(mut socket: WebSocket) {
-    while let Some(Ok(msg)) = socket.recv().await {
-        if let axum::extract::ws::Message::Close(_) = msg { break; }
+async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
+    let mut rx = state.ws_sender.subscribe();
+
+    // Send connection_established to immediately satisfy the frontend
+    let _ = socket.send(axum::extract::ws::Message::Text(
+        serde_json::json!({
+            "type": "connection_established",
+            "data": {
+                "message": "Connected to Rust backend"
+            }
+        }).to_string()
+    )).await;
+
+    // Loop to handle incoming pings/close and outgoing broadcast messages
+    loop {
+        tokio::select! {
+            msg = rx.recv() => {
+                match msg {
+                    Ok(payload) => {
+                        let wrapped = serde_json::json!({ "data": payload });
+                        if socket.send(axum::extract::ws::Message::Text(wrapped.to_string())).await.is_err() {
+                            break;
+                        }
+                    }
+                    Err(_) => break,
+                }
+            }
+            client_msg = socket.recv() => {
+                match client_msg {
+                    Some(Ok(msg)) => {
+                        if let axum::extract::ws::Message::Close(_) = msg {
+                            break;
+                        }
+                    }
+                    _ => break,
+                }
+            }
+        }
     }
 }
 
@@ -45,14 +87,19 @@ async fn main() {
     
     let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL missing");
     let mut opt = ConnectOptions::new(db_url);
-    opt.connect_timeout(Duration::from_secs(15));
+    opt.connect_timeout(Duration::from_secs(15))
+       .sqlx_logging(false);
 
     let db = Database::connect(opt).await.expect("DB Failure");
     println!("✅ DB CONNECTED");
 
+    // Create a broadcast channel for websockets with a capacity of 100
+    let (ws_sender, _) = tokio::sync::broadcast::channel(100);
+
     let state = Arc::new(AppState {
         db,
         http_client: reqwest::Client::builder().build().unwrap(),
+        ws_sender,
     });
 
     // SPA Routing: Serve index.html if the user hits a route like /channels directly
