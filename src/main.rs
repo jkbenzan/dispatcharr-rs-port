@@ -107,7 +107,7 @@ async fn main() {
 
     // SPA Routing: Serve index.html if the user hits a route like /channels directly
     let spa_service = ServeDir::new("dist")
-        .not_found_service(ServeFile::new("dist/index.html"));
+        .fallback(ServeFile::new("dist/index.html"));
 
     let accounts_routes = Router::new()
         .route("/users/", get(accounts::list_users).post(accounts::create_user))

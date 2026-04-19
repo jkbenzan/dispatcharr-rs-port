@@ -99,13 +99,7 @@ pub async fn list_users(
         result.push(serialize_user(&u, groups));
     }
     
-    // wrap in paginated format if frontend expects it
-    Ok(Json(json!({
-        "count": result.len(),
-        "next": null,
-        "previous": null,
-        "results": result
-    })))
+    Ok(Json(json!(result)))
 }
 
 pub async fn create_user(
@@ -331,12 +325,7 @@ pub async fn list_groups(
         }));
     }
     
-    Ok(Json(json!({
-        "count": result.len(),
-        "next": null,
-        "previous": null,
-        "results": result
-    })))
+    Ok(Json(json!(result)))
 }
 
 pub async fn create_group(
