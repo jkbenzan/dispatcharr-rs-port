@@ -191,6 +191,7 @@ async fn main() {
 
         // --- SYSTEM & PROXY ---
         .route("/api/config/", get(api::get_config))
+        .route("/ws", get(ws_handler))
         .route("/ws/", get(ws_handler))
         .route("/play/:token/:channel_id", get(proxy::handle_proxy))
         
@@ -201,10 +202,28 @@ async fn main() {
         .fallback_service(spa_service)
         .layer(CorsLayer::permissive())
         .layer(tower_http::trace::TraceLayer::new_for_http())
-        .with_state(state);
+        .with_state(state.clone());
 
     let addr = "0.0.0.0:8080";
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     tracing::info!("🚀 LISTENING ON {}", addr);
+    println!("🚀 Rust Dispatcharr API listening on {}", listener.local_addr().unwrap());
+    
+    // Spawn a secondary listener on port 8001 specifically for WebSockets
+    // This provides backward compatibility with the old Django/Daphne Nginx configuration.
+    let state_clone = state.clone();
+    tokio::spawn(async move {
+        let ws_app = Router::new()
+            .route("/ws", get(ws_handler))
+            .route("/ws/", get(ws_handler))
+            .with_state(state_clone)
+            .layer(CorsLayer::permissive());
+            
+        if let Ok(ws_listener) = tokio::net::TcpListener::bind("0.0.0.0:8001").await {
+            println!("📡 WebSocket Compatibility Server listening on {}", ws_listener.local_addr().unwrap());
+            let _ = axum::serve(ws_listener, ws_app).await;
+        }
+    });
+
     axum::serve(listener, app).await.unwrap();
 }
