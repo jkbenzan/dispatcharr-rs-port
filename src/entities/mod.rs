@@ -3,6 +3,7 @@ pub mod auth_group;
 pub mod auth_permission;
 pub mod auth_group_permissions;
 pub mod accounts_user_groups;
+pub mod core_settings;
 pub mod channel;
 pub mod channel_stream;
 pub mod epg_source;

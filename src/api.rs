@@ -53,18 +53,20 @@ pub async fn get_core_settings() -> Json<Value> {
 }
 
 use crate::{AppState, auth::{CurrentUser, generate_jwt, verify_password}};
-use crate::entities::{user, channel, m3u_account, epg_source, channel_group, channel_profile, stream};
+use crate::entities::{user, channel, m3u_account, epg_source, channel_group, channel_profile, stream, core_settings};
 use crate::{m3u, epg};
 use axum::{
-    extract::{Query, State, Path},
+    extract::{Query, State, Path, Multipart},
     http::StatusCode,
     response::IntoResponse,
 };
 use sea_orm::{
     ColumnTrait, EntityTrait, QueryFilter,
-    ConnectionTrait, Statement, PaginatorTrait, QuerySelect, QueryOrder, ActiveModelTrait
+    ConnectionTrait, Statement, PaginatorTrait, QuerySelect, QueryOrder, ActiveModelTrait, Set
 };
 use std::sync::Arc;
+use std::path::Path as StdPath;
+use tokio::fs;
 
 pub async fn get_current_user(current_user: CurrentUser) -> Json<Value> {
     let u = current_user.0;
@@ -1187,6 +1189,100 @@ pub async fn refresh_m3u_all(
     }
     
     (StatusCode::ACCEPTED, Json(json!({"success": true, "message": "M3U refresh initiated."})))
+}
+
+pub async fn get_comskip_config(
+    State(state): State<Arc<AppState>>,
+    current_user: CurrentUser,
+) -> Result<Json<Value>, StatusCode> {
+    if !current_user.0.is_superuser && !current_user.0.is_staff {
+        return Err(StatusCode::FORBIDDEN);
+    }
+    
+    let settings = core_settings::Entity::find()
+        .filter(core_settings::Column::Key.eq("dvr_settings"))
+        .one(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        
+    let path = if let Some(s) = settings {
+        s.value.get("comskip_custom_path").and_then(|v| v.as_str()).unwrap_or("").to_string()
+    } else {
+        "".to_string()
+    };
+    
+    let exists = !path.is_empty() && StdPath::new(&path).exists();
+    
+    Ok(Json(json!({
+        "path": path,
+        "exists": exists
+    })))
+}
+
+pub async fn upload_comskip_ini(
+    State(state): State<Arc<AppState>>,
+    current_user: CurrentUser,
+    mut multipart: Multipart,
+) -> Result<Json<Value>, StatusCode> {
+    if !current_user.0.is_superuser && !current_user.0.is_staff {
+        return Err(StatusCode::FORBIDDEN);
+    }
+    
+    let mut file_saved = false;
+    
+    while let Some(field) = multipart.next_field().await.unwrap_or(None) {
+        let name = field.name().unwrap_or("").to_string();
+        if name == "file" || name == "comskip_ini" {
+            let file_name = field.file_name().unwrap_or("").to_lowercase();
+            if !file_name.ends_with(".ini") {
+                return Err(StatusCode::BAD_REQUEST);
+            }
+            
+            let data = field.bytes().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            let save_path = "comskip.ini";
+            
+            fs::write(save_path, &data).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            
+            let settings = core_settings::Entity::find()
+                .filter(core_settings::Column::Key.eq("dvr_settings"))
+                .one(&state.db)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                
+            let mut value = if let Some(ref s) = settings {
+                s.value.clone()
+            } else {
+                json!({})
+            };
+            
+            if let Some(obj) = value.as_object_mut() {
+                obj.insert("comskip_custom_path".to_string(), json!(save_path));
+            }
+            
+            if let Some(s) = settings {
+                let mut active_s: core_settings::ActiveModel = s.into();
+                active_s.value = Set(value);
+                let _ = active_s.update(&state.db).await;
+            } else {
+                let new_setting = core_settings::ActiveModel {
+                    key: Set("dvr_settings".to_string()),
+                    name: Set("DVR Settings".to_string()),
+                    value: Set(value),
+                    ..Default::default()
+                };
+                let _ = new_setting.insert(&state.db).await;
+            }
+            
+            file_saved = true;
+            break;
+        }
+    }
+    
+    if file_saved {
+        Ok(Json(json!({"message": "File uploaded successfully"})))
+    } else {
+        Err(StatusCode::BAD_REQUEST)
+    }
 }
 
 pub async fn refresh_m3u_account_info(

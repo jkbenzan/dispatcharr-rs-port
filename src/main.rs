@@ -20,6 +20,8 @@ mod m3u;
 mod outputs;
 mod xtream_codes;
 mod channel_sync;
+mod settings;
+mod vod;
 
 use axum::extract::State;
 
@@ -107,6 +109,30 @@ async fn main() {
     let spa_service = ServeDir::new("dist")
         .not_found_service(ServeFile::new("dist/index.html"));
 
+    let accounts_routes = Router::new()
+        .route("/users/", get(accounts::list_users).post(accounts::create_user))
+        .route("/users/me/", patch(accounts::update_me))
+        .route("/users/:id/", get(accounts::get_user).put(accounts::update_user).patch(accounts::update_user).delete(accounts::delete_user))
+        .route("/groups/", get(accounts::list_groups).post(accounts::create_group))
+        .route("/groups/:id/", get(accounts::get_group).put(accounts::update_group).patch(accounts::update_group).delete(accounts::delete_group))
+        .route("/permissions/", get(accounts::list_permissions))
+        .route("/api-keys/", get(accounts::get_api_key).post(accounts::generate_api_key).delete(accounts::revoke_api_key))
+        .route("/init-superuser/", post(accounts::init_superuser));
+        
+    let settings_routes = Router::new()
+        .route("/", get(settings::list_settings).post(settings::create_setting))
+        .route("/:id/", get(settings::get_setting).put(settings::update_setting).patch(settings::update_setting))
+        .route("/:id/check/", get(settings::get_setting)); // Stub for checkSetting
+
+    let vod_routes = Router::new()
+        .route("/all/", get(vod::get_vod_all))
+        .route("/categories/", get(vod::get_vod_categories))
+        .route("/movies/", get(vod::get_vod_movies))
+        .route("/series/", get(vod::get_vod_series));
+
+    let channels_routes = Router::new()
+        .route("/dvr/comskip-config/", get(api::get_comskip_config).post(api::upload_comskip_ini));
+
     let app = Router::new()
         // --- AUTH ---
         .route("/api/accounts/initialize-superuser/", get(api::check_superuser).post(accounts::init_superuser))
@@ -176,6 +202,10 @@ async fn main() {
         .route("/play/:token/:channel_id", get(proxy::handle_proxy))
         
         // Serve the compiled React frontend for non-API routes
+        .nest("/api/accounts", accounts_routes)
+        .nest("/api/core/settings", settings_routes)
+        .nest("/api/vod", vod_routes)
+        .nest("/api/channels", channels_routes)
         .fallback_service(spa_service)
         .layer(CorsLayer::permissive())
         .layer(tower_http::trace::TraceLayer::new_for_http())
