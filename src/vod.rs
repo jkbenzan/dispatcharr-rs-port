@@ -94,14 +94,27 @@ pub async fn get_vod_all(
 pub async fn get_vod_categories(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Value>, StatusCode> {
-    let categories = vod_category::Entity::find().all(&state.db).await.unwrap_or_default();
-    let mut results = Vec::new();
+    use crate::entities::vod_m3uvodcategoryrelation;
     
+    let categories = vod_category::Entity::find().all(&state.db).await.unwrap_or_default();
+    let relations = vod_m3uvodcategoryrelation::Entity::find().all(&state.db).await.unwrap_or_default();
+    
+    let mut rel_map: std::collections::HashMap<i64, Vec<Value>> = std::collections::HashMap::new();
+    for r in relations {
+        let entry = rel_map.entry(r.category_id).or_insert_with(Vec::new);
+        entry.push(json!({
+            "m3u_account": r.m3u_account_id,
+            "enabled": r.enabled,
+        }));
+    }
+    
+    let mut results = Vec::new();
     for c in categories {
         results.push(json!({
             "id": c.id,
             "name": c.name,
             "category_type": c.category_type,
+            "m3u_accounts": rel_map.get(&c.id).unwrap_or(&Vec::new()),
         }));
     }
     
