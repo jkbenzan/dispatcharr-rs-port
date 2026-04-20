@@ -64,6 +64,14 @@ async fn get_or_create_channel_group_id(
     cg.id
 }
 
+fn truncate(s: &str, max_chars: usize) -> String {
+    if s.chars().count() > max_chars {
+        s.chars().take(max_chars).collect()
+    } else {
+        s.to_string()
+    }
+}
+
 pub fn broadcast_progress(
     ws_sender: &Option<Sender<Value>>,
     account_id: i64,
@@ -187,9 +195,9 @@ pub async fn fetch_and_parse_m3u(
             }
             
             current_extinf = Some(stream::ActiveModel {
-                name: Set(name),
-                tvg_id: Set(tvg_id),
-                logo_url: Set(logo_url),
+                name: Set(truncate(&name, 255)),
+                tvg_id: Set(tvg_id.map(|t| truncate(&t, 255))),
+                logo_url: Set(logo_url.map(|l| truncate(&l, 500))),
                 custom_properties: Set(Some(serde_json::Value::Object(cp))),
                 m3u_account_id: Set(Some(account_id)),
                 channel_group_id: Set(cg_id),
@@ -351,10 +359,10 @@ pub async fn fetch_and_parse_xc(
 
             let stream_model = stream::ActiveModel {
                 m3u_account_id: Set(Some(account_id)),
-                name: Set(s.name),
+                name: Set(truncate(&s.name, 255)),
                 url: Set(Some(url)),
-                logo_url: Set(s.stream_icon),
-                tvg_id: Set(s.epg_channel_id),
+                logo_url: Set(s.stream_icon.map(|l| truncate(&l, 500))),
+                tvg_id: Set(s.epg_channel_id.map(|t| truncate(&t, 255))),
                 channel_group_id: Set(cg_id),
                 is_custom: Set(false),
                 current_viewers: Set(0),
