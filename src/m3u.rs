@@ -6,13 +6,63 @@ use crate::entities::{
 };
 use regex::Regex;
 use sea_orm::{DatabaseConnection, Set, EntityTrait, QueryFilter, ColumnTrait, ActiveModelTrait};
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 use std::error::Error;
 use sha2::{Sha256, Digest};
 use chrono::Utc;
 use uuid::Uuid;
 use tokio::sync::broadcast::Sender;
 use serde_json::Value;
+
+async fn get_or_create_channel_group_id(
+    db: &DatabaseConnection,
+    group_name: &str,
+    account_id: i64,
+    auto_sync: bool,
+    group_id_map: &mut HashMap<String, i64>,
+) -> i64 {
+    if let Some(id) = group_id_map.get(group_name) {
+        return *id;
+    }
+
+    let cg = match channel_group::Entity::find()
+        .filter(channel_group::Column::Name.eq(group_name))
+        .one(db).await.unwrap_or(None) {
+        Some(g) => g,
+        None => {
+            let new_cg = channel_group::ActiveModel {
+                name: Set(group_name.to_string()),
+                ..Default::default()
+            };
+            if let Ok(res) = channel_group::Entity::insert(new_cg).exec(db).await {
+                channel_group::Model { id: res.last_insert_id, name: group_name.to_string() }
+            } else {
+                return 0;
+            }
+        }
+    };
+
+    let existing_mapping = channel_group_m3u_account::Entity::find()
+        .filter(channel_group_m3u_account::Column::ChannelGroupId.eq(cg.id))
+        .filter(channel_group_m3u_account::Column::M3uAccountId.eq(account_id))
+        .one(db).await.unwrap_or(None);
+
+    if existing_mapping.is_none() {
+        let new_mapping = channel_group_m3u_account::ActiveModel {
+            enabled: Set(auto_sync),
+            channel_group_id: Set(cg.id),
+            m3u_account_id: Set(account_id),
+            auto_channel_sync: Set(auto_sync),
+            is_stale: Set(false),
+            last_seen: Set(Utc::now().into()),
+            ..Default::default()
+        };
+        let _ = channel_group_m3u_account::Entity::insert(new_mapping).exec(db).await;
+    }
+
+    group_id_map.insert(group_name.to_string(), cg.id);
+    cg.id
+}
 
 pub fn broadcast_progress(
     ws_sender: &Option<Sender<Value>>,
@@ -98,7 +148,7 @@ pub async fn fetch_and_parse_m3u(
     let attr_re = Regex::new(r#"([a-zA-Z0-9_-]+)="([^"]*)""#)?;
     let mut current_extinf: Option<stream::ActiveModel> = None;
     let mut streams_batch = vec![];
-    let mut unique_groups: HashSet<String> = HashSet::new();
+    let mut group_id_map: HashMap<String, i64> = HashMap::new();
 
     for line in body.lines() {
         let line = line.trim();
@@ -125,9 +175,13 @@ pub async fn fetch_and_parse_m3u(
             }
 
             let mut cp = serde_json::Map::new();
+            let mut cg_id = None;
             if let Some(gt) = group_title {
                 if !gt.is_empty() {
-                    unique_groups.insert(gt.clone());
+                    let id = get_or_create_channel_group_id(db, &gt, account_id, true, &mut group_id_map).await;
+                    if id > 0 {
+                        cg_id = Some(id);
+                    }
                 }
                 cp.insert("group_title".to_string(), serde_json::Value::String(gt));
             }
@@ -138,6 +192,7 @@ pub async fn fetch_and_parse_m3u(
                 logo_url: Set(logo_url),
                 custom_properties: Set(Some(serde_json::Value::Object(cp))),
                 m3u_account_id: Set(Some(account_id)),
+                channel_group_id: Set(cg_id),
                 is_custom: Set(false),
                 current_viewers: Set(0),
                 updated_at: Set(Utc::now().into()),
@@ -153,7 +208,10 @@ pub async fn fetch_and_parse_m3u(
                     _ => serde_json::Map::new(),
                 };
                 if !group_title.is_empty() {
-                    unique_groups.insert(group_title.clone());
+                    let id = get_or_create_channel_group_id(db, &group_title, account_id, true, &mut group_id_map).await;
+                    if id > 0 {
+                        stream_model.channel_group_id = Set(Some(id));
+                    }
                 }
                 cp.insert("group_title".to_string(), serde_json::Value::String(group_title));
                 stream_model.custom_properties = Set(Some(serde_json::Value::Object(cp)));
@@ -185,43 +243,6 @@ pub async fn fetch_and_parse_m3u(
 
     if !streams_batch.is_empty() {
         let _ = stream::Entity::insert_many(streams_batch).exec(db).await;
-    }
-
-    for group_name in unique_groups {
-        let cg = match channel_group::Entity::find()
-            .filter(channel_group::Column::Name.eq(&group_name))
-            .one(db).await.unwrap_or(None) {
-            Some(g) => g,
-            None => {
-                let new_cg = channel_group::ActiveModel {
-                    name: Set(group_name.clone()),
-                    ..Default::default()
-                };
-                if let Ok(res) = channel_group::Entity::insert(new_cg).exec(db).await {
-                    channel_group::Model { id: res.last_insert_id, name: group_name.clone() }
-                } else {
-                    continue;
-                }
-            }
-        };
-
-        let existing_mapping = channel_group_m3u_account::Entity::find()
-            .filter(channel_group_m3u_account::Column::ChannelGroupId.eq(cg.id))
-            .filter(channel_group_m3u_account::Column::M3uAccountId.eq(account_id))
-            .one(db).await.unwrap_or(None);
-
-        if existing_mapping.is_none() {
-            let new_mapping = channel_group_m3u_account::ActiveModel {
-                enabled: Set(false),
-                channel_group_id: Set(cg.id),
-                m3u_account_id: Set(account_id),
-                auto_channel_sync: Set(false),
-                is_stale: Set(false),
-                last_seen: Set(Utc::now().into()),
-                ..Default::default()
-            };
-            let _ = channel_group_m3u_account::Entity::insert(new_mapping).exec(db).await;
-        }
     }
 
     if let Ok(Some(acc)) = m3u_account::Entity::find_by_id(account_id).one(db).await {
@@ -264,7 +285,6 @@ pub async fn fetch_and_parse_xc(
     let mut server_url_raw = acc.server_url.clone().unwrap_or_default();
     server_url_raw = server_url_raw.trim_end_matches('/').to_string();
     
-    // Remove any path after domain
     let server_url = if let Some(idx) = server_url_raw.find("://") {
         let protocol = &server_url_raw[..idx];
         let rest = &server_url_raw[idx + 3..];
@@ -293,14 +313,15 @@ pub async fn fetch_and_parse_xc(
     let xc_streams = crate::xtream_codes::get_live_streams(&client, &server_url, &username, &password).await?;
 
     let mut streams_batch = Vec::new();
-    let mut unique_groups = HashSet::new();
     let mut hash_set = HashSet::new();
+    let mut group_id_map = HashMap::new();
 
-    // XC API categories mapping
-    let mut category_map = std::collections::HashMap::new();
+    let auto_sync_live = acc.custom_properties.as_ref().and_then(|cp| cp.get("auto_enable_new_groups_live").and_then(|v| v.as_bool())).unwrap_or(true);
+
+    let mut category_map = HashMap::new();
     for cat in categories {
         category_map.insert(cat.category_id.clone(), cat.category_name.clone());
-        unique_groups.insert(cat.category_name);
+        get_or_create_channel_group_id(db, &cat.category_name, account_id, auto_sync_live, &mut group_id_map).await;
     }
 
     for s in xc_streams {
@@ -321,6 +342,8 @@ pub async fn fetch_and_parse_xc(
             if let Some(num) = s.num {
                 cp.insert("channel-number".to_string(), num);
             }
+            
+            let cg_id = group_id_map.get(&group_title).cloned();
 
             let stream_model = stream::ActiveModel {
                 m3u_account_id: Set(Some(account_id)),
@@ -328,6 +351,7 @@ pub async fn fetch_and_parse_xc(
                 url: Set(Some(url)),
                 logo_url: Set(s.stream_icon),
                 tvg_id: Set(s.epg_channel_id),
+                channel_group_id: Set(cg_id),
                 is_custom: Set(false),
                 last_seen: Set(Utc::now().into()),
                 updated_at: Set(Utc::now().into()),
@@ -346,44 +370,6 @@ pub async fn fetch_and_parse_xc(
 
     if !streams_batch.is_empty() {
         let _ = stream::Entity::insert_many(streams_batch).exec(db).await;
-    }
-
-    // Insert new ChannelGroups and mappings
-    for group_name in unique_groups {
-        let cg = match channel_group::Entity::find()
-            .filter(channel_group::Column::Name.eq(&group_name))
-            .one(db).await.unwrap_or(None) {
-            Some(g) => g,
-            None => {
-                let new_cg = channel_group::ActiveModel {
-                    name: Set(group_name.clone()),
-                    ..Default::default()
-                };
-                if let Ok(res) = channel_group::Entity::insert(new_cg).exec(db).await {
-                    channel_group::Model { id: res.last_insert_id, name: group_name.clone() }
-                } else {
-                    continue;
-                }
-            }
-        };
-
-        let existing_mapping = channel_group_m3u_account::Entity::find()
-            .filter(channel_group_m3u_account::Column::ChannelGroupId.eq(cg.id))
-            .filter(channel_group_m3u_account::Column::M3uAccountId.eq(account_id))
-            .one(db).await.unwrap_or(None);
-
-        if existing_mapping.is_none() {
-            let new_mapping = channel_group_m3u_account::ActiveModel {
-                enabled: Set(false),
-                channel_group_id: Set(cg.id),
-                m3u_account_id: Set(account_id),
-                auto_channel_sync: Set(false),
-                is_stale: Set(false),
-                last_seen: Set(Utc::now().into()),
-                ..Default::default()
-            };
-            let _ = channel_group_m3u_account::Entity::insert(new_mapping).exec(db).await;
-        }
     }
 
     let _ = crate::channel_sync::sync_channels_for_account(db, account_id).await;
