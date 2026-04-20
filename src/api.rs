@@ -446,7 +446,7 @@ async fn create_default_profile(account_id: i64, account_name: &str, max_streams
         is_default: sea_orm::Set(true),
         is_active: sea_orm::Set(true),
         max_streams: sea_orm::Set(max_streams),
-        current_viewers: sea_orm::Set(0),
+            current_viewers: sea_orm::Set(0),
         search_pattern: sea_orm::Set("^(.*)$".to_string()),
         replace_pattern: sea_orm::Set("$1".to_string()),
         ..Default::default()
@@ -454,14 +454,85 @@ async fn create_default_profile(account_id: i64, account_name: &str, max_streams
     let _ = m3u_account_profile::Entity::insert(new_profile).exec(db).await;
 }
 
+fn extract_custom_props_to_root(acc: &crate::entities::m3u_account::Model, acc_json: &mut serde_json::Value) {
+    if let Some(cp) = acc.custom_properties.as_ref() {
+        if let Some(vod) = cp.get("enable_vod") {
+            acc_json["enable_vod"] = vod.clone();
+        } else {
+            acc_json["enable_vod"] = serde_json::json!(false);
+        }
+        if let Some(auto_movie) = cp.get("auto_enable_new_groups_movies") {
+            acc_json["auto_enable_new_groups_movies"] = auto_movie.clone();
+        } else {
+            acc_json["auto_enable_new_groups_movies"] = serde_json::json!(true);
+        }
+        if let Some(auto_series) = cp.get("auto_enable_new_groups_series") {
+            acc_json["auto_enable_new_groups_series"] = auto_series.clone();
+        } else {
+            acc_json["auto_enable_new_groups_series"] = serde_json::json!(true);
+        }
+        if let Some(auto_live) = cp.get("auto_enable_new_groups_live") {
+            acc_json["auto_enable_new_groups_live"] = auto_live.clone();
+        } else {
+            acc_json["auto_enable_new_groups_live"] = serde_json::json!(true);
+        }
+        if let Some(auto_vod) = cp.get("auto_enable_new_groups_vod") {
+            acc_json["auto_enable_new_groups_vod"] = auto_vod.clone();
+        } else {
+            acc_json["auto_enable_new_groups_vod"] = serde_json::json!(true);
+        }
+    } else {
+        acc_json["enable_vod"] = serde_json::json!(false);
+        acc_json["auto_enable_new_groups_movies"] = serde_json::json!(true);
+        acc_json["auto_enable_new_groups_series"] = serde_json::json!(true);
+        acc_json["auto_enable_new_groups_live"] = serde_json::json!(true);
+        acc_json["auto_enable_new_groups_vod"] = serde_json::json!(true);
+    }
+}
+
+fn apply_custom_props_from_payload(payload: &serde_json::Value, active: &mut crate::entities::m3u_account::ActiveModel, existing_props: Option<&serde_json::Value>) -> Option<bool> {
+    let mut custom = existing_props.cloned().unwrap_or(serde_json::json!({}));
+    let mut updated = false;
+    let mut enable_vod_ret = None;
+
+    if let Some(v) = payload.get("enable_vod") {
+        let b = if let Some(b) = v.as_bool() { Some(b) } else if let Some(s) = v.as_str() { Some(s == "true") } else { None };
+        if let Some(b) = b {
+            custom["enable_vod"] = serde_json::json!(b);
+            enable_vod_ret = Some(b);
+            updated = true;
+        }
+    }
+    
+    let keys = ["auto_enable_new_groups_live", "auto_enable_new_groups_vod", "auto_enable_new_groups_series", "auto_enable_new_groups_movies"];
+    for k in keys {
+        if let Some(v) = payload.get(k) {
+            let b = if let Some(b) = v.as_bool() { Some(b) } else if let Some(s) = v.as_str() { Some(s == "true") } else { None };
+            if let Some(b) = b {
+                custom[k] = serde_json::json!(b);
+                updated = true;
+            }
+        }
+    }
+    
+    if updated {
+        active.custom_properties = sea_orm::Set(Some(custom));
+    }
+    enable_vod_ret
+}
+
 pub async fn get_m3u_accounts(State(state): State<Arc<AppState>>) -> Json<Value> {
-    let accounts = match m3u_account::Entity::find().all(&state.db).await {
+    use sea_orm::QueryOrder;
+    let accounts = match m3u_account::Entity::find()
+        .order_by_asc(m3u_account::Column::Priority)
+        .all(&state.db).await {
         Ok(a) => a,
         Err(_) => vec![],
     };
     let mut results = vec![];
     for acc in accounts {
         let mut acc_json = serde_json::to_value(&acc).unwrap();
+        extract_custom_props_to_root(&acc, &mut acc_json);
         acc_json["profiles"] = json!([]);
         acc_json["filters"] = json!([]);
         acc_json["groups"] = json!([]);
@@ -529,7 +600,7 @@ pub async fn add_m3u_account(
         _ => 1,
     };
 
-    let new_acc = m3u_account::ActiveModel {
+    let mut new_acc = m3u_account::ActiveModel {
         name: sea_orm::Set(name),
         account_type: sea_orm::Set(account_type),
         server_url: sea_orm::Set(server_url),
@@ -547,6 +618,8 @@ pub async fn add_m3u_account(
         refresh_interval: sea_orm::Set(24),
         ..Default::default()
     };
+    
+    let enable_vod = apply_custom_props_from_payload(&payload, &mut new_acc, None).unwrap_or(false);
 
     match m3u_account::Entity::insert(new_acc).exec(&state.db).await {
         Ok(res) => {
@@ -571,11 +644,6 @@ pub async fn add_m3u_account(
                     }
                 }));
 
-                let enable_vod = payload.get("enable_vod").and_then(|v| {
-                    if let Some(b) = v.as_bool() { Some(b) }
-                    else if let Some(s) = v.as_str() { Some(s == "true") }
-                    else { None }
-                }).unwrap_or(false);
 
                 if !url.is_empty() || file_path.is_some() {
                     let db_clone = state.db.clone();
@@ -623,6 +691,7 @@ pub async fn add_m3u_account(
                 create_default_profile(acc.id, &acc.name, acc.max_streams, &state.db).await;
                 
                 let mut acc_json = serde_json::to_value(&acc).unwrap();
+                extract_custom_props_to_root(&acc, &mut acc_json);
                 acc_json["profiles"] = json!([]);
                 acc_json["filters"] = json!([]);
                 acc_json["groups"] = json!([]);
@@ -644,6 +713,7 @@ pub async fn get_m3u_account(
     match m3u_account::Entity::find_by_id(account_id).one(&state.db).await {
         Ok(Some(acc)) => {
             let mut acc_json = serde_json::to_value(&acc).unwrap();
+            extract_custom_props_to_root(&acc, &mut acc_json);
             acc_json["profiles"] = json!([]);
             acc_json["filters"] = json!([]);
             acc_json["groups"] = json!([]);
@@ -885,20 +955,10 @@ pub async fn update_m3u_account(
         active.file_path = sea_orm::Set(Some(path));
     }
     
-    let enable_vod = payload.get("enable_vod").and_then(|v| {
-        if let Some(b) = v.as_bool() { Some(b) }
-        else if let Some(s) = v.as_str() { Some(s == "true") }
-        else { None }
-    });
-
-    if let Some(vod) = enable_vod {
-        let mut custom = acc.custom_properties.clone().unwrap_or(json!({}));
-        custom["enable_vod"] = json!(vod);
-        active.custom_properties = sea_orm::Set(Some(custom));
-    }
+    let enable_vod_opt = apply_custom_props_from_payload(&payload, &mut active, acc.custom_properties.as_ref());
     
     if let Ok(updated) = active.update(&state.db).await {
-        if enable_vod == Some(true) && updated.account_type == "XC" {
+        if enable_vod_opt == Some(true) && updated.account_type == "XC" {
             let db_clone = state.db.clone();
             tokio::spawn(async move {
                 let _ = crate::m3u::fetch_and_parse_xc_vod(&db_clone, account_id).await;
@@ -907,6 +967,7 @@ pub async fn update_m3u_account(
         }
         
         let mut acc_json = serde_json::to_value(&updated).unwrap();
+        extract_custom_props_to_root(&updated, &mut acc_json);
         acc_json["profiles"] = json!([]);
         acc_json["filters"] = json!([]);
         acc_json["groups"] = json!([]);
