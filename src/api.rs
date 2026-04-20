@@ -352,14 +352,22 @@ pub async fn get_streams(
         .all(&state.db).await.unwrap_or_default();
 
     let mut filtered_streams = vec![];
-    let group_filter = params.get("group").cloned();
+    let channel_group_filter = params.get("channel_group").cloned();
+    let group_name_filter = params.get("group").cloned(); // Legacy/name filter if used
     
     for s in streams {
-        if let Some(ref g) = group_filter {
+        if let Some(ref cg) = channel_group_filter {
+            let cg_ids: Vec<&str> = cg.split(',').collect();
+            let s_cg_id = s.channel_group_id.unwrap_or(0).to_string();
+            if !cg_ids.contains(&s_cg_id.as_str()) {
+                continue;
+            }
+        }
+        if let Some(ref g) = group_name_filter {
             let matches = s.custom_properties.as_ref()
                 .and_then(|p| p.get("group_title"))
                 .and_then(|v| v.as_str())
-                .map(|v| v == g)
+                .map(|v| v.to_lowercase().contains(&g.to_lowercase()))
                 .unwrap_or(false);
             if !matches { continue; }
         }
@@ -368,6 +376,26 @@ pub async fn get_streams(
     
     let count = filtered_streams.len() as u64;
     let paginated = filtered_streams.into_iter().skip(offset as usize).take(page_size as usize).collect::<Vec<_>>();
+    
+    let mut results = vec![];
+    for s in paginated {
+        let mut js = serde_json::to_value(&s).unwrap();
+        if let Some(cg_id) = s.channel_group_id {
+            js["channel_group"] = json!(cg_id);
+        } else {
+            js["channel_group"] = serde_json::Value::Null;
+        }
+        if let Some(m_id) = s.m3u_account_id {
+            js["m3u_account"] = json!(m_id);
+        } else {
+            js["m3u_account"] = serde_json::Value::Null;
+        }
+        if let Some(p_id) = s.stream_profile_id {
+            js["stream_profile"] = json!(p_id);
+            js["stream_profile_id"] = json!(p_id);
+        }
+        results.push(js);
+    }
 
     let has_next = (offset + page_size) < count;
     let next_page = if has_next { Some(format!("/api/channels/streams/?page={}", page + 1)) } else { None };
@@ -378,7 +406,7 @@ pub async fn get_streams(
         "count": count,
         "next": next_page,
         "previous": prev_page,
-        "results": paginated
+        "results": results
     }))
 }
 
@@ -1103,7 +1131,7 @@ pub async fn update_m3u_group_settings(
             if let Some(cg_id) = cg_id {
                 if let Ok(Some(mapping)) = channel_group_m3u_account::Entity::find()
                     .filter(channel_group_m3u_account::Column::M3uAccountId.eq(account_id))
-                    .filter(channel_group_m3u_account::Column::ChannelGroupId.eq(cg_id as i32))
+                    .filter(channel_group_m3u_account::Column::ChannelGroupId.eq(cg_id))
                     .one(&state.db).await 
                 {
                     let mut active: channel_group_m3u_account::ActiveModel = mapping.into();

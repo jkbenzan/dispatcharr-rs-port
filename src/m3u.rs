@@ -234,7 +234,9 @@ pub async fn fetch_and_parse_m3u(
 
                     if streams_batch.len() >= 500 {
                         let chunk = std::mem::take(&mut streams_batch);
-                        let _ = stream::Entity::insert_many(chunk).exec(db).await;
+                        if let Err(e) = stream::Entity::insert_many(chunk).exec(db).await {
+                            println!("[M3U Sync] ERROR inserting stream chunk: {:?}", e);
+                        }
                     }
                 }
             }
@@ -242,7 +244,9 @@ pub async fn fetch_and_parse_m3u(
     }
 
     if !streams_batch.is_empty() {
-        let _ = stream::Entity::insert_many(streams_batch).exec(db).await;
+        if let Err(e) = stream::Entity::insert_many(streams_batch).exec(db).await {
+            println!("[M3U Sync] ERROR inserting final stream batch: {:?}", e);
+        }
     }
 
     if let Ok(Some(acc)) = m3u_account::Entity::find_by_id(account_id).one(db).await {
@@ -353,6 +357,7 @@ pub async fn fetch_and_parse_xc(
                 tvg_id: Set(s.epg_channel_id),
                 channel_group_id: Set(cg_id),
                 is_custom: Set(false),
+                current_viewers: Set(0),
                 last_seen: Set(Utc::now().into()),
                 updated_at: Set(Utc::now().into()),
                 stream_hash: Set(Some(result)),
@@ -363,13 +368,17 @@ pub async fn fetch_and_parse_xc(
 
             if streams_batch.len() >= 500 {
                 let chunk = std::mem::take(&mut streams_batch);
-                let _ = stream::Entity::insert_many(chunk).exec(db).await;
+                if let Err(e) = stream::Entity::insert_many(chunk).exec(db).await {
+                    println!("[XC Sync] ERROR inserting stream chunk: {:?}", e);
+                }
             }
         }
     }
 
     if !streams_batch.is_empty() {
-        let _ = stream::Entity::insert_many(streams_batch).exec(db).await;
+        if let Err(e) = stream::Entity::insert_many(streams_batch).exec(db).await {
+            println!("[XC Sync] ERROR inserting final stream batch: {:?}", e);
+        }
     }
 
     let _ = crate::channel_sync::sync_channels_for_account(db, account_id).await;
