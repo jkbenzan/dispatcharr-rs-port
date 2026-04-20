@@ -354,15 +354,36 @@ pub async fn get_streams(
     let mut filtered_streams = vec![];
     let channel_group_filter = params.get("channel_group").cloned();
     let group_name_filter = params.get("group").cloned(); // Legacy/name filter if used
+    let name_filter = params.get("name").cloned();
+    let tvg_id_filter = params.get("tvg_id").cloned();
     
     for s in streams {
-        if let Some(ref cg) = channel_group_filter {
-            let cg_ids: Vec<&str> = cg.split(',').collect();
-            let s_cg_id = s.channel_group_id.unwrap_or(0).to_string();
-            if !cg_ids.contains(&s_cg_id.as_str()) {
+        if let Some(ref tvg) = tvg_id_filter {
+            if let Some(ref s_tvg) = s.tvg_id {
+                if !s_tvg.to_lowercase().contains(&tvg.to_lowercase()) {
+                    continue;
+                }
+            } else {
                 continue;
             }
         }
+        
+        if let Some(ref name) = name_filter {
+            if !s.name.to_lowercase().contains(&name.to_lowercase()) {
+                continue;
+            }
+        }
+        
+        if let Some(ref cg) = channel_group_filter {
+            let cg_names: Vec<&str> = cg.split(',').collect();
+            let matches = s.custom_properties.as_ref()
+                .and_then(|p| p.get("group_title"))
+                .and_then(|v| v.as_str())
+                .map(|v| cg_names.contains(&v))
+                .unwrap_or(false);
+            if !matches { continue; }
+        }
+        
         if let Some(ref g) = group_name_filter {
             let matches = s.custom_properties.as_ref()
                 .and_then(|p| p.get("group_title"))
