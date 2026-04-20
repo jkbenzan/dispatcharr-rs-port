@@ -14,3 +14,16 @@ Dispatcharr-main/frontend/node_modules/
 *.dump
 .git/
 .github/
+
+
+# Files
+channels.json
+docker.log
+docker_tail.txt
+extracted_group.txt
+extracted_profile.txt
+extracted_stream.txt
+read_log.py
+replace_group.txt
+scratch_notifications.txt
+server_logs.txt
