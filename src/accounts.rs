@@ -3,17 +3,19 @@ use axum::{
     http::StatusCode,
     Json,
 };
+use chrono::Utc;
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set, ModelTrait,
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, ModelTrait, QueryFilter, Set,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::sync::Arc;
 use uuid::Uuid;
-use chrono::Utc;
 
 use crate::auth::{hash_password, CurrentUser};
-use crate::entities::{accounts_user_groups, auth_group, auth_group_permissions, auth_permission, user};
+use crate::entities::{
+    accounts_user_groups, auth_group, auth_group_permissions, auth_permission, user,
+};
 use crate::AppState;
 
 // --- User CRUD ---
@@ -100,10 +102,10 @@ pub async fn list_users(
             .into_iter()
             .map(|g| g.group_id)
             .collect();
-            
+
         result.push(serialize_user(&u, groups));
     }
-    
+
     Ok(Json(json!(result)))
 }
 
@@ -120,7 +122,7 @@ pub async fn create_user(
     } else {
         hash_password("default123")
     };
-    
+
     let mut u_level = 1;
     if let Some(val) = payload.user_level {
         match val {
@@ -129,7 +131,7 @@ pub async fn create_user(
             _ => {}
         }
     }
-    
+
     let mut s_limit = 0;
     if let Some(val) = payload.stream_limit {
         match val {
@@ -154,9 +156,12 @@ pub async fn create_user(
         stream_limit: Set(s_limit),
         ..Default::default()
     };
-    
-    let inserted = new_user.insert(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
+
+    let inserted = new_user
+        .insert(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
     let mut final_groups = Vec::new();
     if let Some(groups) = payload.groups {
         for gid in &groups {
@@ -169,7 +174,7 @@ pub async fn create_user(
         }
         final_groups = groups;
     }
-    
+
     Ok(Json(serialize_user(&inserted, final_groups)))
 }
 
@@ -181,7 +186,10 @@ pub async fn get_user(
     if !current_user.0.is_superuser {
         return Err(StatusCode::FORBIDDEN);
     }
-    let u = user::Entity::find_by_id(id).one(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let u = user::Entity::find_by_id(id)
+        .one(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     if let Some(u) = u {
         let groups: Vec<i32> = accounts_user_groups::Entity::find()
             .filter(accounts_user_groups::Column::UserId.eq(u.id))
@@ -191,7 +199,7 @@ pub async fn get_user(
             .into_iter()
             .map(|g| g.group_id)
             .collect();
-            
+
         Ok(Json(serialize_user(&u, groups)))
     } else {
         Err(StatusCode::NOT_FOUND)
@@ -207,14 +215,31 @@ pub async fn update_user(
     if !current_user.0.is_superuser {
         return Err(StatusCode::FORBIDDEN);
     }
-    let mut u: user::ActiveModel = user::Entity::find_by_id(id).one(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?.ok_or(StatusCode::NOT_FOUND)?.into();
-    
-    if let Some(v) = payload.username { u.username = Set(v); }
-    if let Some(v) = payload.email { u.email = Set(v); }
-    if let Some(v) = payload.first_name { u.first_name = Set(v); }
-    if let Some(v) = payload.last_name { u.last_name = Set(v); }
-    if let Some(v) = payload.is_superuser { u.is_superuser = Set(v); }
-    if let Some(v) = payload.is_staff { u.is_staff = Set(v); }
+    let mut u: user::ActiveModel = user::Entity::find_by_id(id)
+        .one(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?
+        .into();
+
+    if let Some(v) = payload.username {
+        u.username = Set(v);
+    }
+    if let Some(v) = payload.email {
+        u.email = Set(v);
+    }
+    if let Some(v) = payload.first_name {
+        u.first_name = Set(v);
+    }
+    if let Some(v) = payload.last_name {
+        u.last_name = Set(v);
+    }
+    if let Some(v) = payload.is_superuser {
+        u.is_superuser = Set(v);
+    }
+    if let Some(v) = payload.is_staff {
+        u.is_staff = Set(v);
+    }
     if let Some(val) = payload.user_level {
         match val {
             Value::Number(n) => u.user_level = Set(n.as_i64().unwrap_or(1) as i32),
@@ -229,20 +254,26 @@ pub async fn update_user(
             _ => {}
         }
     }
-    if let Some(v) = payload.custom_properties { u.custom_properties = Set(Some(v)); }
+    if let Some(v) = payload.custom_properties {
+        u.custom_properties = Set(Some(v));
+    }
     if let Some(p) = payload.password {
         if !p.is_empty() {
             u.password = Set(hash_password(&p));
         }
     }
-    
-    let updated = u.update(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
+
+    let updated = u
+        .update(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
     if let Some(groups) = payload.groups {
         let _ = accounts_user_groups::Entity::delete_many()
             .filter(accounts_user_groups::Column::UserId.eq(id))
-            .exec(&state.db).await;
-            
+            .exec(&state.db)
+            .await;
+
         for gid in groups {
             let user_group = accounts_user_groups::ActiveModel {
                 user_id: Set(updated.id),
@@ -252,7 +283,7 @@ pub async fn update_user(
             let _ = user_group.insert(&state.db).await;
         }
     }
-    
+
     let groups: Vec<i32> = accounts_user_groups::Entity::find()
         .filter(accounts_user_groups::Column::UserId.eq(updated.id))
         .all(&state.db)
@@ -261,7 +292,7 @@ pub async fn update_user(
         .into_iter()
         .map(|g| g.group_id)
         .collect();
-    
+
     Ok(Json(serialize_user(&updated, groups)))
 }
 
@@ -273,7 +304,10 @@ pub async fn delete_user(
     if !current_user.0.is_superuser {
         return Err(StatusCode::FORBIDDEN);
     }
-    user::Entity::delete_by_id(id).exec(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    user::Entity::delete_by_id(id)
+        .exec(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -290,7 +324,7 @@ pub async fn get_me(
         .into_iter()
         .map(|g| g.group_id)
         .collect();
-        
+
     Ok(Json(serialize_user(&u, groups)))
 }
 
@@ -300,10 +334,16 @@ pub async fn update_me(
     Json(payload): Json<UpdateMeReq>,
 ) -> Result<Json<Value>, StatusCode> {
     let mut u: user::ActiveModel = current_user.0.into();
-    
-    if let Some(v) = payload.first_name { u.first_name = Set(v); }
-    if let Some(v) = payload.last_name { u.last_name = Set(v); }
-    if let Some(v) = payload.email { u.email = Set(v); }
+
+    if let Some(v) = payload.first_name {
+        u.first_name = Set(v);
+    }
+    if let Some(v) = payload.last_name {
+        u.last_name = Set(v);
+    }
+    if let Some(v) = payload.email {
+        u.email = Set(v);
+    }
     if let Some(v) = payload.custom_properties {
         // Handle custom properties merging/filtering here if needed
         u.custom_properties = Set(Some(v));
@@ -313,9 +353,12 @@ pub async fn update_me(
             u.password = Set(hash_password(&p));
         }
     }
-    
-    let updated = u.update(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
+
+    let updated = u
+        .update(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
     let groups: Vec<i32> = accounts_user_groups::Entity::find()
         .filter(accounts_user_groups::Column::UserId.eq(updated.id))
         .all(&state.db)
@@ -324,7 +367,7 @@ pub async fn update_me(
         .into_iter()
         .map(|g| g.group_id)
         .collect();
-        
+
     Ok(Json(serialize_user(&updated, groups)))
 }
 
@@ -340,9 +383,14 @@ pub async fn list_groups(
     State(state): State<Arc<AppState>>,
     current_user: CurrentUser,
 ) -> Result<Json<Value>, StatusCode> {
-    if !current_user.0.is_superuser { return Err(StatusCode::FORBIDDEN); }
-    
-    let groups = auth_group::Entity::find().all(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if !current_user.0.is_superuser {
+        return Err(StatusCode::FORBIDDEN);
+    }
+
+    let groups = auth_group::Entity::find()
+        .all(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let mut result = Vec::new();
     for g in groups {
         let perms: Vec<i32> = auth_group_permissions::Entity::find()
@@ -353,14 +401,14 @@ pub async fn list_groups(
             .into_iter()
             .map(|p| p.permission_id)
             .collect();
-            
+
         result.push(json!({
             "id": g.id,
             "name": g.name,
             "permissions": perms
         }));
     }
-    
+
     Ok(Json(json!(result)))
 }
 
@@ -369,15 +417,20 @@ pub async fn create_group(
     current_user: CurrentUser,
     Json(payload): Json<GroupReq>,
 ) -> Result<Json<Value>, StatusCode> {
-    if !current_user.0.is_superuser { return Err(StatusCode::FORBIDDEN); }
-    
+    if !current_user.0.is_superuser {
+        return Err(StatusCode::FORBIDDEN);
+    }
+
     let new_group = auth_group::ActiveModel {
         name: Set(payload.name),
         ..Default::default()
     };
-    
-    let inserted = new_group.insert(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
+
+    let inserted = new_group
+        .insert(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
     if let Some(perms) = payload.permissions {
         for pid in perms {
             let gp = auth_group_permissions::ActiveModel {
@@ -388,7 +441,7 @@ pub async fn create_group(
             let _ = gp.insert(&state.db).await;
         }
     }
-    
+
     Ok(Json(json!({"id": inserted.id, "name": inserted.name})))
 }
 
@@ -397,9 +450,14 @@ pub async fn get_group(
     Path(id): Path<i32>,
     current_user: CurrentUser,
 ) -> Result<Json<Value>, StatusCode> {
-    if !current_user.0.is_superuser { return Err(StatusCode::FORBIDDEN); }
-    
-    let g = auth_group::Entity::find_by_id(id).one(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if !current_user.0.is_superuser {
+        return Err(StatusCode::FORBIDDEN);
+    }
+
+    let g = auth_group::Entity::find_by_id(id)
+        .one(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     if let Some(g) = g {
         let perms: Vec<i32> = auth_group_permissions::Entity::find()
             .filter(auth_group_permissions::Column::GroupId.eq(g.id))
@@ -409,7 +467,7 @@ pub async fn get_group(
             .into_iter()
             .map(|p| p.permission_id)
             .collect();
-            
+
         Ok(Json(json!({
             "id": g.id,
             "name": g.name,
@@ -426,18 +484,29 @@ pub async fn update_group(
     current_user: CurrentUser,
     Json(payload): Json<GroupReq>,
 ) -> Result<Json<Value>, StatusCode> {
-    if !current_user.0.is_superuser { return Err(StatusCode::FORBIDDEN); }
-    
-    let mut g: auth_group::ActiveModel = auth_group::Entity::find_by_id(id).one(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?.ok_or(StatusCode::NOT_FOUND)?.into();
-    
+    if !current_user.0.is_superuser {
+        return Err(StatusCode::FORBIDDEN);
+    }
+
+    let mut g: auth_group::ActiveModel = auth_group::Entity::find_by_id(id)
+        .one(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?
+        .into();
+
     g.name = Set(payload.name);
-    let updated = g.update(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
+    let updated = g
+        .update(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
     if let Some(perms) = payload.permissions {
         let _ = auth_group_permissions::Entity::delete_many()
             .filter(auth_group_permissions::Column::GroupId.eq(id))
-            .exec(&state.db).await;
-            
+            .exec(&state.db)
+            .await;
+
         for pid in perms {
             let gp = auth_group_permissions::ActiveModel {
                 group_id: Set(updated.id),
@@ -447,7 +516,7 @@ pub async fn update_group(
             let _ = gp.insert(&state.db).await;
         }
     }
-    
+
     Ok(Json(json!({"id": updated.id, "name": updated.name})))
 }
 
@@ -456,8 +525,13 @@ pub async fn delete_group(
     Path(id): Path<i32>,
     current_user: CurrentUser,
 ) -> Result<StatusCode, StatusCode> {
-    if !current_user.0.is_superuser { return Err(StatusCode::FORBIDDEN); }
-    auth_group::Entity::delete_by_id(id).exec(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if !current_user.0.is_superuser {
+        return Err(StatusCode::FORBIDDEN);
+    }
+    auth_group::Entity::delete_by_id(id)
+        .exec(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -467,14 +541,22 @@ pub async fn list_permissions(
     State(state): State<Arc<AppState>>,
     _current_user: CurrentUser,
 ) -> Result<Json<Value>, StatusCode> {
-    let perms = auth_permission::Entity::find().all(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let result: Vec<Value> = perms.into_iter().map(|p| json!({
-        "id": p.id,
-        "name": p.name,
-        "codename": p.codename,
-        "content_type": p.content_type_id
-    })).collect();
-    
+    let perms = auth_permission::Entity::find()
+        .all(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let result: Vec<Value> = perms
+        .into_iter()
+        .map(|p| {
+            json!({
+                "id": p.id,
+                "name": p.name,
+                "codename": p.codename,
+                "content_type": p.content_type_id
+            })
+        })
+        .collect();
+
     Ok(Json(Value::Array(result)))
 }
 
@@ -498,15 +580,22 @@ pub async fn generate_api_key(
     if target_user_id != current_user.0.id && !current_user.0.is_superuser {
         return Err(StatusCode::FORBIDDEN);
     }
-    
-    let mut u: user::ActiveModel = user::Entity::find_by_id(target_user_id).one(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?.ok_or(StatusCode::NOT_FOUND)?.into();
-    
+
+    let mut u: user::ActiveModel = user::Entity::find_by_id(target_user_id)
+        .one(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?
+        .into();
+
     use uuid::Uuid;
     let key = Uuid::new_v4().simple().to_string();
-        
+
     u.api_key = Set(Some(key.clone()));
-    u.update(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
+    u.update(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
     Ok(Json(json!({"key": key})))
 }
 
@@ -519,18 +608,27 @@ pub async fn revoke_api_key(
     if target_user_id != current_user.0.id && !current_user.0.is_superuser {
         return Err(StatusCode::FORBIDDEN);
     }
-    
-    let mut u: user::ActiveModel = user::Entity::find_by_id(target_user_id).one(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?.ok_or(StatusCode::NOT_FOUND)?.into();
-    
+
+    let mut u: user::ActiveModel = user::Entity::find_by_id(target_user_id)
+        .one(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?
+        .into();
+
     u.api_key = Set(None);
-    u.update(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
+    u.update(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
     Ok(Json(json!({"success": true})))
 }
 
 // --- Initialize Superuser ---
 
-pub async fn check_superuser(State(state): State<Arc<AppState>>) -> Result<Json<Value>, StatusCode> {
+pub async fn check_superuser(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<Value>, StatusCode> {
     // Check if any admin/superuser exists
     let has_superuser = user::Entity::find()
         .filter(user::Column::UserLevel.gte(10))
@@ -576,7 +674,7 @@ pub async fn init_superuser(
 
     let hashed = hash_password(&password);
     let now = Utc::now().into();
-    
+
     let new_user = user::ActiveModel {
         username: Set(username),
         password: Set(hashed),
@@ -592,7 +690,10 @@ pub async fn init_superuser(
         ..Default::default()
     };
 
-    new_user.insert(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    new_user
+        .insert(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(json!({"superuser_exists": true})))
 }
