@@ -90,17 +90,26 @@ pub async fn list_users(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let mut result = Vec::new();
-    for u in users {
-        let groups: Vec<i32> = accounts_user_groups::Entity::find()
-            .filter(accounts_user_groups::Column::UserId.eq(u.id))
+    let user_ids: Vec<i64> = users.iter().map(|u| u.id).collect();
+
+    let user_groups = if user_ids.is_empty() {
+        Vec::new()
+    } else {
+        accounts_user_groups::Entity::find()
+            .filter(accounts_user_groups::Column::UserId.is_in(user_ids))
             .all(&state.db)
             .await
             .unwrap_or_default()
-            .into_iter()
-            .map(|g| g.group_id)
-            .collect();
-            
+    };
+
+    let mut user_groups_map: std::collections::HashMap<i64, Vec<i32>> = std::collections::HashMap::new();
+    for ug in user_groups {
+        user_groups_map.entry(ug.user_id).or_default().push(ug.group_id);
+    }
+
+    let mut result = Vec::new();
+    for u in users {
+        let groups = user_groups_map.get(&u.id).cloned().unwrap_or_default();
         result.push(serialize_user(&u, groups));
     }
     
@@ -343,16 +352,27 @@ pub async fn list_groups(
     if !current_user.0.is_superuser { return Err(StatusCode::FORBIDDEN); }
     
     let groups = auth_group::Entity::find().all(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let mut result = Vec::new();
-    for g in groups {
-        let perms: Vec<i32> = auth_group_permissions::Entity::find()
-            .filter(auth_group_permissions::Column::GroupId.eq(g.id))
+
+    let group_ids: Vec<i32> = groups.iter().map(|g| g.id).collect();
+
+    let all_perms = if group_ids.is_empty() {
+        Vec::new()
+    } else {
+        auth_group_permissions::Entity::find()
+            .filter(auth_group_permissions::Column::GroupId.is_in(group_ids))
             .all(&state.db)
             .await
             .unwrap_or_default()
-            .into_iter()
-            .map(|p| p.permission_id)
-            .collect();
+    };
+
+    let mut perms_map: std::collections::HashMap<i32, Vec<i32>> = std::collections::HashMap::new();
+    for p in all_perms {
+        perms_map.entry(p.group_id).or_default().push(p.permission_id);
+    }
+
+    let mut result = Vec::new();
+    for g in groups {
+        let perms = perms_map.get(&g.id).cloned().unwrap_or_default();
             
         result.push(json!({
             "id": g.id,
@@ -597,7 +617,6 @@ pub async fn init_superuser(
     Ok(Json(json!({"superuser_exists": true})))
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -608,6 +627,93 @@ mod tests {
     use crate::AppState;
     use crate::auth::CurrentUser;
     use crate::entities::{user, accounts_user_groups};
+    use sea_orm::prelude::DateTimeWithTimeZone;
+
+    #[test]
+    fn test_serialize_user() {
+        let now: DateTimeWithTimeZone = Utc::now().into();
+        let test_user = user::Model {
+            id: 1,
+            password: "hashed_password".to_string(),
+            last_login: Some(now.clone()),
+            is_superuser: true,
+            username: "testuser".to_string(),
+            first_name: "Test".to_string(),
+            last_name: "User".to_string(),
+            email: "test@example.com".to_string(),
+            is_staff: true,
+            is_active: true,
+            date_joined: now.clone(),
+            avatar_config: None,
+            user_level: 5,
+            custom_properties: Some(serde_json::json!({"theme": "dark"})),
+            api_key: Some("test-api-key".to_string()),
+            stream_limit: 2,
+        };
+
+        let groups = vec![1, 2];
+
+        let result = serialize_user(&test_user, groups);
+
+        assert_eq!(result["id"], 1);
+        assert_eq!(result["username"], "testuser");
+        assert_eq!(result["email"], "test@example.com");
+        assert_eq!(result["first_name"], "Test");
+        assert_eq!(result["last_name"], "User");
+        assert_eq!(result["is_superuser"], true);
+        assert_eq!(result["is_staff"], true);
+        assert_eq!(result["is_active"], true);
+        assert_eq!(result["user_level"], 5);
+        assert_eq!(result["api_key"], "test-api-key");
+        assert_eq!(result["groups"][0], 1);
+        assert_eq!(result["groups"][1], 2);
+        assert_eq!(result["custom_properties"]["theme"], "dark");
+        assert!(result["channel_profiles"].is_array());
+        assert!(result["channel_profiles"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_serialize_user_empty_optionals() {
+        let now: DateTimeWithTimeZone = Utc::now().into();
+        let test_user = user::Model {
+            id: 2,
+            password: "hashed_password".to_string(),
+            last_login: None,
+            is_superuser: false,
+            username: "testuser2".to_string(),
+            first_name: "".to_string(),
+            last_name: "".to_string(),
+            email: "".to_string(),
+            is_staff: false,
+            is_active: false,
+            date_joined: now.clone(),
+            avatar_config: None,
+            user_level: 1,
+            custom_properties: None,
+            api_key: None,
+            stream_limit: 0,
+        };
+
+        let groups = vec![];
+
+        let result = serialize_user(&test_user, groups);
+
+        assert_eq!(result["id"], 2);
+        assert_eq!(result["username"], "testuser2");
+        assert_eq!(result["email"], "");
+        assert_eq!(result["first_name"], "");
+        assert_eq!(result["last_name"], "");
+        assert_eq!(result["is_superuser"], false);
+        assert_eq!(result["is_staff"], false);
+        assert_eq!(result["is_active"], false);
+        assert_eq!(result["user_level"], 1);
+        assert!(result["api_key"].is_null());
+        assert!(result["groups"].as_array().unwrap().is_empty());
+        assert!(result["custom_properties"].is_null());
+        assert!(result["last_login"].is_null());
+        assert!(result["channel_profiles"].is_array());
+        assert!(result["channel_profiles"].as_array().unwrap().is_empty());
+    }
 
     async fn setup_db() -> sea_orm::DatabaseConnection {
         let db = Database::connect("sqlite::memory:").await.unwrap();
