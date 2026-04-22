@@ -112,7 +112,7 @@ pub async fn get_channels() -> Json<Value> {
 }
 
 pub async fn get_channel_groups() -> Json<Value> {
-    get_paginated_object().await
+    get_flat_array().await
 }
 
 pub async fn get_profiles() -> Json<Value> {
@@ -124,9 +124,25 @@ pub async fn get_ids_stub() -> Json<Value> {
 }
 
 pub async fn get_m3u_accounts() -> Json<Value> {
-    get_paginated_object().await
+    get_flat_array().await
 }
 
 pub async fn get_epg_sources() -> Json<Value> {
-    get_paginated_object().await
+    get_flat_array().await
+}
+
+pub async fn get_user_agents() -> Json<Value> {
+    get_flat_array().await
+}
+
+pub async fn get_stream_profiles() -> Json<Value> {
+    get_flat_array().await
+}
+
+pub async fn get_notifications() -> Json<Value> {
+    get_flat_array().await
+}
+
+pub async fn get_tvgs() -> Json<Value> {
+    get_flat_array().await
 }

@@ -71,7 +71,10 @@ async fn main() {
         .route("/api/channels/channels/ids/", get(api::get_ids_stub))
         .route("/api/m3u/accounts/", get(api::get_m3u_accounts))
         .route("/api/epg/sources/", get(api::get_epg_sources))
-        .route("/api/epg/epgdata/", get(api::get_epg_sources))
+                .route("/api/core/useragents/", get(api::get_user_agents))
+        .route("/api/core/streamprofiles/", get(api::get_stream_profiles))
+        .route("/api/core/notifications/", get(api::get_notifications))
+        .route("/api/epg/epgdata/", get(api::get_tvgs))
 
         // System & Proxy
         .route("/api/config/", get(api::get_config))
