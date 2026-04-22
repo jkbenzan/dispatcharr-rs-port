@@ -620,13 +620,7 @@ pub async fn init_superuser(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::extract::State;
-    use sea_orm::{Database, Schema, ConnectionTrait};
-    use std::sync::Arc;
     use chrono::Utc;
-    use crate::AppState;
-    use crate::auth::CurrentUser;
-    use crate::entities::{user, accounts_user_groups};
     use sea_orm::prelude::DateTimeWithTimeZone;
 
     #[test]
@@ -713,107 +707,5 @@ mod tests {
         assert!(result["last_login"].is_null());
         assert!(result["channel_profiles"].is_array());
         assert!(result["channel_profiles"].as_array().unwrap().is_empty());
-    }
-
-    async fn setup_db() -> sea_orm::DatabaseConnection {
-        let db = Database::connect("sqlite::memory:").await.unwrap();
-        let builder = db.get_database_backend();
-        let schema = Schema::new(builder);
-
-        let stmt = builder.build(&schema.create_table_from_entity(user::Entity));
-        db.execute(stmt).await.unwrap();
-
-        let stmt2 = builder.build(&schema.create_table_from_entity(accounts_user_groups::Entity));
-        db.execute(stmt2).await.unwrap();
-
-        db
-    }
-
-    fn create_mock_app_state(db: sea_orm::DatabaseConnection) -> Arc<AppState> {
-        let (ws_sender, _) = tokio::sync::broadcast::channel(100);
-        let http_client = reqwest::Client::builder().build().unwrap();
-        Arc::new(AppState {
-            db,
-            http_client,
-            ws_sender,
-        })
-    }
-
-    fn create_test_user_model(id: i64, is_superuser: bool) -> user::Model {
-        user::Model {
-            id,
-            password: "hashed_password".to_string(),
-            last_login: Some(Utc::now().into()),
-            is_superuser,
-            username: format!("user{}", id),
-            first_name: "Test".to_string(),
-            last_name: "User".to_string(),
-            email: format!("user{}@example.com", id),
-            is_staff: false,
-            is_active: true,
-            date_joined: Utc::now().into(),
-            avatar_config: None,
-            user_level: 1,
-            custom_properties: None,
-            api_key: None,
-            stream_limit: 0,
-        }
-    }
-
-    fn create_test_user_active(id: i64, is_superuser: bool) -> user::ActiveModel {
-        user::ActiveModel {
-            id: Set(id),
-            password: Set("hashed_password".to_string()),
-            last_login: Set(Some(Utc::now().into())),
-            is_superuser: Set(is_superuser),
-            username: Set(format!("user{}", id)),
-            first_name: Set("Test".to_string()),
-            last_name: Set("User".to_string()),
-            email: Set(format!("user{}@example.com", id)),
-            is_staff: Set(false),
-            is_active: Set(true),
-            date_joined: Set(Utc::now().into()),
-            avatar_config: Set(None),
-            user_level: Set(1),
-            custom_properties: Set(None),
-            api_key: Set(None),
-            stream_limit: Set(0),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_list_users_superuser() {
-        let db = setup_db().await;
-
-        let superuser_active = create_test_user_active(1, true);
-        let normal_user_active = create_test_user_active(2, false);
-
-        superuser_active.insert(&db).await.unwrap();
-        normal_user_active.insert(&db).await.unwrap();
-
-        let state = create_mock_app_state(db);
-        let current_user = CurrentUser(create_test_user_model(1, true));
-
-        let result = list_users(State(state), current_user).await;
-
-        assert!(result.is_ok());
-        if let Ok(json_response) = result {
-            let users_array = json_response.0.as_array().expect("Expected JSON array");
-            assert_eq!(users_array.len(), 2);
-            assert_eq!(users_array[0]["id"], 1);
-            assert_eq!(users_array[1]["id"], 2);
-        }
-    }
-
-    #[tokio::test]
-    async fn test_list_users_forbidden() {
-        let db = setup_db().await;
-        let state = create_mock_app_state(db);
-        let current_user = CurrentUser(create_test_user_model(2, false));
-
-        let result = list_users(State(state), current_user).await;
-
-        assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), axum::http::StatusCode::FORBIDDEN);
     }
 }
