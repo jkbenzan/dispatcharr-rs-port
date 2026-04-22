@@ -592,6 +592,18 @@ pub async fn get_m3u_accounts(State(state): State<Arc<AppState>>) -> Json<Value>
     Json(json!(results))
 }
 
+fn sanitize_filename(filename: &str) -> String {
+    let filename = filename.split(|c| c == '/' || c == '\\').last().unwrap_or(filename);
+    let sanitized: String = filename.chars()
+        .filter(|c| c.is_alphanumeric() || *c == '.' || *c == '_' || *c == '-')
+        .collect();
+    if sanitized.is_empty() || sanitized.replace(".", "").is_empty() {
+        "uploaded.m3u".to_string()
+    } else {
+        sanitized
+    }
+}
+
 pub async fn add_m3u_account(
     State(state): State<Arc<AppState>>,
     req: axum::extract::Request,
@@ -609,7 +621,8 @@ pub async fn add_m3u_account(
                 if name == "file" {
                     if let Some(file_name) = field.file_name().map(|s| s.to_string()) {
                         if let Ok(data) = field.bytes().await {
-                            let path = format!("./data/uploads/m3us/{}", file_name);
+                            let sanitized = sanitize_filename(&file_name);
+                            let path = format!("./data/uploads/m3us/{}", sanitized);
                             let _ = std::fs::create_dir_all("./data/uploads/m3us");
                             let _ = std::fs::write(&path, data);
                             file_path = Some(path);
@@ -932,7 +945,8 @@ pub async fn update_m3u_account(
                 if name == "file" {
                     if let Some(file_name) = field.file_name().map(|s| s.to_string()) {
                         if let Ok(data) = field.bytes().await {
-                            let path = format!("./data/uploads/m3us/{}", file_name);
+                            let sanitized = sanitize_filename(&file_name);
+                            let path = format!("./data/uploads/m3us/{}", sanitized);
                             let _ = std::fs::create_dir_all("./data/uploads/m3us");
                             let _ = std::fs::write(&path, data);
                             file_path = Some(path);
