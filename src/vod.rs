@@ -4,7 +4,7 @@ use axum::{
     Json,
 };
 use sea_orm::{
-    ColumnTrait, EntityTrait, QueryFilter, QuerySelect,
+    ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -130,9 +130,37 @@ pub async fn get_vod_movies(
 }
 
 pub async fn get_vod_series(
-    State(_state): State<Arc<AppState>>,
-    Query(_params): Query<Pagination>,
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<Pagination>,
 ) -> Result<Json<Value>, StatusCode> {
-    // Stub for now
-    Ok(Json(json!({"count": 0, "results": []})))
+    let search = params.search.unwrap_or_default().to_lowercase();
+    let page = params.page.unwrap_or(1);
+    let limit = params.page_size.unwrap_or(24);
+    let offset = (page.saturating_sub(1)) * limit;
+
+    let mut query = vod_series::Entity::find();
+
+    if !search.is_empty() {
+        query = query.filter(
+            sea_orm::Condition::any()
+                .add(sea_orm::sea_query::Expr::expr(sea_orm::sea_query::Func::lower(sea_orm::sea_query::Expr::col(vod_series::Column::Name))).like(format!("%{}%", search)))
+        );
+    }
+
+    let count = query.clone().count(&state.db).await.unwrap_or(0);
+
+    let series = query
+        .order_by_asc(vod_series::Column::Name)
+        .limit(limit)
+        .offset(offset)
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+
+    Ok(Json(json!({
+        "count": count,
+        "next": if (offset + limit) < count { Some(page + 1) } else { None },
+        "previous": if page > 1 { Some(page - 1) } else { None },
+        "results": series
+    })))
 }
