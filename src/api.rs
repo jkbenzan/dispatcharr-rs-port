@@ -347,8 +347,93 @@ pub async fn get_channels(
     }))
 }
 
-pub async fn get_notifications() -> Json<Value> { 
-    Json(json!({ "notifications": [] }))
+pub async fn get_notifications(
+    State(state): State<Arc<AppState>>,
+    current_user: CurrentUser,
+    Query(params): Query<HashMap<String, String>>,
+) -> Json<Value> {
+    use crate::entities::{core_systemnotification, core_notificationdismissal};
+
+    let include_dismissed = params.get("include_dismissed").map(|s| s == "true").unwrap_or(false);
+
+    let mut notifications_query = core_systemnotification::Entity::find()
+        .filter(core_systemnotification::Column::IsActive.eq(true));
+
+    if !current_user.0.is_superuser && !current_user.0.is_staff {
+        notifications_query = notifications_query.filter(core_systemnotification::Column::AdminOnly.eq(false));
+    }
+
+    let notifications = match notifications_query
+        .order_by_desc(core_systemnotification::Column::Priority)
+        .order_by_desc(core_systemnotification::Column::CreatedAt)
+        .all(&state.db).await {
+        Ok(n) => n,
+        Err(_) => vec![],
+    };
+
+    let dismissed_ids = if !include_dismissed {
+        match core_notificationdismissal::Entity::find()
+            .filter(core_notificationdismissal::Column::UserId.eq(current_user.0.id))
+            .all(&state.db).await {
+            Ok(dismissals) => dismissals.into_iter().map(|d| d.notification_id).collect::<std::collections::HashSet<_>>(),
+            Err(_) => std::collections::HashSet::new(),
+        }
+    } else {
+        std::collections::HashSet::new()
+    };
+
+    let mut results = vec![];
+    for n in notifications {
+        if !include_dismissed && dismissed_ids.contains(&n.id) {
+            continue;
+        }
+        results.push(serde_json::to_value(&n).unwrap());
+    }
+
+    Json(json!({ "notifications": results }))
+}
+
+pub async fn get_notifications_count(
+    State(state): State<Arc<AppState>>,
+    current_user: CurrentUser,
+    Query(params): Query<HashMap<String, String>>,
+) -> Json<Value> {
+    use crate::entities::{core_systemnotification, core_notificationdismissal};
+
+    let include_dismissed = params.get("include_dismissed").map(|s| s == "true").unwrap_or(false);
+
+    let mut notifications_query = core_systemnotification::Entity::find()
+        .filter(core_systemnotification::Column::IsActive.eq(true));
+
+    if !current_user.0.is_superuser && !current_user.0.is_staff {
+        notifications_query = notifications_query.filter(core_systemnotification::Column::AdminOnly.eq(false));
+    }
+
+    let notifications = match notifications_query.all(&state.db).await {
+        Ok(n) => n,
+        Err(_) => vec![],
+    };
+
+    let dismissed_ids = if !include_dismissed {
+        match core_notificationdismissal::Entity::find()
+            .filter(core_notificationdismissal::Column::UserId.eq(current_user.0.id))
+            .all(&state.db).await {
+            Ok(dismissals) => dismissals.into_iter().map(|d| d.notification_id).collect::<std::collections::HashSet<_>>(),
+            Err(_) => std::collections::HashSet::new(),
+        }
+    } else {
+        std::collections::HashSet::new()
+    };
+
+    let mut count = 0;
+    for n in notifications {
+        if !include_dismissed && dismissed_ids.contains(&n.id) {
+            continue;
+        }
+        count += 1;
+    }
+
+    Json(json!({ "count": count }))
 }
 
 pub async fn post_stub() -> Json<Value> {
