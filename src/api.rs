@@ -610,8 +610,8 @@ pub async fn add_m3u_account(
                     if let Some(file_name) = field.file_name().map(|s| s.to_string()) {
                         if let Ok(data) = field.bytes().await {
                             let path = format!("./data/uploads/m3us/{}", file_name);
-                            let _ = std::fs::create_dir_all("./data/uploads/m3us");
-                            let _ = std::fs::write(&path, data);
+                            let _ = tokio::fs::create_dir_all("./data/uploads/m3us").await;
+                            let _ = tokio::fs::write(&path, data).await;
                             file_path = Some(path);
                         }
                     }
@@ -933,8 +933,8 @@ pub async fn update_m3u_account(
                     if let Some(file_name) = field.file_name().map(|s| s.to_string()) {
                         if let Ok(data) = field.bytes().await {
                             let path = format!("./data/uploads/m3us/{}", file_name);
-                            let _ = std::fs::create_dir_all("./data/uploads/m3us");
-                            let _ = std::fs::write(&path, data);
+                            let _ = tokio::fs::create_dir_all("./data/uploads/m3us").await;
+                            let _ = tokio::fs::write(&path, data).await;
                             file_path = Some(path);
                         }
                     }
