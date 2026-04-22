@@ -96,25 +96,20 @@ pub async fn get_vod_categories(
 ) -> Result<Json<Value>, StatusCode> {
     use crate::entities::vod_m3uvodcategoryrelation;
     
-    let categories = vod_category::Entity::find().all(&state.db).await.unwrap_or_default();
-    let relations = vod_m3uvodcategoryrelation::Entity::find().all(&state.db).await.unwrap_or_default();
-    
-    let mut rel_map: std::collections::HashMap<i64, Vec<Value>> = std::collections::HashMap::new();
-    for r in relations {
-        let entry = rel_map.entry(r.category_id).or_insert_with(Vec::new);
-        entry.push(json!({
-            "m3u_account": r.m3u_account_id,
-            "enabled": r.enabled,
-        }));
-    }
+    let categories_with_relations = vod_category::Entity::find()
+        .find_with_related(vod_m3uvodcategoryrelation::Entity)
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
     
     let mut results = Vec::new();
-    for c in categories {
+    for (c, relations) in categories_with_relations {
+        let m3u_accounts: Vec<Value> = relations.into_iter().map(|r| json!({"m3u_account": r.m3u_account_id, "enabled": r.enabled})).collect();
         results.push(json!({
             "id": c.id,
             "name": c.name,
             "category_type": c.category_type,
-            "m3u_accounts": rel_map.get(&c.id).unwrap_or(&Vec::new()),
+            "m3u_accounts": m3u_accounts,
         }));
     }
     
