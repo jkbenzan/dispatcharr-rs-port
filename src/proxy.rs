@@ -5,9 +5,9 @@ use axum::{
     response::Response,
 };
 use futures_util::StreamExt; 
-use sea_orm::EntityTrait;
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use std::sync::Arc;
-use crate::{AppState, entities::channel};
+use crate::{AppState, entities::{channel, channel_stream, stream}};
 use jsonwebtoken::{decode, DecodingKey, Validation};
 use crate::auth::Claims;
 
@@ -36,9 +36,23 @@ pub async fn handle_proxy(
         .ok_or(StatusCode::NOT_FOUND)?;
 
     // 3. Determine Upstream URL
-    // TODO: Link with the ChannelStream entity mapped to `dispatcharr_channels_stream` 
+    // Link with the ChannelStream entity mapped to `dispatcharr_channels_channelstream`
     // to pick the highest priority / active stream for the requested channel.
-    let target_url = "http://example.com/test_stream.m3u8".to_string(); // Placeholder
+    let channel_stream = channel_stream::Entity::find()
+        .filter(channel_stream::Column::ChannelId.eq(parsed_id))
+        .order_by_asc(channel_stream::Column::Order)
+        .one(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    let stream_entity = stream::Entity::find_by_id(channel_stream.stream_id)
+        .one(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    let target_url = stream_entity.url.ok_or(StatusCode::NOT_FOUND)?;
 
     println!("▶️ Proxying Stream Channel: {} -> {}", parsed_id, target_url);
 
