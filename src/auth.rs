@@ -1,9 +1,11 @@
+use crate::{entities::user, AppState};
 use axum::{
     async_trait,
     extract::FromRequestParts,
     http::{request::Parts, StatusCode},
 };
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
+use sea_orm::EntityTrait;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, OnceLock};
 use crate::{AppState, entities::user};
