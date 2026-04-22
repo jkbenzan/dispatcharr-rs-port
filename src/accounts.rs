@@ -596,3 +596,96 @@ pub async fn init_superuser(
 
     Ok(Json(json!({"superuser_exists": true})))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+    use sea_orm::prelude::DateTimeWithTimeZone;
+
+    #[test]
+    fn test_serialize_user() {
+        let now: DateTimeWithTimeZone = Utc::now().into();
+        let test_user = user::Model {
+            id: 1,
+            password: "hashed_password".to_string(),
+            last_login: Some(now.clone()),
+            is_superuser: true,
+            username: "testuser".to_string(),
+            first_name: "Test".to_string(),
+            last_name: "User".to_string(),
+            email: "test@example.com".to_string(),
+            is_staff: true,
+            is_active: true,
+            date_joined: now.clone(),
+            avatar_config: None,
+            user_level: 5,
+            custom_properties: Some(serde_json::json!({"theme": "dark"})),
+            api_key: Some("test-api-key".to_string()),
+            stream_limit: 2,
+        };
+
+        let groups = vec![1, 2];
+
+        let result = serialize_user(&test_user, groups);
+
+        assert_eq!(result["id"], 1);
+        assert_eq!(result["username"], "testuser");
+        assert_eq!(result["email"], "test@example.com");
+        assert_eq!(result["first_name"], "Test");
+        assert_eq!(result["last_name"], "User");
+        assert_eq!(result["is_superuser"], true);
+        assert_eq!(result["is_staff"], true);
+        assert_eq!(result["is_active"], true);
+        assert_eq!(result["user_level"], 5);
+        assert_eq!(result["api_key"], "test-api-key");
+        assert_eq!(result["groups"][0], 1);
+        assert_eq!(result["groups"][1], 2);
+        assert_eq!(result["custom_properties"]["theme"], "dark");
+        assert!(result["channel_profiles"].is_array());
+        assert!(result["channel_profiles"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_serialize_user_empty_optionals() {
+        let now: DateTimeWithTimeZone = Utc::now().into();
+        let test_user = user::Model {
+            id: 2,
+            password: "hashed_password".to_string(),
+            last_login: None,
+            is_superuser: false,
+            username: "testuser2".to_string(),
+            first_name: "".to_string(),
+            last_name: "".to_string(),
+            email: "".to_string(),
+            is_staff: false,
+            is_active: false,
+            date_joined: now.clone(),
+            avatar_config: None,
+            user_level: 1,
+            custom_properties: None,
+            api_key: None,
+            stream_limit: 0,
+        };
+
+        let groups = vec![];
+
+        let result = serialize_user(&test_user, groups);
+
+        assert_eq!(result["id"], 2);
+        assert_eq!(result["username"], "testuser2");
+        assert_eq!(result["email"], "");
+        assert_eq!(result["first_name"], "");
+        assert_eq!(result["last_name"], "");
+        assert_eq!(result["is_superuser"], false);
+        assert_eq!(result["is_staff"], false);
+        assert_eq!(result["is_active"], false);
+        assert_eq!(result["user_level"], 1);
+        assert!(result["api_key"].is_null());
+        assert!(result["groups"].as_array().unwrap().is_empty());
+        assert!(result["custom_properties"].is_null());
+        assert!(result["last_login"].is_null());
+        assert!(result["channel_profiles"].is_array());
+        assert!(result["channel_profiles"].as_array().unwrap().is_empty());
+    }
+}
