@@ -228,6 +228,42 @@ pub async fn get_channels(
             Err(_) => vec![],
         };
 
+    let channel_ids: Vec<i64> = channels.iter().map(|ch| ch.id).collect();
+
+    let all_stream_links = if !channel_ids.is_empty() {
+        crate::entities::channel_stream::Entity::find()
+            .filter(crate::entities::channel_stream::Column::ChannelId.is_in(channel_ids.clone()))
+            .order_by_asc(crate::entities::channel_stream::Column::Order)
+            .all(&state.db)
+            .await
+            .unwrap_or_default()
+    } else {
+        vec![]
+    };
+
+    let mut stream_ids: Vec<i64> = all_stream_links.iter().map(|l| l.stream_id).collect();
+    stream_ids.sort_unstable();
+    stream_ids.dedup();
+
+    let all_streams = if !stream_ids.is_empty() {
+        stream::Entity::find()
+            .filter(stream::Column::Id.is_in(stream_ids))
+            .all(&state.db)
+            .await
+            .unwrap_or_default()
+    } else {
+        vec![]
+    };
+
+    let stream_obj_map: std::collections::HashMap<i64, stream::Model> = all_streams.into_iter().map(|s| (s.id, s)).collect();
+
+    let mut channel_streams_map: std::collections::HashMap<i64, Vec<stream::Model>> = std::collections::HashMap::new();
+    for link in all_stream_links {
+        if let Some(stream_obj) = stream_obj_map.get(&link.stream_id) {
+            channel_streams_map.entry(link.channel_id).or_default().push(stream_obj.clone());
+        }
+    }
+
     let mut results = vec![];
     for ch in channels {
         let mut ch_json = serde_json::to_value(&ch).unwrap();
@@ -256,20 +292,7 @@ pub async fn get_channels(
         let epg_ids: Vec<i64> = epg.into_iter().filter_map(|e| e.try_get("", "epgsource_id").ok()).collect();
         ch_json["epg_sources"] = json!(epg_ids);
 
-        let stream_links = state.db.query_all(Statement::from_sql_and_values(
-            sea_orm::DatabaseBackend::Postgres,
-            "SELECT stream_id FROM dispatcharr_channels_channelstream WHERE channel_id = $1",
-            vec![ch.id.into()]
-        )).await.unwrap_or_default();
-        
-        let mut streams_arr = vec![];
-        for link in stream_links {
-            if let Ok(stream_id) = link.try_get::<i64>("", "stream_id") {
-                if let Ok(Some(stream_obj)) = stream::Entity::find_by_id(stream_id).one(&state.db).await {
-                    streams_arr.push(stream_obj);
-                }
-            }
-        }
+        let streams_arr = channel_streams_map.remove(&ch.id).unwrap_or_default();
         ch_json["streams"] = json!(streams_arr);
 
         results.push(ch_json);
