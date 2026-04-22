@@ -7,9 +7,20 @@ use axum::{
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use sea_orm::EntityTrait;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
+use crate::{AppState, entities::user};
+use sea_orm::EntityTrait;
 
-const JWT_SECRET: &[u8] = b"dispatcharr_super_secret_temporary_key"; // In prod, load from env
+static JWT_SECRET: OnceLock<Vec<u8>> = OnceLock::new();
+
+fn jwt_secret() -> &'static [u8] {
+    JWT_SECRET.get_or_init(|| {
+        std::env::var("JWT_SECRET")
+            .expect("JWT_SECRET must be set")
+            .into_bytes()
+    })
+}
+
 const JWT_EXPIRATION_SECS: usize = 3600 * 24; // 1 day
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -44,7 +55,7 @@ impl FromRequestParts<Arc<AppState>> for CurrentUser {
         // Decode the JWT
         let token_data = match decode::<Claims>(
             token,
-            &DecodingKey::from_secret(JWT_SECRET),
+            &DecodingKey::from_secret(jwt_secret()),
             &Validation::default(),
         ) {
             Ok(d) => d,
@@ -78,11 +89,7 @@ pub fn generate_jwt(user: &user::Model) -> Result<String, jsonwebtoken::errors::
         exp: now + JWT_EXPIRATION_SECS,
     };
 
-    encode(
-        &Header::default(),
-        &claims,
-        &EncodingKey::from_secret(JWT_SECRET),
-    )
+    encode(&Header::default(), &claims, &EncodingKey::from_secret(jwt_secret()))
 }
 
 pub fn verify_password(hash: &str, password: &str) -> bool {
@@ -92,4 +99,31 @@ pub fn verify_password(hash: &str, password: &str) -> bool {
 
 pub fn hash_password(password: &str) -> String {
     djangohashers::make_password(password)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_verify_password_valid() {
+        let password = "my_secure_password";
+        let hash = djangohashers::make_password(password);
+        assert!(verify_password(&hash, password));
+    }
+
+    #[test]
+    fn test_verify_password_invalid() {
+        let password = "my_secure_password";
+        let hash = djangohashers::make_password(password);
+        assert!(!verify_password(&hash, "wrong_password"));
+    }
+
+    #[test]
+    fn test_verify_password_known_hash() {
+        // Hash for "testpassword123"
+        let known_hash = "pbkdf2_sha256$1200000$VYFSAPcExcRp$uwLdrvy0EDXQGgwadZpWyuWOX7JQZ6nTr6Y6oWN+qjk=";
+        assert!(verify_password(known_hash, "testpassword123"));
+        assert!(!verify_password(known_hash, "wrongpassword"));
+    }
 }

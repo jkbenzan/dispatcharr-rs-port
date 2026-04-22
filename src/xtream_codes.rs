@@ -342,3 +342,70 @@ pub async fn get_series_info(
     let info: serde_json::Value = serde_json::from_str(&text)?;
     Ok(info)
 }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use reqwest::Client;
+    use mockito::Server;
+
+    #[tokio::test]
+    async fn test_get_live_categories_success() {
+        let mut server = Server::new_async().await;
+
+        let _m = server.mock("GET", "/player_api.php?username=test_user&password=test_pass&action=get_live_categories")
+            .with_status(200)
+            .with_body(r#"[
+                {"category_id": "1", "category_name": "News", "parent_id": 0},
+                {"category_id": "2", "category_name": "Sports", "parent_id": "0"},
+                {"category_id": 3, "category_name": "Movies", "parent_id": 0}
+            ]"#)
+            .create_async().await;
+
+        let client = Client::new();
+        let categories = get_live_categories(&client, &server.url(), "test_user", "test_pass").await.unwrap();
+
+        assert_eq!(categories.len(), 3);
+
+        assert_eq!(categories[0].category_id, "1");
+        assert_eq!(categories[0].category_name, "News");
+        assert_eq!(categories[0].parent_id, 0);
+
+        assert_eq!(categories[1].category_id, "2");
+        assert_eq!(categories[1].category_name, "Sports");
+        assert_eq!(categories[1].parent_id, 0);
+
+        assert_eq!(categories[2].category_id, "3");
+        assert_eq!(categories[2].category_name, "Movies");
+        assert_eq!(categories[2].parent_id, 0);
+    }
+
+    #[tokio::test]
+    async fn test_get_live_categories_invalid_json() {
+        let mut server = Server::new_async().await;
+
+        let _m = server.mock("GET", "/player_api.php?username=test_user&password=test_pass&action=get_live_categories")
+            .with_status(200)
+            .with_body(r#"<html/>"#)
+            .create_async().await;
+
+        let client = Client::new();
+        let categories = get_live_categories(&client, &server.url(), "test_user", "test_pass").await.unwrap();
+
+        assert_eq!(categories.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_get_live_categories_http_error() {
+        let mut server = Server::new_async().await;
+
+        let _m = server.mock("GET", "/player_api.php?username=test_user&password=test_pass&action=get_live_categories")
+            .with_status(500)
+            .with_body(r#"Internal Server Error"#)
+            .create_async().await;
+
+        let client = Client::new();
+        let result = get_live_categories(&client, &server.url(), "test_user", "test_pass").await;
+
+        assert!(result.is_err());
+    }
+}

@@ -3,7 +3,9 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
+use sea_orm::{
+    ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect,
+};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -109,32 +111,21 @@ pub async fn get_vod_categories(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Value>, StatusCode> {
     use crate::entities::vod_m3uvodcategoryrelation;
-
-    let categories = vod_category::Entity::find()
+    
+    let categories_with_relations = vod_category::Entity::find()
+        .find_with_related(vod_m3uvodcategoryrelation::Entity)
         .all(&state.db)
         .await
         .unwrap_or_default();
-    let relations = vod_m3uvodcategoryrelation::Entity::find()
-        .all(&state.db)
-        .await
-        .unwrap_or_default();
-
-    let mut rel_map: std::collections::HashMap<i64, Vec<Value>> = std::collections::HashMap::new();
-    for r in relations {
-        let entry = rel_map.entry(r.category_id).or_insert_with(Vec::new);
-        entry.push(json!({
-            "m3u_account": r.m3u_account_id,
-            "enabled": r.enabled,
-        }));
-    }
-
+    
     let mut results = Vec::new();
-    for c in categories {
+    for (c, relations) in categories_with_relations {
+        let m3u_accounts: Vec<Value> = relations.into_iter().map(|r| json!({"m3u_account": r.m3u_account_id, "enabled": r.enabled})).collect();
         results.push(json!({
             "id": c.id,
             "name": c.name,
             "category_type": c.category_type,
-            "m3u_accounts": rel_map.get(&c.id).unwrap_or(&Vec::new()),
+            "m3u_accounts": m3u_accounts,
         }));
     }
 
@@ -147,17 +138,89 @@ pub async fn get_vod_categories(
 }
 
 pub async fn get_vod_movies(
-    State(_state): State<Arc<AppState>>,
-    Query(_params): Query<Pagination>,
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<Pagination>,
 ) -> Result<Json<Value>, StatusCode> {
-    // Stub for now
-    Ok(Json(json!({"count": 0, "results": []})))
+    use sea_orm::{PaginatorTrait, QueryOrder};
+
+    let search = params.search.unwrap_or_default().to_lowercase();
+    let page = params.page.unwrap_or(1);
+    let page_size = params.page_size.unwrap_or(24);
+    let offset = (page.saturating_sub(1)) * page_size;
+
+    let mut movies_q = vod_movie::Entity::find();
+
+    if !search.is_empty() {
+        movies_q = movies_q.filter(
+            sea_orm::Condition::any()
+                .add(sea_orm::sea_query::Expr::expr(sea_orm::sea_query::Func::lower(sea_orm::sea_query::Expr::col(vod_movie::Column::Name))).like(format!("%{}%", search)))
+        );
+    }
+
+    let count = movies_q.clone().count(&state.db).await.unwrap_or(0);
+
+    let movies = movies_q
+        .order_by_asc(vod_movie::Column::Id)
+        .limit(page_size)
+        .offset(offset)
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+
+    let mut results = Vec::new();
+    for m in movies {
+        results.push(json!({
+            "id": m.id,
+            "name": m.name,
+            "type": "movie",
+            "year": m.year,
+            "rating": m.rating,
+            "description": m.description,
+            "created_at": m.created_at,
+            "logo_id": m.logo_id,
+        }));
+    }
+
+    Ok(Json(json!({
+        "count": count,
+        "next": null,
+        "previous": null,
+        "results": results
+    })))
 }
 
 pub async fn get_vod_series(
-    State(_state): State<Arc<AppState>>,
-    Query(_params): Query<Pagination>,
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<Pagination>,
 ) -> Result<Json<Value>, StatusCode> {
-    // Stub for now
-    Ok(Json(json!({"count": 0, "results": []})))
+    let search = params.search.unwrap_or_default().to_lowercase();
+    let page = params.page.unwrap_or(1);
+    let limit = params.page_size.unwrap_or(24);
+    let offset = (page.saturating_sub(1)) * limit;
+
+    let mut query = vod_series::Entity::find();
+
+    if !search.is_empty() {
+        query = query.filter(
+            sea_orm::Condition::any()
+                .add(sea_orm::sea_query::Expr::expr(sea_orm::sea_query::Func::lower(sea_orm::sea_query::Expr::col(vod_series::Column::Name))).like(format!("%{}%", search)))
+        );
+    }
+
+    let count = query.clone().count(&state.db).await.unwrap_or(0);
+
+    let series = query
+        .order_by_asc(vod_series::Column::Name)
+        .limit(limit)
+        .offset(offset)
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+
+    Ok(Json(json!({
+        "count": count,
+        "next": if (offset + limit) < count { Some(page + 1) } else { None },
+        "previous": if page > 1 { Some(page - 1) } else { None },
+        "results": series
+    })))
 }
