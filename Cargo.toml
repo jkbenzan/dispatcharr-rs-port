@@ -51,3 +51,6 @@ rand = "0.10.1"
 opt-level = 'z'
 lto = true
 panic = 'abort'
+
+[dev-dependencies]
+mockito = "1.7.2"
