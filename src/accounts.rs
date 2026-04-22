@@ -90,17 +90,26 @@ pub async fn list_users(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let mut result = Vec::new();
-    for u in users {
-        let groups: Vec<i32> = accounts_user_groups::Entity::find()
-            .filter(accounts_user_groups::Column::UserId.eq(u.id))
+    let user_ids: Vec<i64> = users.iter().map(|u| u.id).collect();
+
+    let user_groups = if user_ids.is_empty() {
+        Vec::new()
+    } else {
+        accounts_user_groups::Entity::find()
+            .filter(accounts_user_groups::Column::UserId.is_in(user_ids))
             .all(&state.db)
             .await
             .unwrap_or_default()
-            .into_iter()
-            .map(|g| g.group_id)
-            .collect();
-            
+    };
+
+    let mut user_groups_map: std::collections::HashMap<i64, Vec<i32>> = std::collections::HashMap::new();
+    for ug in user_groups {
+        user_groups_map.entry(ug.user_id).or_default().push(ug.group_id);
+    }
+
+    let mut result = Vec::new();
+    for u in users {
+        let groups = user_groups_map.get(&u.id).cloned().unwrap_or_default();
         result.push(serialize_user(&u, groups));
     }
     
@@ -343,16 +352,27 @@ pub async fn list_groups(
     if !current_user.0.is_superuser { return Err(StatusCode::FORBIDDEN); }
     
     let groups = auth_group::Entity::find().all(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let mut result = Vec::new();
-    for g in groups {
-        let perms: Vec<i32> = auth_group_permissions::Entity::find()
-            .filter(auth_group_permissions::Column::GroupId.eq(g.id))
+
+    let group_ids: Vec<i32> = groups.iter().map(|g| g.id).collect();
+
+    let all_perms = if group_ids.is_empty() {
+        Vec::new()
+    } else {
+        auth_group_permissions::Entity::find()
+            .filter(auth_group_permissions::Column::GroupId.is_in(group_ids))
             .all(&state.db)
             .await
             .unwrap_or_default()
-            .into_iter()
-            .map(|p| p.permission_id)
-            .collect();
+    };
+
+    let mut perms_map: std::collections::HashMap<i32, Vec<i32>> = std::collections::HashMap::new();
+    for p in all_perms {
+        perms_map.entry(p.group_id).or_default().push(p.permission_id);
+    }
+
+    let mut result = Vec::new();
+    for g in groups {
+        let perms = perms_map.get(&g.id).cloned().unwrap_or_default();
             
         result.push(json!({
             "id": g.id,
