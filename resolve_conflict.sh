@@ -1,3 +1,3 @@
-#!/bin/bash
-sed -i '232,319d' src/api.rs
-sed -i 's/>>>>>>> origin\/main//g' src/api.rs
+sed -i '/<<<<<<< Updated upstream/d' src/proxy.rs
+sed -i '/=======/,/>>>>>>> Stashed changes/d' src/proxy.rs
+git add src/proxy.rs

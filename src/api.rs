@@ -238,7 +238,7 @@ pub async fn get_channels(
         // Batch query groups
         let groups = state.db.query_all(Statement::from_sql_and_values(
             sea_orm::DatabaseBackend::Postgres,
-            format!("SELECT channel_id, channelgroup_id FROM dispatcharr_channels_channel_groups WHERE channel_id IN ({})", placeholders),
+            &format!("SELECT channel_id, channelgroup_id FROM dispatcharr_channels_channel_groups WHERE channel_id IN ({})", placeholders),
             values.clone()
         )).await.unwrap_or_default();
 
@@ -252,7 +252,7 @@ pub async fn get_channels(
         // Batch query profiles
         let profiles = state.db.query_all(Statement::from_sql_and_values(
             sea_orm::DatabaseBackend::Postgres,
-            format!("SELECT channel_id, channelprofile_id FROM dispatcharr_channels_channel_channel_profiles WHERE channel_id IN ({})", placeholders),
+            &format!("SELECT channel_id, channelprofile_id FROM dispatcharr_channels_channel_channel_profiles WHERE channel_id IN ({})", placeholders),
             values.clone()
         )).await.unwrap_or_default();
 
@@ -266,7 +266,7 @@ pub async fn get_channels(
         // Batch query EPG sources
         let epg = state.db.query_all(Statement::from_sql_and_values(
             sea_orm::DatabaseBackend::Postgres,
-            format!("SELECT channel_id, epgsource_id FROM dispatcharr_channels_channel_epg_sources WHERE channel_id IN ({})", placeholders),
+            &format!("SELECT channel_id, epgsource_id FROM dispatcharr_channels_channel_epg_sources WHERE channel_id IN ({})", placeholders),
             values.clone()
         )).await.unwrap_or_default();
 
@@ -280,7 +280,7 @@ pub async fn get_channels(
         // Batch query streams
         let stream_links = state.db.query_all(Statement::from_sql_and_values(
             sea_orm::DatabaseBackend::Postgres,
-            format!("SELECT channel_id, stream_id FROM dispatcharr_channels_channelstream WHERE channel_id IN ({})", placeholders),
+            &format!("SELECT channel_id, stream_id FROM dispatcharr_channels_channelstream WHERE channel_id IN ({})", placeholders),
             values.clone()
         )).await.unwrap_or_default();
 
@@ -308,7 +308,6 @@ pub async fn get_channels(
                 }
             }
         }
-
 
         for ch in channels {
             let mut ch_json = serde_json::to_value(&ch).unwrap();
