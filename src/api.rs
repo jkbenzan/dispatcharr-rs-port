@@ -228,51 +228,110 @@ pub async fn get_channels(
             Err(_) => vec![],
         };
 
+    let channel_ids: Vec<i64> = channels.iter().map(|ch| ch.id).collect();
     let mut results = vec![];
-    for ch in channels {
-        let mut ch_json = serde_json::to_value(&ch).unwrap();
-        
+
+    if !channel_ids.is_empty() {
+        let placeholders = channel_ids.iter().enumerate().map(|(i, _)| format!("${}", i + 1)).collect::<Vec<_>>().join(", ");
+        let values: Vec<sea_orm::Value> = channel_ids.iter().map(|&id| id.into()).collect();
+
+        // Batch query groups
         let groups = state.db.query_all(Statement::from_sql_and_values(
             sea_orm::DatabaseBackend::Postgres,
-            "SELECT channelgroup_id FROM dispatcharr_channels_channel_groups WHERE channel_id = $1",
-            vec![ch.id.into()]
+            format!("SELECT channel_id, channelgroup_id FROM dispatcharr_channels_channel_groups WHERE channel_id IN ({})", placeholders),
+            values.clone()
         )).await.unwrap_or_default();
-        let group_ids: Vec<i64> = groups.into_iter().filter_map(|gr| gr.try_get("", "channelgroup_id").ok()).collect();
-        ch_json["channel_groups"] = json!(group_ids);
 
+        let mut groups_map: HashMap<i64, Vec<i64>> = HashMap::new();
+        for gr in groups {
+            if let (Ok(c_id), Ok(g_id)) = (gr.try_get::<i64>("", "channel_id"), gr.try_get::<i64>("", "channelgroup_id")) {
+                groups_map.entry(c_id).or_default().push(g_id);
+            }
+        }
+
+        // Batch query profiles
         let profiles = state.db.query_all(Statement::from_sql_and_values(
             sea_orm::DatabaseBackend::Postgres,
-            "SELECT channelprofile_id FROM dispatcharr_channels_channel_channel_profiles WHERE channel_id = $1",
-            vec![ch.id.into()]
+            format!("SELECT channel_id, channelprofile_id FROM dispatcharr_channels_channel_channel_profiles WHERE channel_id IN ({})", placeholders),
+            values.clone()
         )).await.unwrap_or_default();
-        let profile_ids: Vec<i64> = profiles.into_iter().filter_map(|pr| pr.try_get("", "channelprofile_id").ok()).collect();
-        ch_json["channel_profiles"] = json!(profile_ids);
 
+        let mut profiles_map: HashMap<i64, Vec<i64>> = HashMap::new();
+        for pr in profiles {
+            if let (Ok(c_id), Ok(p_id)) = (pr.try_get::<i64>("", "channel_id"), pr.try_get::<i64>("", "channelprofile_id")) {
+                profiles_map.entry(c_id).or_default().push(p_id);
+            }
+        }
+
+        // Batch query EPG sources
         let epg = state.db.query_all(Statement::from_sql_and_values(
             sea_orm::DatabaseBackend::Postgres,
-            "SELECT epgsource_id FROM dispatcharr_channels_channel_epg_sources WHERE channel_id = $1",
-            vec![ch.id.into()]
+            format!("SELECT channel_id, epgsource_id FROM dispatcharr_channels_channel_epg_sources WHERE channel_id IN ({})", placeholders),
+            values.clone()
         )).await.unwrap_or_default();
-        let epg_ids: Vec<i64> = epg.into_iter().filter_map(|e| e.try_get("", "epgsource_id").ok()).collect();
-        ch_json["epg_sources"] = json!(epg_ids);
 
+        let mut epg_map: HashMap<i64, Vec<i64>> = HashMap::new();
+        for e in epg {
+            if let (Ok(c_id), Ok(e_id)) = (e.try_get::<i64>("", "channel_id"), e.try_get::<i64>("", "epgsource_id")) {
+                epg_map.entry(c_id).or_default().push(e_id);
+            }
+        }
+
+        // Batch query streams
         let stream_links = state.db.query_all(Statement::from_sql_and_values(
             sea_orm::DatabaseBackend::Postgres,
-            "SELECT stream_id FROM dispatcharr_channels_channelstream WHERE channel_id = $1",
-            vec![ch.id.into()]
+            format!("SELECT channel_id, stream_id FROM dispatcharr_channels_channelstream WHERE channel_id IN ({})", placeholders),
+            values.clone()
         )).await.unwrap_or_default();
-        
-        let mut streams_arr = vec![];
+
+        let mut stream_links_map: HashMap<i64, Vec<i64>> = HashMap::new();
+        let mut all_stream_ids: Vec<i64> = Vec::new();
         for link in stream_links {
-            if let Ok(stream_id) = link.try_get::<i64>("", "stream_id") {
-                if let Ok(Some(stream_obj)) = stream::Entity::find_by_id(stream_id).one(&state.db).await {
-                    streams_arr.push(stream_obj);
+            if let (Ok(c_id), Ok(s_id)) = (link.try_get::<i64>("", "channel_id"), link.try_get::<i64>("", "stream_id")) {
+                stream_links_map.entry(c_id).or_default().push(s_id);
+                all_stream_ids.push(s_id);
+            }
+        }
+
+        // Batch fetch stream objects
+        all_stream_ids.sort_unstable();
+        all_stream_ids.dedup();
+
+        let mut streams_obj_map: HashMap<i64, stream::Model> = HashMap::new();
+        if !all_stream_ids.is_empty() {
+            if let Ok(streams) = stream::Entity::find()
+                .filter(stream::Column::Id.is_in(all_stream_ids))
+                .all(&state.db).await
+            {
+                for st in streams {
+                    streams_obj_map.insert(st.id, st);
                 }
             }
         }
-        ch_json["streams"] = json!(streams_arr);
 
-        results.push(ch_json);
+        for ch in channels {
+            let mut ch_json = serde_json::to_value(&ch).unwrap();
+
+            let group_ids = groups_map.get(&ch.id).cloned().unwrap_or_default();
+            ch_json["channel_groups"] = json!(group_ids);
+
+            let profile_ids = profiles_map.get(&ch.id).cloned().unwrap_or_default();
+            ch_json["channel_profiles"] = json!(profile_ids);
+
+            let epg_ids = epg_map.get(&ch.id).cloned().unwrap_or_default();
+            ch_json["epg_sources"] = json!(epg_ids);
+
+            let stream_ids = stream_links_map.get(&ch.id).cloned().unwrap_or_default();
+            let mut streams_arr = vec![];
+            for s_id in stream_ids {
+                if let Some(stream_obj) = streams_obj_map.get(&s_id) {
+                    streams_arr.push(stream_obj.clone());
+                }
+            }
+            ch_json["streams"] = json!(streams_arr);
+
+            results.push(ch_json);
+        }
     }
 
     let has_next = (offset + page_size) < count;
@@ -610,8 +669,8 @@ pub async fn add_m3u_account(
                     if let Some(file_name) = field.file_name().map(|s| s.to_string()) {
                         if let Ok(data) = field.bytes().await {
                             let path = format!("./data/uploads/m3us/{}", file_name);
-                            let _ = std::fs::create_dir_all("./data/uploads/m3us");
-                            let _ = std::fs::write(&path, data);
+                            let _ = tokio::fs::create_dir_all("./data/uploads/m3us").await;
+                            let _ = tokio::fs::write(&path, data).await;
                             file_path = Some(path);
                         }
                     }
@@ -700,6 +759,7 @@ pub async fn add_m3u_account(
                     let ws_clone = state.ws_sender.clone();
                     let final_url = url.clone();
                     let file_path_clone = file_path.clone();
+                    let acc_clone = acc.clone();
                     
                     tokio::spawn(async move {
                         let error_msg = if is_xc {
@@ -726,12 +786,10 @@ pub async fn add_m3u_account(
                         
                         if let Some(msg) = error_msg {
                             eprintln!("{}", msg);
-                            if let Ok(Some(acc)) = m3u_account::Entity::find_by_id(account_id).one(&db_clone).await {
-                                let mut active: m3u_account::ActiveModel = acc.into();
-                                active.status = sea_orm::Set("failed".to_string());
-                                active.last_message = sea_orm::Set(Some(msg.chars().take(255).collect()));
-                                let _ = active.update(&db_clone).await;
-                            }
+                            let mut active: m3u_account::ActiveModel = acc_clone.into();
+                            active.status = sea_orm::Set("failed".to_string());
+                            active.last_message = sea_orm::Set(Some(msg.chars().take(255).collect()));
+                            let _ = active.update(&db_clone).await;
                         }
                     });
                 }
@@ -818,6 +876,7 @@ pub async fn refresh_m3u_account(
         let db_clone = state.db.clone();
         let is_xc = account.account_type == "XC";
         let ws_clone_outer = state.ws_sender.clone();
+        let acc_clone = account.clone();
         tokio::spawn(async move {
             let error_msg = if is_xc {
                 let ws_clone = ws_clone_outer.clone();
@@ -841,12 +900,10 @@ pub async fn refresh_m3u_account(
             
             if let Some(msg) = error_msg {
                 eprintln!("{}", msg);
-                if let Ok(Some(acc)) = m3u_account::Entity::find_by_id(account_id).one(&db_clone).await {
-                    let mut active: m3u_account::ActiveModel = acc.into();
-                    active.status = sea_orm::Set("failed".to_string());
-                    active.last_message = sea_orm::Set(Some(msg.chars().take(255).collect()));
-                    let _ = active.update(&db_clone).await;
-                }
+                let mut active: m3u_account::ActiveModel = acc_clone.into();
+                active.status = sea_orm::Set("failed".to_string());
+                active.last_message = sea_orm::Set(Some(msg.chars().take(255).collect()));
+                let _ = active.update(&db_clone).await;
             }
         });
         (StatusCode::ACCEPTED, Json(json!({"status": "M3U refresh task started"})))
@@ -933,8 +990,8 @@ pub async fn update_m3u_account(
                     if let Some(file_name) = field.file_name().map(|s| s.to_string()) {
                         if let Ok(data) = field.bytes().await {
                             let path = format!("./data/uploads/m3us/{}", file_name);
-                            let _ = std::fs::create_dir_all("./data/uploads/m3us");
-                            let _ = std::fs::write(&path, data);
+                            let _ = tokio::fs::create_dir_all("./data/uploads/m3us").await;
+                            let _ = tokio::fs::write(&path, data).await;
                             file_path = Some(path);
                         }
                     }
@@ -1429,6 +1486,7 @@ pub async fn refresh_m3u_all(
 
         if !url.is_empty() {
             let ws_clone_outer = state.ws_sender.clone();
+            let acc_clone = account.clone();
             tokio::spawn(async move {
                 let error_msg = if is_xc {
                     let ws_clone = ws_clone_outer.clone();
@@ -1452,13 +1510,11 @@ pub async fn refresh_m3u_all(
                 
                 if let Some(msg) = error_msg {
                     eprintln!("{}", msg);
-                    if let Ok(Some(acc)) = crate::entities::m3u_account::Entity::find_by_id(account_id).one(&db_clone).await {
-                        use sea_orm::ActiveModelTrait;
-                        let mut active: crate::entities::m3u_account::ActiveModel = acc.into();
-                        active.status = sea_orm::Set("failed".to_string());
-                        active.last_message = sea_orm::Set(Some(msg.chars().take(255).collect()));
-                        let _ = active.update(&db_clone).await;
-                    }
+                    use sea_orm::ActiveModelTrait;
+                    let mut active: crate::entities::m3u_account::ActiveModel = acc_clone.into();
+                    active.status = sea_orm::Set("failed".to_string());
+                    active.last_message = sea_orm::Set(Some(msg.chars().take(255).collect()));
+                    let _ = active.update(&db_clone).await;
                 }
             });
         }
