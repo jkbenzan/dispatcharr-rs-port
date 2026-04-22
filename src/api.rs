@@ -228,45 +228,90 @@ pub async fn get_channels(
             Err(_) => vec![],
         };
 
-    let mut results = vec![];
-    for ch in channels {
-        let mut ch_json = serde_json::to_value(&ch).unwrap();
-        
+    let channel_ids: Vec<i64> = channels.iter().map(|ch| ch.id).collect();
+
+    let mut group_map: HashMap<i64, Vec<i64>> = HashMap::new();
+    let mut profile_map: HashMap<i64, Vec<i64>> = HashMap::new();
+    let mut epg_map: HashMap<i64, Vec<i64>> = HashMap::new();
+    let mut stream_link_map: HashMap<i64, Vec<i64>> = HashMap::new();
+
+    if !channel_ids.is_empty() {
         let groups = state.db.query_all(Statement::from_sql_and_values(
             sea_orm::DatabaseBackend::Postgres,
-            "SELECT channelgroup_id FROM dispatcharr_channels_channel_groups WHERE channel_id = $1",
-            vec![ch.id.into()]
+            "SELECT channel_id, channelgroup_id FROM dispatcharr_channels_channel_groups WHERE channel_id = ANY($1)",
+            vec![channel_ids.clone().into()]
         )).await.unwrap_or_default();
-        let group_ids: Vec<i64> = groups.into_iter().filter_map(|gr| gr.try_get("", "channelgroup_id").ok()).collect();
-        ch_json["channel_groups"] = json!(group_ids);
+        for gr in groups {
+            if let (Ok(c_id), Ok(g_id)) = (gr.try_get::<i64>("", "channel_id"), gr.try_get::<i64>("", "channelgroup_id")) {
+                group_map.entry(c_id).or_default().push(g_id);
+            }
+        }
 
         let profiles = state.db.query_all(Statement::from_sql_and_values(
             sea_orm::DatabaseBackend::Postgres,
-            "SELECT channelprofile_id FROM dispatcharr_channels_channel_channel_profiles WHERE channel_id = $1",
-            vec![ch.id.into()]
+            "SELECT channel_id, channelprofile_id FROM dispatcharr_channels_channel_channel_profiles WHERE channel_id = ANY($1)",
+            vec![channel_ids.clone().into()]
         )).await.unwrap_or_default();
-        let profile_ids: Vec<i64> = profiles.into_iter().filter_map(|pr| pr.try_get("", "channelprofile_id").ok()).collect();
-        ch_json["channel_profiles"] = json!(profile_ids);
+        for pr in profiles {
+            if let (Ok(c_id), Ok(p_id)) = (pr.try_get::<i64>("", "channel_id"), pr.try_get::<i64>("", "channelprofile_id")) {
+                profile_map.entry(c_id).or_default().push(p_id);
+            }
+        }
 
         let epg = state.db.query_all(Statement::from_sql_and_values(
             sea_orm::DatabaseBackend::Postgres,
-            "SELECT epgsource_id FROM dispatcharr_channels_channel_epg_sources WHERE channel_id = $1",
-            vec![ch.id.into()]
+            "SELECT channel_id, epgsource_id FROM dispatcharr_channels_channel_epg_sources WHERE channel_id = ANY($1)",
+            vec![channel_ids.clone().into()]
         )).await.unwrap_or_default();
-        let epg_ids: Vec<i64> = epg.into_iter().filter_map(|e| e.try_get("", "epgsource_id").ok()).collect();
-        ch_json["epg_sources"] = json!(epg_ids);
+        for e in epg {
+            if let (Ok(c_id), Ok(e_id)) = (e.try_get::<i64>("", "channel_id"), e.try_get::<i64>("", "epgsource_id")) {
+                epg_map.entry(c_id).or_default().push(e_id);
+            }
+        }
 
         let stream_links = state.db.query_all(Statement::from_sql_and_values(
             sea_orm::DatabaseBackend::Postgres,
-            "SELECT stream_id FROM dispatcharr_channels_channelstream WHERE channel_id = $1",
-            vec![ch.id.into()]
+            "SELECT channel_id, stream_id FROM dispatcharr_channels_channelstream WHERE channel_id = ANY($1)",
+            vec![channel_ids.clone().into()]
         )).await.unwrap_or_default();
+        for link in stream_links {
+            if let (Ok(c_id), Ok(s_id)) = (link.try_get::<i64>("", "channel_id"), link.try_get::<i64>("", "stream_id")) {
+                stream_link_map.entry(c_id).or_default().push(s_id);
+            }
+        }
+    }
+
+    // Now fetch all streams at once
+    let mut all_stream_ids: Vec<i64> = stream_link_map.values().flatten().cloned().collect();
+    all_stream_ids.sort_unstable();
+    all_stream_ids.dedup();
+
+    let mut stream_obj_map: HashMap<i64, stream::Model> = HashMap::new();
+    if !all_stream_ids.is_empty() {
+        if let Ok(streams) = stream::Entity::find()
+            .filter(stream::Column::Id.is_in(all_stream_ids))
+            .all(&state.db)
+            .await
+        {
+            for s in streams {
+                stream_obj_map.insert(s.id, s);
+            }
+        }
+    }
+
+    let mut results = vec![];
+    for ch in channels {
+        let mut ch_json = serde_json::to_value(&ch).unwrap();
+
+        ch_json["channel_groups"] = json!(group_map.get(&ch.id).cloned().unwrap_or_default());
+        ch_json["channel_profiles"] = json!(profile_map.get(&ch.id).cloned().unwrap_or_default());
+        ch_json["epg_sources"] = json!(epg_map.get(&ch.id).cloned().unwrap_or_default());
         
         let mut streams_arr = vec![];
-        for link in stream_links {
-            if let Ok(stream_id) = link.try_get::<i64>("", "stream_id") {
-                if let Ok(Some(stream_obj)) = stream::Entity::find_by_id(stream_id).one(&state.db).await {
-                    streams_arr.push(stream_obj);
+        if let Some(stream_ids) = stream_link_map.get(&ch.id) {
+            for sid in stream_ids {
+                if let Some(stream_obj) = stream_obj_map.get(sid) {
+                    streams_arr.push(stream_obj.clone());
                 }
             }
         }
