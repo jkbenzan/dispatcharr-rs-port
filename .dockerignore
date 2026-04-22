@@ -1,0 +1,29 @@
+# Rust build artifacts
+target/
+
+# Pre-built frontend (rebuilt fresh inside Docker)
+dist/
+
+# Node dependencies (rebuilt inside Docker)
+Dispatcharr-main/frontend/node_modules/
+
+# Dev/local files
+.env
+*.db
+*.db-journal
+*.dump
+.git/
+.github/
+
+
+# Files
+channels.json
+docker.log
+docker_tail.txt
+extracted_group.txt
+extracted_profile.txt
+extracted_stream.txt
+read_log.py
+replace_group.txt
+scratch_notifications.txt
+server_logs.txt

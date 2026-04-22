@@ -5,21 +5,36 @@ edition = "2021"
 
 [dependencies]
 # Web Server
-axum = { version = "0.7.9", features = ["ws", "macros"] }
+axum = { version = "0.7.9", features = ["ws", "macros", "multipart"] }
 tokio = { version = "1.0", features = ["full"] }
 tower = "0.4"
 tower-http = { version = "0.5", features = ["cors", "fs", "trace"] }
 
 # Database (PostgreSQL via SeaORM)
 sea-orm = { version = "0.12", features = [
-    "sqlx-postgres", 
+    "sqlx-postgres", "sqlx-sqlite",
     "runtime-tokio-rustls", 
-    "macros"
+    "macros",
+    "with-chrono",
+    "with-json",
+    "with-uuid"
 ] }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+
+# Authentication
+jsonwebtoken = "9.3"
+djangohashers = "1.6"
+
+# Parsing (M3U & XMLTV)
+quick-xml = "0.31"
+regex = "1.10"
+uuid = { version = "1.8", features = ["v4"] }
+sha2 = "0.10"
+hex = "0.4"
+
 
 # Networking & Streaming
 reqwest = { version = "0.12", features = ["json", "stream"] }
@@ -30,8 +45,12 @@ dotenvy = "0.15"
 chrono = { version = "0.4", features = ["serde"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
+rand = "0.10.1"
 
 [profile.release]
 opt-level = 'z'
 lto = true
 panic = 'abort'
+
+[dev-dependencies]
+mockito = "1.7.2"

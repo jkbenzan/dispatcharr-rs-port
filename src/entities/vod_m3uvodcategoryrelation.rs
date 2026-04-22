@@ -1,0 +1,33 @@
+use sea_orm::entity::prelude::*;
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize)]
+#[sea_orm(table_name = "vod_m3uvodcategoryrelation", schema_name = "public")]
+pub struct Model {
+    #[sea_orm(primary_key)]
+    pub id: i64,
+    pub enabled: bool,
+    pub custom_properties: Option<Json>,
+    pub created_at: DateTimeWithTimeZone,
+    pub updated_at: DateTimeWithTimeZone,
+    pub m3u_account_id: i64,
+    pub category_id: i64,
+}
+
+#[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+pub enum Relation {
+    #[sea_orm(
+        belongs_to = "super::vod_category::Entity",
+        from = "Column::CategoryId",
+        to = "super::vod_category::Column::Id",
+    )]
+    VodCategory,
+}
+
+impl Related<super::vod_category::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::VodCategory.def()
+    }
+}
+
+impl ActiveModelBehavior for ActiveModel {}

@@ -1,5 +1,14 @@
-# STEP 1: Build the Rust Binary
-FROM rust:1.88-slim AS builder
+# STEP 1: Build the React Frontend
+FROM node:20-slim AS frontend-builder
+
+WORKDIR /app/frontend
+COPY Dispatcharr-main/frontend/package*.json ./
+RUN npm ci
+COPY Dispatcharr-main/frontend/ ./
+RUN npm run build
+
+# STEP 2: Build the Rust Binary
+FROM rust:latest AS backend-builder
 
 # Install OpenSSL development headers and pkg-config
 RUN apt-get update && apt-get install -y \
@@ -11,7 +20,7 @@ WORKDIR /app
 COPY . .
 RUN cargo build --release
 
-# STEP 2: Create the slim Production Image
+# STEP 3: Create the slim Production Image
 FROM debian:bookworm-slim
 
 # Install runtime OpenSSL (needed for the binary to actually run)
@@ -22,13 +31,13 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Copy the compiled binary from the builder stage
-COPY --from=builder /app/target/release/dispatcharr-rs /usr/local/bin/
+# Copy the compiled binary from the Rust builder stage
+COPY --from=backend-builder /app/target/release/dispatcharr-rs /usr/local/bin/
 
-# Copy your React frontend files
-COPY dist /app/dist
+# Copy the compiled frontend from the Node builder stage
+COPY --from=frontend-builder /app/frontend/dist /app/dist
 
 EXPOSE 8080
 
 # Start the application
-CMD ["dispatcharr-rs"]
+CMD ["dispatcharr-rs"]
