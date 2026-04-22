@@ -190,7 +190,7 @@ async fn main() {
         .route("/api/channels/streams/ids/", get(api::get_flat_array))
         .route("/api/channels/streams/filter-options/", get(api::get_stream_filter_options))
         .route("/api/channels/dashboard-stats/", get(api::get_dashboard_stats))
-        .route("/api/channels/streams/", get(api::get_streams).post(api::post_stub))
+        .route("/api/channels/streams/", get(api::get_streams).post(api::create_stream))
         .route("/api/core/system-events/", get(api::get_paginated_object))
         .route("/api/connect/integrations/", get(api::get_paginated_object))
         .route("/api/plugins/plugins/", get(api::get_paginated_object))

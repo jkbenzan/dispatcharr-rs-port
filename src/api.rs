@@ -292,8 +292,49 @@ pub async fn get_notifications() -> Json<Value> {
     Json(json!({ "notifications": [] }))
 }
 
-pub async fn post_stub() -> Json<Value> {
-    Json(json!({ "id": 9999, "success": true, "message": "created mock" }))
+pub async fn create_stream(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<Value>,
+) -> impl IntoResponse {
+    use crate::entities::stream;
+
+    let now = chrono::Utc::now().with_timezone(&chrono::FixedOffset::east_opt(0).unwrap());
+
+    let m3u_account_id = payload.get("m3u_account_id")
+        .or_else(|| payload.get("m3u_account"))
+        .and_then(|v| v.as_i64());
+
+    let stream_profile_id = payload.get("stream_profile_id")
+        .or_else(|| payload.get("stream_profile"))
+        .and_then(|v| v.as_i64());
+
+    let channel_group_id = payload.get("channel_group_id")
+        .or_else(|| payload.get("channel_group"))
+        .and_then(|v| v.as_i64());
+
+    let active = stream::ActiveModel {
+        name: sea_orm::Set(payload.get("name").and_then(|v| v.as_str()).unwrap_or("New Stream").to_string()),
+        url: sea_orm::Set(payload.get("url").and_then(|v| v.as_str()).map(|s| s.to_string())),
+        logo_url: sea_orm::Set(payload.get("logo_url").and_then(|v| v.as_str()).map(|s| s.to_string())),
+        tvg_id: sea_orm::Set(payload.get("tvg_id").and_then(|v| v.as_str()).map(|s| s.to_string())),
+        local_file: sea_orm::Set(payload.get("local_file").and_then(|v| v.as_str()).map(|s| s.to_string())),
+        current_viewers: sea_orm::Set(0),
+        updated_at: sea_orm::Set(now),
+        m3u_account_id: sea_orm::Set(m3u_account_id),
+        stream_profile_id: sea_orm::Set(stream_profile_id),
+        is_custom: sea_orm::Set(payload.get("is_custom").and_then(|v| v.as_bool()).unwrap_or(true)),
+        channel_group_id: sea_orm::Set(channel_group_id),
+        last_seen: sea_orm::Set(now),
+        stream_hash: sea_orm::Set(None),
+        custom_properties: sea_orm::Set(payload.get("custom_properties").cloned()),
+        ..Default::default()
+    };
+
+    if let Ok(inserted) = active.insert(&state.db).await {
+        (StatusCode::CREATED, Json(json!(inserted)))
+    } else {
+        (StatusCode::BAD_REQUEST, Json(json!({"error": "Failed to create stream"})))
+    }
 }
 
 pub async fn get_useragents() -> Json<Value> { get_flat_array().await }
