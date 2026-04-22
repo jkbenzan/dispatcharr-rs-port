@@ -89,3 +89,30 @@ pub fn verify_password(hash: &str, password: &str) -> bool {
 pub fn hash_password(password: &str) -> String {
     djangohashers::make_password(password)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_verify_password_valid() {
+        let password = "my_secure_password";
+        let hash = djangohashers::make_password(password);
+        assert!(verify_password(&hash, password));
+    }
+
+    #[test]
+    fn test_verify_password_invalid() {
+        let password = "my_secure_password";
+        let hash = djangohashers::make_password(password);
+        assert!(!verify_password(&hash, "wrong_password"));
+    }
+
+    #[test]
+    fn test_verify_password_known_hash() {
+        // Hash for "testpassword123"
+        let known_hash = "pbkdf2_sha256$1200000$VYFSAPcExcRp$uwLdrvy0EDXQGgwadZpWyuWOX7JQZ6nTr6Y6oWN+qjk=";
+        assert!(verify_password(known_hash, "testpassword123"));
+        assert!(!verify_password(known_hash, "wrongpassword"));
+    }
+}
