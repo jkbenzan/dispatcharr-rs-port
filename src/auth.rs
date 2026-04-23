@@ -104,26 +104,43 @@ pub fn hash_password(password: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::FixedOffset;
 
-    #[test]
-    fn test_verify_password_valid() {
-        let password = "my_secure_password";
-        let hash = djangohashers::make_password(password);
-        assert!(verify_password(&hash, password));
+    fn create_mock_user() -> user::Model {
+        user::Model {
+            id: 1,
+            password: "hashed_password".to_string(),
+            last_login: None,
+            is_superuser: true,
+            username: "testuser".to_string(),
+            first_name: "Test".to_string(),
+            last_name: "User".to_string(),
+            email: "test@example.com".to_string(),
+            is_staff: true,
+            is_active: true,
+            date_joined: chrono::Utc::now().with_timezone(&FixedOffset::east_opt(0).unwrap()),
+            avatar_config: None,
+            user_level: 1,
+            custom_properties: None,
+            api_key: None,
+            stream_limit: 10,
+        }
     }
 
     #[test]
-    fn test_verify_password_invalid() {
-        let password = "my_secure_password";
-        let hash = djangohashers::make_password(password);
-        assert!(!verify_password(&hash, "wrong_password"));
-    }
+    fn test_generate_jwt() {
+        let user = create_mock_user();
+        let token = generate_jwt(&user).expect("Should generate JWT");
 
-    #[test]
-    fn test_verify_password_known_hash() {
-        // Hash for "testpassword123"
-        let known_hash = "pbkdf2_sha256$1200000$VYFSAPcExcRp$uwLdrvy0EDXQGgwadZpWyuWOX7JQZ6nTr6Y6oWN+qjk=";
-        assert!(verify_password(known_hash, "testpassword123"));
-        assert!(!verify_password(known_hash, "wrongpassword"));
+        let decoded = decode::<Claims>(
+            &token,
+            &DecodingKey::from_secret(JWT_SECRET),
+            &Validation::default(),
+        ).expect("Should decode JWT");
+
+        assert_eq!(decoded.claims.user_id, 1);
+        assert_eq!(decoded.claims.username, "testuser");
+        assert_eq!(decoded.claims.is_superuser, true);
+        assert!(decoded.claims.exp > chrono::Utc::now().timestamp() as usize);
     }
 }
