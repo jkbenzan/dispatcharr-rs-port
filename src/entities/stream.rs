@@ -1,6 +1,6 @@
-use chrono::{DateTime, FixedOffset};
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
+use chrono::{DateTime, FixedOffset};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize)]
 #[sea_orm(table_name = "dispatcharr_channels_stream", schema_name = "public")]
