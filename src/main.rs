@@ -1,4 +1,3 @@
-mod stream_checker;
 use axum::{
     extract::ws::{WebSocket, WebSocketUpgrade},
     response::IntoResponse,
@@ -13,6 +12,7 @@ use tower_http::services::{ServeDir, ServeFile};
 
 mod accounts;
 mod api;
+mod stream_checker;
 mod auth;
 mod channel_sync;
 mod entities;
