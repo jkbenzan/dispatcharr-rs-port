@@ -1,5 +1,6 @@
+use crate::{AppState, entities::{channel, channel_stream, stream}};
+use jsonwebtoken::{decode, DecodingKey, Validation};
 use crate::auth::Claims;
-use crate::{entities::channel, AppState};
 use axum::{
     body::Body,
     extract::{Path, State},
@@ -9,9 +10,6 @@ use axum::{
 use futures_util::StreamExt; 
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use std::sync::Arc;
-use crate::{AppState, entities::{channel, channel_stream, stream}};
-use jsonwebtoken::{decode, DecodingKey, Validation};
-use crate::auth::Claims;
 
 const STREAM_SECRET: &[u8] = b"dispatcharr_super_secret_temporary_key";
 

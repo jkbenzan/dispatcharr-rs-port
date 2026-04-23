@@ -8,8 +8,6 @@ use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation}
 use sea_orm::EntityTrait;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, OnceLock};
-use crate::{AppState, entities::user};
-use sea_orm::EntityTrait;
 
 static JWT_SECRET: OnceLock<Vec<u8>> = OnceLock::new();
 
