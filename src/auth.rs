@@ -1,15 +1,26 @@
+use crate::{entities::user, AppState};
 use axum::{
     async_trait,
     extract::FromRequestParts,
     http::{request::Parts, StatusCode},
 };
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
+use sea_orm::EntityTrait;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use crate::{AppState, entities::user};
 use sea_orm::EntityTrait;
 
-const JWT_SECRET: &[u8] = b"dispatcharr_super_secret_temporary_key"; // In prod, load from env
+static JWT_SECRET: OnceLock<Vec<u8>> = OnceLock::new();
+
+fn jwt_secret() -> &'static [u8] {
+    JWT_SECRET.get_or_init(|| {
+        std::env::var("JWT_SECRET")
+            .expect("JWT_SECRET must be set")
+            .into_bytes()
+    })
+}
+
 const JWT_EXPIRATION_SECS: usize = 3600 * 24; // 1 day
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -44,7 +55,7 @@ impl FromRequestParts<Arc<AppState>> for CurrentUser {
         // Decode the JWT
         let token_data = match decode::<Claims>(
             token,
-            &DecodingKey::from_secret(JWT_SECRET),
+            &DecodingKey::from_secret(jwt_secret()),
             &Validation::default(),
         ) {
             Ok(d) => d,
@@ -78,7 +89,7 @@ pub fn generate_jwt(user: &user::Model) -> Result<String, jsonwebtoken::errors::
         exp: now + JWT_EXPIRATION_SECS,
     };
 
-    encode(&Header::default(), &claims, &EncodingKey::from_secret(JWT_SECRET))
+    encode(&Header::default(), &claims, &EncodingKey::from_secret(jwt_secret()))
 }
 
 pub fn verify_password(hash: &str, password: &str) -> bool {

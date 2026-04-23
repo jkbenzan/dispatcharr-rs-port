@@ -2,12 +2,14 @@ use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize)]
-#[sea_orm(table_name = "accounts_user_groups",  )]
+#[sea_orm(table_name = "core_notificationdismissal", schema_name = "public")]
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i64,
+    pub dismissed_at: DateTimeWithTimeZone,
+    pub action_taken: Option<String>,
     pub user_id: i64,
-    pub group_id: i32,
+    pub notification_id: i64,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
