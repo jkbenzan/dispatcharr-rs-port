@@ -1,8 +1,8 @@
-use crate::entities::{channel, channel_group_m3u_account, channel_stream, stream};
-use chrono::Utc;
-use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
+use sea_orm::{DatabaseConnection, EntityTrait, QueryFilter, ColumnTrait, ActiveModelTrait, Set};
+use crate::entities::{channel, stream, channel_group_m3u_account, channel_stream};
 use std::error::Error;
 use uuid::Uuid;
+use chrono::Utc;
 
 pub async fn sync_channels_for_account(
     db: &DatabaseConnection,
@@ -17,16 +17,10 @@ pub async fn sync_channels_for_account(
         .all(db)
         .await?;
 
-    let enabled_group_ids: Vec<i64> = mappings
-        .into_iter()
-        .map(|m| m.channel_group_id as i64)
-        .collect();
+    let enabled_group_ids: Vec<i64> = mappings.into_iter().map(|m| m.channel_group_id as i64).collect();
 
     if enabled_group_ids.is_empty() {
-        println!(
-            "[Channel Sync] No auto-sync groups enabled for account {}",
-            account_id
-        );
+        println!("[Channel Sync] No auto-sync groups enabled for account {}", account_id);
         return Ok(());
     }
 
@@ -38,20 +32,13 @@ pub async fn sync_channels_for_account(
 
     println!("[Channel Sync] Found {} streams to sync", streams.len());
 
-    let stream_ids: Vec<i64> = streams.iter().map(|s| s.id).collect();
-
-    let existing_mappings = channel_stream::Entity::find()
-        .filter(channel_stream::Column::StreamId.is_in(stream_ids))
-        .all(db)
-        .await?;
-
-    let existing_stream_ids: std::collections::HashSet<i64> = existing_mappings
-        .into_iter()
-        .map(|m| m.stream_id)
-        .collect();
-
     for stream in streams {
-        if !existing_stream_ids.contains(&stream.id) {
+        let mapping = channel_stream::Entity::find()
+            .filter(channel_stream::Column::StreamId.eq(stream.id))
+            .one(db)
+            .await?;
+
+        if mapping.is_none() {
             let now: chrono::DateTime<chrono::FixedOffset> = Utc::now().into();
 
             let new_channel = channel::ActiveModel {
@@ -79,10 +66,7 @@ pub async fn sync_channels_for_account(
                     let _ = new_mapping.insert(db).await;
                 }
                 Err(e) => {
-                    eprintln!(
-                        "[Channel Sync] Error inserting channel for stream {}: {}",
-                        stream.name, e
-                    );
+                    eprintln!("[Channel Sync] Error inserting channel for stream {}: {}", stream.name, e);
                 }
             }
         }

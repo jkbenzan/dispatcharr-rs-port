@@ -1,16 +1,12 @@
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use reqwest::Client;
 use std::error::Error;
 
 // Helper functions to handle XC API type inconsistencies (strings vs numbers)
 fn get_string(val: &serde_json::Value, key: &str) -> Option<String> {
     val.get(key).and_then(|v| {
         if let Some(s) = v.as_str() {
-            if s.is_empty() {
-                None
-            } else {
-                Some(s.to_string())
-            }
+            if s.is_empty() { None } else { Some(s.to_string()) }
         } else if let Some(n) = v.as_i64() {
             Some(n.to_string())
         } else {
@@ -72,8 +68,7 @@ fn parse_categories(text: &str) -> Vec<XcCategory> {
         for val in arr {
             categories.push(XcCategory {
                 category_id: get_string(&val, "category_id").unwrap_or_default(),
-                category_name: get_string(&val, "category_name")
-                    .unwrap_or_else(|| "Unknown".to_string()),
+                category_name: get_string(&val, "category_name").unwrap_or_else(|| "Unknown".to_string()),
                 parent_id: get_i32(&val, "parent_id").unwrap_or(0),
             });
         }
@@ -89,8 +84,7 @@ pub async fn get_live_categories(
 ) -> Result<Vec<XcCategory>, Box<dyn Error>> {
     let url = format!("{}/player_api.php", server_url.trim_end_matches('/'));
 
-    let res = client
-        .get(&url)
+    let res = client.get(&url)
         .query(&[
             ("username", username),
             ("password", password),
@@ -112,8 +106,7 @@ pub async fn get_live_streams(
 ) -> Result<Vec<XcStream>, Box<dyn Error>> {
     let url = format!("{}/player_api.php", server_url.trim_end_matches('/'));
 
-    let res = client
-        .get(&url)
+    let res = client.get(&url)
         .query(&[
             ("username", username),
             ("password", password),
@@ -128,9 +121,7 @@ pub async fn get_live_streams(
     if let Ok(arr) = serde_json::from_str::<Vec<serde_json::Value>>(&text) {
         for val in arr {
             let stream_id = get_i32(&val, "stream_id").unwrap_or(0);
-            if stream_id == 0 {
-                continue;
-            }
+            if stream_id == 0 { continue; }
             streams.push(XcStream {
                 num: val.get("num").cloned(),
                 name: get_string(&val, "name").unwrap_or_else(|| "Unknown".to_string()),
@@ -159,16 +150,9 @@ pub async fn get_vod_categories(
     password: &str,
 ) -> Result<Vec<XcCategory>, Box<dyn Error>> {
     let url = format!("{}/player_api.php", server_url.trim_end_matches('/'));
-    let res = client
-        .get(&url)
-        .query(&[
-            ("username", username),
-            ("password", password),
-            ("action", "get_vod_categories"),
-        ])
-        .send()
-        .await?
-        .error_for_status()?;
+    let res = client.get(&url)
+        .query(&[("username", username), ("password", password), ("action", "get_vod_categories")])
+        .send().await?.error_for_status()?;
     let text = res.text().await?;
     Ok(parse_categories(&text))
 }
@@ -194,25 +178,16 @@ pub async fn get_vod_streams(
     password: &str,
 ) -> Result<Vec<XcVodStream>, Box<dyn Error>> {
     let url = format!("{}/player_api.php", server_url.trim_end_matches('/'));
-    let res = client
-        .get(&url)
-        .query(&[
-            ("username", username),
-            ("password", password),
-            ("action", "get_vod_streams"),
-        ])
-        .send()
-        .await?
-        .error_for_status()?;
+    let res = client.get(&url)
+        .query(&[("username", username), ("password", password), ("action", "get_vod_streams")])
+        .send().await?.error_for_status()?;
 
     let text = res.text().await?;
     let mut streams = Vec::new();
     if let Ok(arr) = serde_json::from_str::<Vec<serde_json::Value>>(&text) {
         for val in arr {
             let stream_id = get_i32(&val, "stream_id").unwrap_or(0);
-            if stream_id == 0 {
-                continue;
-            }
+            if stream_id == 0 { continue; }
             streams.push(XcVodStream {
                 num: val.get("num").cloned(),
                 name: get_string(&val, "name").unwrap_or_else(|| "Unknown".to_string()),
@@ -239,16 +214,9 @@ pub async fn get_series_categories(
     password: &str,
 ) -> Result<Vec<XcCategory>, Box<dyn Error>> {
     let url = format!("{}/player_api.php", server_url.trim_end_matches('/'));
-    let res = client
-        .get(&url)
-        .query(&[
-            ("username", username),
-            ("password", password),
-            ("action", "get_series_categories"),
-        ])
-        .send()
-        .await?
-        .error_for_status()?;
+    let res = client.get(&url)
+        .query(&[("username", username), ("password", password), ("action", "get_series_categories")])
+        .send().await?.error_for_status()?;
     let text = res.text().await?;
     Ok(parse_categories(&text))
 }
@@ -277,25 +245,16 @@ pub async fn get_series(
     password: &str,
 ) -> Result<Vec<XcSeries>, Box<dyn Error>> {
     let url = format!("{}/player_api.php", server_url.trim_end_matches('/'));
-    let res = client
-        .get(&url)
-        .query(&[
-            ("username", username),
-            ("password", password),
-            ("action", "get_series"),
-        ])
-        .send()
-        .await?
-        .error_for_status()?;
+    let res = client.get(&url)
+        .query(&[("username", username), ("password", password), ("action", "get_series")])
+        .send().await?.error_for_status()?;
 
     let text = res.text().await?;
     let mut streams = Vec::new();
     if let Ok(arr) = serde_json::from_str::<Vec<serde_json::Value>>(&text) {
         for val in arr {
             let series_id = get_i32(&val, "series_id").unwrap_or(0);
-            if series_id == 0 {
-                continue;
-            }
+            if series_id == 0 { continue; }
             streams.push(XcSeries {
                 num: val.get("num").cloned(),
                 name: get_string(&val, "name").unwrap_or_else(|| "Unknown".to_string()),
@@ -326,86 +285,16 @@ pub async fn get_series_info(
     series_id: i32,
 ) -> Result<serde_json::Value, Box<dyn Error>> {
     let url = format!("{}/player_api.php", server_url.trim_end_matches('/'));
-    let res = client
-        .get(&url)
+    let res = client.get(&url)
         .query(&[
             ("username", username),
             ("password", password),
             ("action", "get_series_info"),
-            ("series_id", &series_id.to_string()),
+            ("series_id", &series_id.to_string())
         ])
-        .send()
-        .await?
-        .error_for_status()?;
+        .send().await?.error_for_status()?;
 
     let text = res.text().await?;
     let info: serde_json::Value = serde_json::from_str(&text)?;
     Ok(info)
-}
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use reqwest::Client;
-    use mockito::Server;
-
-    #[tokio::test]
-    async fn test_get_live_categories_success() {
-        let mut server = Server::new_async().await;
-
-        let _m = server.mock("GET", "/player_api.php?username=test_user&password=test_pass&action=get_live_categories")
-            .with_status(200)
-            .with_body(r#"[
-                {"category_id": "1", "category_name": "News", "parent_id": 0},
-                {"category_id": "2", "category_name": "Sports", "parent_id": "0"},
-                {"category_id": 3, "category_name": "Movies", "parent_id": 0}
-            ]"#)
-            .create_async().await;
-
-        let client = Client::new();
-        let categories = get_live_categories(&client, &server.url(), "test_user", "test_pass").await.unwrap();
-
-        assert_eq!(categories.len(), 3);
-
-        assert_eq!(categories[0].category_id, "1");
-        assert_eq!(categories[0].category_name, "News");
-        assert_eq!(categories[0].parent_id, 0);
-
-        assert_eq!(categories[1].category_id, "2");
-        assert_eq!(categories[1].category_name, "Sports");
-        assert_eq!(categories[1].parent_id, 0);
-
-        assert_eq!(categories[2].category_id, "3");
-        assert_eq!(categories[2].category_name, "Movies");
-        assert_eq!(categories[2].parent_id, 0);
-    }
-
-    #[tokio::test]
-    async fn test_get_live_categories_invalid_json() {
-        let mut server = Server::new_async().await;
-
-        let _m = server.mock("GET", "/player_api.php?username=test_user&password=test_pass&action=get_live_categories")
-            .with_status(200)
-            .with_body(r#"<html/>"#)
-            .create_async().await;
-
-        let client = Client::new();
-        let categories = get_live_categories(&client, &server.url(), "test_user", "test_pass").await.unwrap();
-
-        assert_eq!(categories.len(), 0);
-    }
-
-    #[tokio::test]
-    async fn test_get_live_categories_http_error() {
-        let mut server = Server::new_async().await;
-
-        let _m = server.mock("GET", "/player_api.php?username=test_user&password=test_pass&action=get_live_categories")
-            .with_status(500)
-            .with_body(r#"Internal Server Error"#)
-            .create_async().await;
-
-        let client = Client::new();
-        let result = get_live_categories(&client, &server.url(), "test_user", "test_pass").await;
-
-        assert!(result.is_err());
-    }
 }

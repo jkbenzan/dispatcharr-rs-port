@@ -1,5 +1,3 @@
-use crate::auth::Claims;
-use crate::{AppState, entities::{channel, channel_stream, stream}};
 use axum::{
     body::Body,
     extract::{Path, State},
@@ -7,9 +5,11 @@ use axum::{
     response::Response,
 };
 use futures_util::StreamExt; 
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
+use sea_orm::EntityTrait;
 use std::sync::Arc;
+use crate::{AppState, entities::channel};
 use jsonwebtoken::{decode, DecodingKey, Validation};
+use crate::auth::Claims;
 
 const STREAM_SECRET: &[u8] = b"dispatcharr_super_secret_temporary_key";
 
@@ -17,18 +17,16 @@ pub async fn handle_proxy(
     Path((token, channel_id)): Path<(String, String)>,
     State(state): State<Arc<AppState>>,
 ) -> Result<Response<Body>, StatusCode> {
+
     // 1. Authenticate the Token
     // We decode the token to ensure the player making the GET request has an active session or an API key
     let _token_data = decode::<Claims>(
         &token,
         &DecodingKey::from_secret(STREAM_SECRET),
         &Validation::default(),
-    )
-    .map_err(|_| StatusCode::UNAUTHORIZED)?;
+    ).map_err(|_| StatusCode::UNAUTHORIZED)?;
 
-    let parsed_id = channel_id
-        .parse::<i64>()
-        .map_err(|_| StatusCode::BAD_REQUEST)?;
+    let parsed_id = channel_id.parse::<i64>().map_err(|_| StatusCode::BAD_REQUEST)?;
 
     // 2. Fetch the channel gracefully from Postgres
     let _channel = channel::Entity::find_by_id(parsed_id)
@@ -38,32 +36,14 @@ pub async fn handle_proxy(
         .ok_or(StatusCode::NOT_FOUND)?;
 
     // 3. Determine Upstream URL
-    // Link with the ChannelStream entity mapped to `dispatcharr_channels_channelstream`
+    // TODO: Link with the ChannelStream entity mapped to `dispatcharr_channels_stream`
     // to pick the highest priority / active stream for the requested channel.
-    let channel_stream = channel_stream::Entity::find()
-        .filter(channel_stream::Column::ChannelId.eq(parsed_id))
-        .order_by_asc(channel_stream::Column::Order)
-        .one(&state.db)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .ok_or(StatusCode::NOT_FOUND)?;
+    let target_url = "http://example.com/test_stream.m3u8".to_string(); // Placeholder
 
-    let stream_entity = stream::Entity::find_by_id(channel_stream.stream_id)
-        .one(&state.db)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .ok_or(StatusCode::NOT_FOUND)?;
-
-    let target_url = stream_entity.url.ok_or(StatusCode::NOT_FOUND)?;
-
-    println!(
-        "▶️ Proxying Stream Channel: {} -> {}",
-        parsed_id, target_url
-    );
+    println!("▶️ Proxying Stream Channel: {} -> {}", parsed_id, target_url);
 
     // 4. Request the Upstream bytes using our native Reqwest Client with timeouts
-    let resp = state
-        .http_client
+    let resp = state.http_client
         .get(&target_url)
         .timeout(std::time::Duration::from_secs(15))
         .send()
@@ -77,9 +57,9 @@ pub async fn handle_proxy(
 
     // 5. Zero-Copy Byte Streaming
     // Stream the raw bytes directly to Axum to avoid consuming memory
-    let stream = resp
-        .bytes_stream()
-        .map(|result| result.map_err(std::io::Error::other));
+    let stream = resp.bytes_stream().map(|result| {
+        result.map_err(std::io::Error::other)
+    });
 
     Ok(Response::builder()
         .status(StatusCode::OK)

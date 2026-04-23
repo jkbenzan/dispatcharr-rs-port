@@ -1,15 +1,11 @@
-use crate::entities::{epg_data, epg_program, epg_source};
-use chrono::Utc;
 use quick_xml::events::Event;
 use quick_xml::reader::Reader;
-use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
+use sea_orm::{DatabaseConnection, Set, EntityTrait, QueryFilter, ColumnTrait, ActiveModelTrait};
 use std::error::Error;
+use chrono::Utc;
+use crate::entities::{epg_data, epg_program, epg_source};
 
-pub async fn refresh_all_guides(
-    db: &DatabaseConnection,
-    url: &str,
-    source_id: i64,
-) -> Result<(), Box<dyn Error>> {
+pub async fn refresh_all_guides(db: &DatabaseConnection, url: &str, source_id: i64) -> Result<(), Box<dyn Error>> {
     if let Ok(Some(src)) = epg_source::Entity::find_by_id(source_id).one(db).await {
         let mut active: epg_source::ActiveModel = src.into();
         active.status = Set("fetching".to_string());
@@ -41,12 +37,9 @@ pub async fn refresh_all_guides(
 
     let existing_channels = epg_data::Entity::find()
         .filter(epg_data::Column::EpgSourceId.eq(source_id))
-        .all(db)
-        .await
-        .unwrap_or_default();
+        .all(db).await.unwrap_or_default();
 
-    let mut epg_channel_map: std::collections::HashMap<String, i64> =
-        std::collections::HashMap::new();
+    let mut epg_channel_map: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
     for ch in existing_channels {
         if let Some(tvg) = ch.tvg_id.clone() {
             epg_channel_map.insert(tvg, ch.id);
@@ -67,9 +60,7 @@ pub async fn refresh_all_guides(
                         for attr in e.attributes() {
                             if let Ok(a) = attr {
                                 if a.key.as_ref() == b"id" {
-                                    tvg_id = Some(
-                                        String::from_utf8(a.value.into_owned()).unwrap_or_default(),
-                                    );
+                                    tvg_id = Some(String::from_utf8(a.value.into_owned()).unwrap_or_default());
                                 }
                             }
                         }
@@ -92,18 +83,13 @@ pub async fn refresh_all_guides(
                         for attr in e.attributes() {
                             if let Ok(a) = attr {
                                 let key = a.key.as_ref();
-                                let val =
-                                    String::from_utf8(a.value.into_owned()).unwrap_or_default();
+                                let val = String::from_utf8(a.value.into_owned()).unwrap_or_default();
                                 if key == b"start" {
-                                    if let Ok(dt) =
-                                        chrono::DateTime::parse_from_str(&val, "%Y%m%d%H%M%S %z")
-                                    {
+                                    if let Ok(dt) = chrono::DateTime::parse_from_str(&val, "%Y%m%d%H%M%S %z") {
                                         prog.start_time = Set(dt);
                                     }
                                 } else if key == b"stop" {
-                                    if let Ok(dt) =
-                                        chrono::DateTime::parse_from_str(&val, "%Y%m%d%H%M%S %z")
-                                    {
+                                    if let Ok(dt) = chrono::DateTime::parse_from_str(&val, "%Y%m%d%H%M%S %z") {
                                         prog.end_time = Set(dt);
                                     }
                                 } else if key == b"channel" {
@@ -127,9 +113,7 @@ pub async fn refresh_all_guides(
                         if let Ok(a) = attr {
                             if a.key.as_ref() == b"src" {
                                 if let Some(mut ch) = current_channel.take() {
-                                    ch.icon_url = Set(Some(
-                                        String::from_utf8(a.value.into_owned()).unwrap_or_default(),
-                                    ));
+                                    ch.icon_url = Set(Some(String::from_utf8(a.value.into_owned()).unwrap_or_default()));
                                     current_channel = Some(ch);
                                 }
                             }
@@ -140,9 +124,7 @@ pub async fn refresh_all_guides(
             Ok(Event::Text(e)) => {
                 let txt = e.unescape().unwrap_or_default().into_owned();
                 let txt = txt.trim();
-                if txt.is_empty() {
-                    continue;
-                }
+                if txt.is_empty() { continue; }
 
                 if in_channel {
                     if let Some(mut ch) = current_channel.take() {
@@ -196,7 +178,7 @@ pub async fn refresh_all_guides(
             }
             Ok(Event::Eof) => break,
             Err(e) => println!("XML Error: {:?}", e),
-            _ => (),
+            _ => ()
         }
         buf.clear();
     }
@@ -205,9 +187,7 @@ pub async fn refresh_all_guides(
         let _ = epg_data::Entity::insert_many(channels_batch).exec(db).await;
     }
     if !programs_batch.is_empty() {
-        let _ = epg_program::Entity::insert_many(programs_batch)
-            .exec(db)
-            .await;
+        let _ = epg_program::Entity::insert_many(programs_batch).exec(db).await;
     }
 
     if let Ok(Some(src)) = epg_source::Entity::find_by_id(source_id).one(db).await {
