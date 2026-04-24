@@ -10,6 +10,34 @@ pub async fn get_flat_array() -> Json<Value> {
     Json(json!([]))
 }
 
+pub async fn get_logos(axum::extract::State(state): axum::extract::State<std::sync::Arc<crate::AppState>>) -> Json<Value> {
+    use sea_orm::{EntityTrait, ColumnTrait, QueryFilter};
+    let logos = crate::entities::logo::Entity::find()
+        .all(&state.db).await.unwrap_or_default();
+    Json(json!(logos))
+}
+
+pub async fn get_logo(axum::extract::State(state): axum::extract::State<std::sync::Arc<crate::AppState>>, axum::extract::Path(id): axum::extract::Path<i64>) -> Json<Value> { let logo = crate::entities::logo::Entity::find_by_id(id).one(&state.db).await.unwrap_or_default(); Json(json!(logo)) }
+pub async fn delete_logo(axum::extract::State(state): axum::extract::State<std::sync::Arc<crate::AppState>>, axum::extract::Path(id): axum::extract::Path<i64>) -> Json<Value> { let _ = crate::entities::logo::Entity::delete_by_id(id).exec(&state.db).await; Json(json!({"success": true})) }
+#[derive(serde::Deserialize)]
+pub struct UpdateLogoRequest {
+    name: Option<String>,
+    url: Option<String>,
+}
+pub async fn update_logo(axum::extract::State(state): axum::extract::State<std::sync::Arc<crate::AppState>>, axum::extract::Path(id): axum::extract::Path<i64>, axum::Json(payload): axum::Json<UpdateLogoRequest>) -> Json<Value> { use sea_orm::{ActiveModelTrait, Set}; if let Ok(Some(model)) = crate::entities::logo::Entity::find_by_id(id).one(&state.db).await { let mut active: crate::entities::logo::ActiveModel = model.into(); if let Some(n) = payload.name { active.name = Set(n); } if let Some(u) = payload.url { active.url = Set(u); } let _ = active.update(&state.db).await; } Json(json!({"success": true})) }
+#[derive(serde::Deserialize)]
+pub struct BulkDeleteLogosRequest {
+    logo_ids: Vec<i64>,
+}
+pub async fn bulk_delete_logos(axum::extract::State(state): axum::extract::State<std::sync::Arc<crate::AppState>>, axum::Json(payload): axum::Json<BulkDeleteLogosRequest>) -> Json<Value> { use sea_orm::{QueryFilter, ColumnTrait}; let _ = crate::entities::logo::Entity::delete_many().filter(crate::entities::logo::Column::Id.is_in(payload.logo_ids)).exec(&state.db).await; Json(json!({"success": true})) }
+pub async fn cleanup_unused_logos(axum::extract::State(state): axum::extract::State<std::sync::Arc<crate::AppState>>) -> Json<Value> { use sea_orm::{QueryFilter, ColumnTrait}; let channels = crate::entities::channel::Entity::find().all(&state.db).await.unwrap_or_default(); let mut used_logos = vec![]; for ch in channels { if let Some(logo_id) = ch.logo_id { used_logos.push(logo_id); } } let _ = crate::entities::logo::Entity::delete_many().filter(crate::entities::logo::Column::Id.is_not_in(used_logos)).exec(&state.db).await; Json(json!({"success": true})) }
+#[derive(serde::Deserialize)]
+pub struct CreateLogoRequest {
+    name: String,
+    url: String,
+}
+pub async fn upload_logo(axum::extract::State(state): axum::extract::State<std::sync::Arc<crate::AppState>>, axum::Json(payload): axum::Json<CreateLogoRequest>) -> Json<Value> { use sea_orm::{ActiveModelTrait, Set}; let new_logo = crate::entities::logo::ActiveModel { name: Set(payload.name), url: Set(payload.url), ..Default::default() }; let _ = new_logo.insert(&state.db).await; Json(json!({"success": true})) }
+
 pub async fn get_timezones() -> Json<Value> {
     Json(json!({
         "timezones": [

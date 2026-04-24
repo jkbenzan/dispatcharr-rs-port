@@ -1,3 +1,4 @@
+use axum::routing::delete;
 use axum::{
     extract::ws::{WebSocket, WebSocketUpgrade},
     response::IntoResponse,
@@ -186,12 +187,16 @@ async fn main() {
         .route("/api/epg/epgdata/", get(api::get_epgdata))
 
         // --- DASHBOARD MISSING DEPENDENCIES ---
-        .route("/api/channels/logos/", get(api::get_flat_array))
+        .route("/api/channels/logos/", get(api::get_logos))
         .route("/api/channels/streams/ids/", get(api::get_stream_ids))
         .route("/api/channels/streams/by-ids/", post(api::get_streams_by_ids))
         .route("/api/channels/streams/filter-options/", get(api::get_stream_filter_options))
         .route("/api/channels/dashboard-stats/", get(api::get_dashboard_stats))
         .route("/api/channels/streams/", get(api::get_streams).post(api::post_stub))
+        .route("/api/channels/logos/bulk-delete/", delete(api::bulk_delete_logos))
+        .route("/api/channels/logos/cleanup/", post(api::cleanup_unused_logos))
+        .route("/api/channels/logos/upload/", post(api::upload_logo))
+        .route("/api/channels/logos/:id/", get(api::get_logo).delete(api::delete_logo).patch(api::update_logo))
         .route("/api/core/system-events/", get(api::get_paginated_object))
         .route("/api/connect/integrations/", get(api::get_paginated_object))
         .route("/api/plugins/plugins/", get(api::get_paginated_object))
