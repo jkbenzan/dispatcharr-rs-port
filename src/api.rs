@@ -1606,4 +1606,24 @@ mod tests {
         assert_eq!(body["version"], "0.22.1");
         assert_eq!(body["name"], "Dispatcharr");
     }
+
+    #[tokio::test]
+    async fn test_get_core_settings() {
+        let response = get_core_settings().await;
+        let body = response.0;
+
+        assert!(body.is_array());
+        let settings = body.as_array().unwrap();
+
+        assert_eq!(settings.len(), 6);
+
+        let get_val = |key: &str| settings.iter().find(|s| s["key"] == key).unwrap()["value"].clone();
+
+        assert_eq!(get_val("app_name"), "Dispatcharr");
+        assert_eq!(get_val("proxy_enabled"), true);
+        assert_eq!(get_val("registration_enabled"), false);
+        assert_eq!(get_val("backend_url"), "");
+        assert_eq!(get_val("version"), "0.22.1");
+        assert_eq!(get_val("maintenance_mode"), false);
+    }
 }
