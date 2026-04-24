@@ -720,6 +720,7 @@ pub async fn add_m3u_account(
 
                 if !url.is_empty() || file_path.is_some() {
                     let db_clone = state.db.clone();
+                    let acc_clone = acc.clone();
                     let is_xc = acc.account_type == "XC";
                     let ws_clone = state.ws_sender.clone();
                     let final_url = url.clone();
@@ -750,12 +751,10 @@ pub async fn add_m3u_account(
 
                         if let Some(msg) = error_msg {
                             eprintln!("{}", msg);
-                            if let Ok(Some(acc)) = m3u_account::Entity::find_by_id(account_id).one(&db_clone).await {
-                                let mut active: m3u_account::ActiveModel = acc.into();
-                                active.status = sea_orm::Set("failed".to_string());
-                                active.last_message = sea_orm::Set(Some(msg.chars().take(255).collect()));
-                                let _ = active.update(&db_clone).await;
-                            }
+                            let mut active: m3u_account::ActiveModel = acc_clone.into();
+                            active.status = sea_orm::Set("failed".to_string());
+                            active.last_message = sea_orm::Set(Some(msg.chars().take(255).collect()));
+                            let _ = active.update(&db_clone).await;
                         }
                     });
                 }
@@ -840,6 +839,7 @@ pub async fn refresh_m3u_account(
 
     if !url.is_empty() {
         let db_clone = state.db.clone();
+        let acc_clone = account.clone();
         let is_xc = account.account_type == "XC";
         let ws_clone_outer = state.ws_sender.clone();
         tokio::spawn(async move {
@@ -865,12 +865,10 @@ pub async fn refresh_m3u_account(
 
             if let Some(msg) = error_msg {
                 eprintln!("{}", msg);
-                if let Ok(Some(acc)) = m3u_account::Entity::find_by_id(account_id).one(&db_clone).await {
-                    let mut active: m3u_account::ActiveModel = acc.into();
-                    active.status = sea_orm::Set("failed".to_string());
-                    active.last_message = sea_orm::Set(Some(msg.chars().take(255).collect()));
-                    let _ = active.update(&db_clone).await;
-                }
+                let mut active: m3u_account::ActiveModel = acc_clone.into();
+                active.status = sea_orm::Set("failed".to_string());
+                active.last_message = sea_orm::Set(Some(msg.chars().take(255).collect()));
+                let _ = active.update(&db_clone).await;
             }
         });
         (StatusCode::ACCEPTED, Json(json!({"status": "M3U refresh task started"})))
@@ -1441,6 +1439,7 @@ pub async fn refresh_m3u_all(
     for account in accounts {
         let db_clone = state.db.clone();
         let account_id = account.id;
+        let acc_clone = account.clone();
         let is_xc = account.account_type == "XC";
         let url = if is_xc {
             format!("{}/get.php?username={}&password={}&type=m3u_plus&output=ts",
@@ -1477,13 +1476,11 @@ pub async fn refresh_m3u_all(
 
                 if let Some(msg) = error_msg {
                     eprintln!("{}", msg);
-                    if let Ok(Some(acc)) = crate::entities::m3u_account::Entity::find_by_id(account_id).one(&db_clone).await {
-                        use sea_orm::ActiveModelTrait;
-                        let mut active: crate::entities::m3u_account::ActiveModel = acc.into();
-                        active.status = sea_orm::Set("failed".to_string());
-                        active.last_message = sea_orm::Set(Some(msg.chars().take(255).collect()));
-                        let _ = active.update(&db_clone).await;
-                    }
+                    use sea_orm::ActiveModelTrait;
+                    let mut active: crate::entities::m3u_account::ActiveModel = acc_clone.into();
+                    active.status = sea_orm::Set("failed".to_string());
+                    active.last_message = sea_orm::Set(Some(msg.chars().take(255).collect()));
+                    let _ = active.update(&db_clone).await;
                 }
             });
         }
