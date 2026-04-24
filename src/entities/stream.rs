@@ -1,6 +1,6 @@
+use chrono::{DateTime, FixedOffset};
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
-use chrono::{DateTime, FixedOffset};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize)]
 #[sea_orm(table_name = "dispatcharr_channels_stream", schema_name = "public")]
@@ -24,6 +24,15 @@ pub struct Model {
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-pub enum Relation {}
+pub enum Relation {
+    #[sea_orm(has_many = "super::channel_stream::Entity")]
+    ChannelStream,
+}
+
+impl Related<super::channel_stream::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::ChannelStream.def()
+    }
+}
 
 impl ActiveModelBehavior for ActiveModel {}

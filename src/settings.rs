@@ -3,10 +3,8 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use sea_orm::{
-    ActiveModelTrait, DatabaseConnection, EntityTrait, Set, ModelTrait,
-};
-use serde::{Deserialize, Serialize};
+use sea_orm::{ActiveModelTrait, EntityTrait, Set};
+use serde::Deserialize;
 use serde_json::{json, Value};
 use std::sync::Arc;
 
@@ -62,7 +60,10 @@ pub async fn create_setting(
         ..Default::default()
     };
 
-    let inserted = new_setting.insert(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let inserted = new_setting
+        .insert(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(json!({
         "id": inserted.id,
@@ -81,7 +82,10 @@ pub async fn get_setting(
         return Err(StatusCode::FORBIDDEN);
     }
 
-    let s = core_settings::Entity::find_by_id(id).one(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let s = core_settings::Entity::find_by_id(id)
+        .one(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     if let Some(s) = s {
         Ok(Json(json!({
             "id": s.id,
@@ -104,13 +108,21 @@ pub async fn update_setting(
         return Err(StatusCode::FORBIDDEN);
     }
 
-    let mut s: core_settings::ActiveModel = core_settings::Entity::find_by_id(id).one(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?.ok_or(StatusCode::NOT_FOUND)?.into();
+    let mut s: core_settings::ActiveModel = core_settings::Entity::find_by_id(id)
+        .one(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?
+        .into();
 
     s.key = Set(payload.key);
     s.name = Set(payload.name);
     s.value = Set(payload.value);
 
-    let updated = s.update(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let updated = s
+        .update(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(json!({
         "id": updated.id,

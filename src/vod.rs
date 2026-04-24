@@ -3,15 +3,13 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use sea_orm::{
-    ColumnTrait, EntityTrait, QueryFilter, QuerySelect,
-};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::sync::Arc;
 
-use crate::AppState;
 use crate::entities::{vod_category, vod_movie, vod_series};
+use crate::AppState;
 
 #[derive(Deserialize)]
 pub struct Pagination {
@@ -32,18 +30,34 @@ pub async fn get_vod_all(
 
     if !search.is_empty() {
         movies_q = movies_q.filter(
-            sea_orm::Condition::any()
-                .add(sea_orm::sea_query::Expr::expr(sea_orm::sea_query::Func::lower(sea_orm::sea_query::Expr::col(vod_movie::Column::Name))).like(format!("%{}%", search)))
+            sea_orm::Condition::any().add(
+                sea_orm::sea_query::Expr::expr(sea_orm::sea_query::Func::lower(
+                    sea_orm::sea_query::Expr::col(vod_movie::Column::Name),
+                ))
+                .like(format!("%{}%", search)),
+            ),
         );
         series_q = series_q.filter(
-            sea_orm::Condition::any()
-                .add(sea_orm::sea_query::Expr::expr(sea_orm::sea_query::Func::lower(sea_orm::sea_query::Expr::col(vod_series::Column::Name))).like(format!("%{}%", search)))
+            sea_orm::Condition::any().add(
+                sea_orm::sea_query::Expr::expr(sea_orm::sea_query::Func::lower(
+                    sea_orm::sea_query::Expr::col(vod_series::Column::Name),
+                ))
+                .like(format!("%{}%", search)),
+            ),
         );
     }
 
     // For a unified view, fetch up to limit from both, combine, sort, and slice
-    let movies = movies_q.limit(limit).all(&state.db).await.unwrap_or_default();
-    let series = series_q.limit(limit).all(&state.db).await.unwrap_or_default();
+    let movies = movies_q
+        .limit(limit)
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+    let series = series_q
+        .limit(limit)
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
 
     let mut results = Vec::new();
 
@@ -95,9 +109,15 @@ pub async fn get_vod_categories(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Value>, StatusCode> {
     use crate::entities::vod_m3uvodcategoryrelation;
-    
-    let categories = vod_category::Entity::find().all(&state.db).await.unwrap_or_default();
-    let relations = vod_m3uvodcategoryrelation::Entity::find().all(&state.db).await.unwrap_or_default();
+
+    let categories = vod_category::Entity::find()
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+    let relations = vod_m3uvodcategoryrelation::Entity::find()
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
 
     let mut rel_map: std::collections::HashMap<i64, Vec<Value>> = std::collections::HashMap::new();
     for r in relations {
@@ -107,7 +127,7 @@ pub async fn get_vod_categories(
             "enabled": r.enabled,
         }));
     }
-    
+
     let mut results = Vec::new();
     for c in categories {
         results.push(json!({
