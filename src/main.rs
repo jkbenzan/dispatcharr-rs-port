@@ -163,7 +163,7 @@ async fn main() {
         .route("/api/channels/channels/", get(api::get_channels))
         .route("/api/channels/groups/", get(api::get_channel_groups))
         .route("/api/channels/profiles/", get(api::get_channel_profiles))
-        .route("/api/channels/channels/ids/", get(api::get_channel_ids))
+        .route("/api/channels/channels/ids/", get(api::get_ids_stub))
         .route("/api/channels/dvr/comskip-config/", get(api::get_comskip_config).post(api::upload_comskip_ini))
         .route("/api/m3u/accounts/", get(api::get_m3u_accounts).post(api::add_m3u_account))
         .route("/api/m3u/accounts/:id/", get(api::get_m3u_account).patch(api::update_m3u_account).delete(api::delete_m3u_account))
