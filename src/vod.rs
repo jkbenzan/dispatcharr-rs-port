@@ -3,15 +3,13 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use sea_orm::{
-    ColumnTrait, EntityTrait, QueryFilter, QuerySelect,
-};
+use sea_orm::{EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::sync::Arc;
 
-use crate::AppState;
 use crate::entities::{vod_category, vod_movie, vod_series};
+use crate::AppState;
 
 #[derive(Deserialize)]
 pub struct Pagination {
@@ -32,18 +30,34 @@ pub async fn get_vod_all(
 
     if !search.is_empty() {
         movies_q = movies_q.filter(
-            sea_orm::Condition::any()
-                .add(sea_orm::sea_query::Expr::expr(sea_orm::sea_query::Func::lower(sea_orm::sea_query::Expr::col(vod_movie::Column::Name))).like(format!("%{}%", search)))
+            sea_orm::Condition::any().add(
+                sea_orm::sea_query::Expr::expr(sea_orm::sea_query::Func::lower(
+                    sea_orm::sea_query::Expr::col(vod_movie::Column::Name),
+                ))
+                .like(format!("%{}%", search)),
+            ),
         );
         series_q = series_q.filter(
-            sea_orm::Condition::any()
-                .add(sea_orm::sea_query::Expr::expr(sea_orm::sea_query::Func::lower(sea_orm::sea_query::Expr::col(vod_series::Column::Name))).like(format!("%{}%", search)))
+            sea_orm::Condition::any().add(
+                sea_orm::sea_query::Expr::expr(sea_orm::sea_query::Func::lower(
+                    sea_orm::sea_query::Expr::col(vod_series::Column::Name),
+                ))
+                .like(format!("%{}%", search)),
+            ),
         );
     }
 
     // For a unified view, fetch up to limit from both, combine, sort, and slice
-    let movies = movies_q.limit(limit).all(&state.db).await.unwrap_or_default();
-    let series = series_q.limit(limit).all(&state.db).await.unwrap_or_default();
+    let movies = movies_q
+        .limit(limit)
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+    let series = series_q
+        .limit(limit)
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
 
     let mut results = Vec::new();
 
@@ -95,19 +109,25 @@ pub async fn get_vod_categories(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Value>, StatusCode> {
     use crate::entities::vod_m3uvodcategoryrelation;
-    
-    let categories = vod_category::Entity::find().all(&state.db).await.unwrap_or_default();
-    let relations = vod_m3uvodcategoryrelation::Entity::find().all(&state.db).await.unwrap_or_default();
+
+    let categories = vod_category::Entity::find()
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+    let relations = vod_m3uvodcategoryrelation::Entity::find()
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
 
     let mut rel_map: std::collections::HashMap<i64, Vec<Value>> = std::collections::HashMap::new();
     for r in relations {
-        let entry = rel_map.entry(r.category_id).or_insert_with(Vec::new);
+        let entry = rel_map.entry(r.category_id).or_default();
         entry.push(json!({
             "m3u_account": r.m3u_account_id,
             "enabled": r.enabled,
         }));
     }
-    
+
     let mut results = Vec::new();
     for c in categories {
         results.push(json!({
@@ -127,11 +147,48 @@ pub async fn get_vod_categories(
 }
 
 pub async fn get_vod_movies(
-    State(_state): State<Arc<AppState>>,
-    Query(_params): Query<Pagination>,
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<Pagination>,
 ) -> Result<Json<Value>, StatusCode> {
-    // Stub for now
-    Ok(Json(json!({"count": 0, "results": []})))
+    let search = params.search.unwrap_or_default().to_lowercase();
+    let limit = params.page_size.unwrap_or(24);
+    let page = params.page.unwrap_or(1);
+    let offset = (page.saturating_sub(1)) * limit;
+
+    let mut q = vod_movie::Entity::find();
+
+    if !search.is_empty() {
+        q = q.filter(
+            sea_orm::Condition::any().add(
+                sea_orm::sea_query::Expr::expr(sea_orm::sea_query::Func::lower(
+                    sea_orm::sea_query::Expr::col(vod_movie::Column::Name),
+                ))
+                .like(format!("%{}%", search)),
+            ),
+        );
+    }
+
+    let count = q.clone().count(&state.db).await.unwrap_or(0);
+
+    let movies = q
+        .order_by_asc(vod_movie::Column::Id)
+        .limit(limit)
+        .offset(offset)
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+
+    let mut results = Vec::new();
+    for m in movies {
+        if let Ok(val) = serde_json::to_value(&m) {
+            results.push(val);
+        }
+    }
+
+    Ok(Json(json!({
+        "count": count,
+        "results": results
+    })))
 }
 
 pub async fn get_vod_series(
