@@ -13,15 +13,6 @@ pub struct Model {
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-pub enum Relation {
-    #[sea_orm(has_many = "super::vod_m3uvodcategoryrelation::Entity")]
-    VodM3uvodcategoryrelation,
-}
-
-impl Related<super::vod_m3uvodcategoryrelation::Entity> for Entity {
-    fn to() -> RelationDef {
-        Relation::VodM3uvodcategoryrelation.def()
-    }
-}
+pub enum Relation {}
 
 impl ActiveModelBehavior for ActiveModel {}
