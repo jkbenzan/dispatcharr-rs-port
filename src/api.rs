@@ -365,6 +365,7 @@ pub async fn get_notifications(
 ) -> Json<Value> {
     use crate::entities::{core_systemnotification, core_notificationdismissal};
 
+
     let include_dismissed = params.get("include_dismissed").map(|s| s == "true").unwrap_or(false);
 
     let mut notifications_query = core_systemnotification::Entity::find()
@@ -372,6 +373,18 @@ pub async fn get_notifications(
 
     if !current_user.0.is_superuser && !current_user.0.is_staff {
         notifications_query = notifications_query.filter(core_systemnotification::Column::AdminOnly.eq(false));
+    }
+
+    if !include_dismissed {
+        if let Ok(dismissals) = core_notificationdismissal::Entity::find()
+            .filter(core_notificationdismissal::Column::UserId.eq(current_user.0.id))
+            .all(&state.db).await
+        {
+            let dismissed_ids: Vec<i64> = dismissals.into_iter().map(|d| d.notification_id).collect();
+            if !dismissed_ids.is_empty() {
+                notifications_query = notifications_query.filter(core_systemnotification::Column::Id.is_not_in(dismissed_ids));
+            }
+        }
     }
 
     let notifications = match notifications_query
@@ -382,22 +395,8 @@ pub async fn get_notifications(
         Err(_) => vec![],
     };
 
-    let dismissed_ids = if !include_dismissed {
-        match core_notificationdismissal::Entity::find()
-            .filter(core_notificationdismissal::Column::UserId.eq(current_user.0.id))
-            .all(&state.db).await {
-            Ok(dismissals) => dismissals.into_iter().map(|d| d.notification_id).collect::<std::collections::HashSet<_>>(),
-            Err(_) => std::collections::HashSet::new(),
-        }
-    } else {
-        std::collections::HashSet::new()
-    };
-
     let mut results = vec![];
     for n in notifications {
-        if !include_dismissed && dismissed_ids.contains(&n.id) {
-            continue;
-        }
         results.push(serde_json::to_value(&n).unwrap());
     }
 
@@ -410,6 +409,7 @@ pub async fn get_notifications_count(
     Query(params): Query<HashMap<String, String>>,
 ) -> Json<Value> {
     use crate::entities::{core_systemnotification, core_notificationdismissal};
+    use sea_orm::PaginatorTrait;
 
     let include_dismissed = params.get("include_dismissed").map(|s| s == "true").unwrap_or(false);
 
@@ -420,29 +420,19 @@ pub async fn get_notifications_count(
         notifications_query = notifications_query.filter(core_systemnotification::Column::AdminOnly.eq(false));
     }
 
-    let notifications = match notifications_query.all(&state.db).await {
-        Ok(n) => n,
-        Err(_) => vec![],
-    };
-
-    let dismissed_ids = if !include_dismissed {
-        match core_notificationdismissal::Entity::find()
+    if !include_dismissed {
+        if let Ok(dismissals) = core_notificationdismissal::Entity::find()
             .filter(core_notificationdismissal::Column::UserId.eq(current_user.0.id))
-            .all(&state.db).await {
-            Ok(dismissals) => dismissals.into_iter().map(|d| d.notification_id).collect::<std::collections::HashSet<_>>(),
-            Err(_) => std::collections::HashSet::new(),
+            .all(&state.db).await
+        {
+            let dismissed_ids: Vec<i64> = dismissals.into_iter().map(|d| d.notification_id).collect();
+            if !dismissed_ids.is_empty() {
+                notifications_query = notifications_query.filter(core_systemnotification::Column::Id.is_not_in(dismissed_ids));
+            }
         }
-    } else {
-        std::collections::HashSet::new()
-    };
-
-    let mut count = 0;
-    for n in notifications {
-        if !include_dismissed && dismissed_ids.contains(&n.id) {
-            continue;
-        }
-        count += 1;
     }
+
+    let count = notifications_query.count(&state.db).await.unwrap_or(0);
 
     Json(json!({ "count": count }))
 }
