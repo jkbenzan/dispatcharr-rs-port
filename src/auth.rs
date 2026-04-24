@@ -148,4 +148,46 @@ mod tests {
             "Expiration time should be roughly now + JWT_EXPIRATION_SECS"
         );
     }
+
+    #[test]
+    fn test_generate_jwt_non_superuser() {
+        let now = Utc::now().with_timezone(&FixedOffset::east_opt(0).unwrap());
+
+        let mock_user = user::Model {
+            id: 84,
+            password: "hashed_password".to_string(),
+            last_login: Some(now.clone()),
+            is_superuser: false,
+            username: "regularuser".to_string(),
+            first_name: "Regular".to_string(),
+            last_name: "User".to_string(),
+            email: "regular@example.com".to_string(),
+            is_staff: false,
+            is_active: true,
+            date_joined: now,
+            avatar_config: None,
+            user_level: 0,
+            custom_properties: None,
+            api_key: None,
+            stream_limit: 5,
+        };
+
+        let token_result = generate_jwt(&mock_user);
+        assert!(token_result.is_ok(), "JWT generation should succeed");
+        let token = token_result.unwrap();
+
+        // Verify the token can be decoded correctly
+        let mut validation = Validation::default();
+        validation.validate_exp = false; // We can check exp manually
+
+        let token_data = decode::<Claims>(
+            &token,
+            &DecodingKey::from_secret(JWT_SECRET),
+            &validation,
+        ).expect("Failed to decode the generated JWT");
+
+        assert_eq!(token_data.claims.user_id, 84);
+        assert_eq!(token_data.claims.username, "regularuser");
+        assert_eq!(token_data.claims.is_superuser, false);
+    }
 }
