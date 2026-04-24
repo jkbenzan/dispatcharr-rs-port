@@ -8,7 +8,7 @@ COPY Dispatcharr-main/frontend/ ./
 RUN npm run build
 
 # STEP 2: Build the Rust Binary
-FROM rust:latest AS backend-builder
+FROM rust:bookworm AS backend-builder
 
 # Install OpenSSL development headers and pkg-config
 RUN apt-get update && apt-get install -y \
