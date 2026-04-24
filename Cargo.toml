@@ -11,7 +11,7 @@ tower = "0.4"
 tower-http = { version = "0.5", features = ["cors", "fs", "trace"] }
 
 # Database (PostgreSQL via SeaORM)
-sea-orm = { version = "0.12", features = [
+sea-orm = { version = "0.12", features = ["sqlx-sqlite",
     "sqlx-postgres",
     "runtime-tokio-rustls", 
     "macros",
