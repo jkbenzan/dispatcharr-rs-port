@@ -201,6 +201,7 @@ pub async fn fetch_and_parse_m3u(
     let mut current_extinf: Option<stream::ActiveModel> = None;
     let mut streams_batch = vec![];
     let mut group_id_map: HashMap<String, i64> = HashMap::new();
+    let mut current_hashes = Vec::new();
 
     for line in body.lines() {
         let line = line.trim();
@@ -316,6 +317,8 @@ pub async fn fetch_and_parse_m3u(
                 hasher.update(line.as_bytes());
                 hasher.update(&account_id.to_be_bytes());
                 let result = hex::encode(hasher.finalize());
+                
+                current_hashes.push(result.clone());
 
                 if !hash_set.contains(&result) {
                     stream_model.stream_hash = Set(Some(result.clone()));
@@ -338,6 +341,37 @@ pub async fn fetch_and_parse_m3u(
             println!("[M3U Sync] ERROR inserting final stream batch: {:?}", e);
         }
     }
+
+    // --- Stale Stream Cleanup ---
+    let now_fixed: chrono::DateTime<chrono::FixedOffset> = Utc::now().into();
+    if !current_hashes.is_empty() {
+        for chunk in current_hashes.chunks(1000) {
+            let _ = stream::Entity::update_many()
+                .col_expr(stream::Column::LastSeen, sea_orm::sea_query::Expr::value(now_fixed))
+                .filter(stream::Column::M3uAccountId.eq(account_id))
+                .filter(stream::Column::StreamHash.is_in(chunk.to_vec()))
+                .exec(db)
+                .await;
+        }
+    }
+
+    if let Ok(Some(acc)) = m3u_account::Entity::find_by_id(account_id).one(db).await {
+        let stale_days = acc.stale_stream_days;
+        let stale_cutoff_utc = Utc::now() - chrono::Duration::days(stale_days as i64);
+        let stale_cutoff_fixed: chrono::DateTime<chrono::FixedOffset> = stale_cutoff_utc.into();
+
+        if let Ok(r) = stream::Entity::delete_many()
+            .filter(stream::Column::M3uAccountId.eq(account_id))
+            .filter(stream::Column::LastSeen.lt(stale_cutoff_fixed))
+            .exec(db)
+            .await 
+        {
+            if r.rows_affected > 0 {
+                println!("[M3U Sync] Deleted {} stale streams for account {}", r.rows_affected, account_id);
+            }
+        }
+    }
+    // --- End Stale Stream Cleanup ---
 
     if let Ok(Some(acc)) = m3u_account::Entity::find_by_id(account_id).one(db).await {
         let mut active: m3u_account::ActiveModel = acc.into();
@@ -409,6 +443,7 @@ pub async fn fetch_and_parse_xc(
     let mut streams_batch = Vec::new();
     let mut hash_set = HashSet::new();
     let mut group_id_map = HashMap::new();
+    let mut current_hashes = Vec::new();
 
     let auto_sync_live = acc.custom_properties.as_ref().and_then(|cp| cp.get("auto_enable_new_groups_live").and_then(|v| v.as_bool())).unwrap_or(true);
 
@@ -427,6 +462,8 @@ pub async fn fetch_and_parse_xc(
         hasher.update(url.as_bytes());
         hasher.update(&account_id.to_be_bytes());
         let result = hex::encode(hasher.finalize());
+        
+        current_hashes.push(result.clone());
 
         if !hash_set.contains(&result) {
             hash_set.insert(result.clone());
@@ -470,6 +507,35 @@ pub async fn fetch_and_parse_xc(
             println!("[XC Sync] ERROR inserting final stream batch: {:?}", e);
         }
     }
+
+    // --- Stale Stream Cleanup ---
+    let now_fixed: chrono::DateTime<chrono::FixedOffset> = Utc::now().into();
+    if !current_hashes.is_empty() {
+        for chunk in current_hashes.chunks(1000) {
+            let _ = stream::Entity::update_many()
+                .col_expr(stream::Column::LastSeen, sea_orm::sea_query::Expr::value(now_fixed))
+                .filter(stream::Column::M3uAccountId.eq(account_id))
+                .filter(stream::Column::StreamHash.is_in(chunk.to_vec()))
+                .exec(db)
+                .await;
+        }
+    }
+
+    let stale_days = acc.stale_stream_days;
+    let stale_cutoff_utc = Utc::now() - chrono::Duration::days(stale_days as i64);
+    let stale_cutoff_fixed: chrono::DateTime<chrono::FixedOffset> = stale_cutoff_utc.into();
+
+    if let Ok(r) = stream::Entity::delete_many()
+        .filter(stream::Column::M3uAccountId.eq(account_id))
+        .filter(stream::Column::LastSeen.lt(stale_cutoff_fixed))
+        .exec(db)
+        .await 
+    {
+        if r.rows_affected > 0 {
+            println!("[XC Sync] Deleted {} stale streams for account {}", r.rows_affected, account_id);
+        }
+    }
+    // --- End Stale Stream Cleanup ---
 
     let _ = crate::channel_sync::sync_channels_for_account(db, account_id).await;
     let mut final_active: m3u_account::ActiveModel = acc.into();

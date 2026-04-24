@@ -218,6 +218,41 @@ async fn main() {
     tracing::info!("🚀 LISTENING ON {}", addr);
     println!("🚀 Rust Dispatcharr API listening on {}", listener.local_addr().unwrap());
 
+    // Spawn Background Worker for M3U Accounts
+    let worker_db = state.db.clone();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(tokio::time::Duration::from_secs(60 * 5)).await; // run every 5 minutes
+            use sea_orm::{EntityTrait, QueryFilter, ColumnTrait};
+            use chrono::Utc;
+            
+            if let Ok(accounts) = crate::entities::m3u_account::Entity::find()
+                .filter(crate::entities::m3u_account::Column::IsActive.eq(true))
+                .all(&worker_db).await 
+            {
+                for acc in accounts {
+                    let refresh_interval = acc.refresh_interval as i64;
+                    if refresh_interval <= 0 { continue; } // 0 means manual refresh only
+
+                    let last_updated = acc.updated_at.unwrap_or_else(|| Utc::now().into());
+                    let threshold = last_updated.with_timezone(&Utc) + chrono::Duration::hours(refresh_interval);
+                    
+                    if Utc::now() >= threshold {
+                        println!("[Background Worker] Refreshing M3U account {} ({})", acc.id, acc.name);
+                        if acc.account_type == "xc" {
+                            let _ = crate::m3u::fetch_and_parse_xc(&worker_db, acc.id, None).await;
+                        } else {
+                            let url = acc.server_url.clone().unwrap_or_else(|| acc.file_path.clone().unwrap_or_default());
+                            if !url.is_empty() {
+                                let _ = crate::m3u::fetch_and_parse_m3u(&worker_db, &url, acc.id, false, None).await;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
+
     // Spawn a secondary listener on port 8001 specifically for WebSockets
     // This provides backward compatibility with the old Django/Daphne Nginx configuration.
     let state_clone = state.clone();
