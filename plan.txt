@@ -1,0 +1,20 @@
+1. Implement `get_notifications`:
+   - Change `src/api.rs` to replace the mock implementation.
+   - Inject `State<Arc<AppState>>` and `CurrentUser` extractor into `get_notifications`.
+   - Query `core_systemnotification::Entity` to find active notifications.
+   - Filter by user permissions: non-admins shouldn't see `admin_only=true` notifications.
+   - Filter out expired and dismissed notifications.
+   - Make sure to format response to match DRF's output shape (usually `{"count": X, "next": null, "previous": null, "results": [...]}`).
+
+2. Implement `get_notifications_count`:
+   - Create a separate handler in `src/api.rs` specifically for `/count/` endpoint.
+   - Count matching active notifications that have not been dismissed/expired.
+   - Return `{ "count": X }`.
+   - Update `src/main.rs` to point `/api/core/notifications/count/` to the new `get_notifications_count`.
+
+3. Ensure Pre-commit Checks run
+   - Format code
+   - Lint code
+   - Run tests
+
+4. Submit Pull Request

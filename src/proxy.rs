@@ -47,6 +47,7 @@ pub async fn handle_proxy(
     let channel_streams = channel_stream::Entity::find()
         .filter(channel_stream::Column::ChannelId.eq(parsed_id))
         .order_by_asc(channel_stream::Column::Order)
+        .find_also_related(stream::Entity)
         .all(&state.db)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -55,18 +56,10 @@ pub async fn handle_proxy(
         return Err(StatusCode::NOT_FOUND);
     }
 
-    let stream_ids: Vec<i64> = channel_streams.iter().map(|cs| cs.stream_id).collect();
-
-    let streams = stream::Entity::find()
-        .filter(stream::Column::Id.is_in(stream_ids))
-        .all(&state.db)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
     let mut successful_resp = None;
 
-    for cs in channel_streams {
-        if let Some(stream) = streams.iter().find(|s| s.id == cs.stream_id) {
+    for (_cs, stream_opt) in channel_streams {
+        if let Some(stream) = stream_opt {
             if let Some(target_url) = &stream.url {
                 println!(
                     "▶️ Proxying Stream Channel: {} -> {}",

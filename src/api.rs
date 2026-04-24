@@ -318,8 +318,40 @@ pub async fn get_notifications() -> Json<Value> {
     Json(json!({ "notifications": [] }))
 }
 
-pub async fn post_stub() -> Json<Value> {
-    Json(json!({ "id": 9999, "success": true, "message": "created mock" }))
+pub async fn create_stream(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<Value>,
+) -> impl IntoResponse {
+    let active = stream::ActiveModel {
+        name: sea_orm::Set(payload.get("name").and_then(|v| v.as_str()).unwrap_or("New Stream").to_string()),
+        url: sea_orm::Set(payload.get("url").and_then(|v| v.as_str()).map(|s| s.to_string())),
+        logo_url: sea_orm::Set(payload.get("logo_url").and_then(|v| v.as_str()).map(|s| s.to_string())),
+        tvg_id: sea_orm::Set(payload.get("tvg_id").and_then(|v| v.as_str()).map(|s| s.to_string())),
+        local_file: sea_orm::Set(payload.get("local_file").and_then(|v| v.as_str()).map(|s| s.to_string())),
+        current_viewers: sea_orm::Set(0),
+        updated_at: sea_orm::Set(chrono::Utc::now().with_timezone(&chrono::FixedOffset::east_opt(0).unwrap())),
+        m3u_account_id: sea_orm::Set(payload.get("m3u_account_id").and_then(|v| v.as_i64())),
+        stream_profile_id: sea_orm::Set(payload.get("stream_profile_id").and_then(|v| v.as_i64())),
+        is_custom: sea_orm::Set(payload.get("is_custom").and_then(|v| v.as_bool()).unwrap_or(true)),
+        channel_group_id: sea_orm::Set(payload.get("channel_group").and_then(|v| v.as_i64())),
+        last_seen: sea_orm::Set(chrono::Utc::now().with_timezone(&chrono::FixedOffset::east_opt(0).unwrap())),
+        stream_hash: sea_orm::Set(payload.get("stream_hash").and_then(|v| v.as_str()).map(|s| s.to_string())),
+        custom_properties: sea_orm::Set(payload.get("custom_properties").cloned()),
+        ..Default::default()
+    };
+
+    match stream::Entity::insert(active).exec_with_returning(&state.db).await {
+        Ok(inserted) => {
+            let mut js = serde_json::to_value(&inserted).unwrap();
+            js["channel_group"] = js["channel_group_id"].clone();
+            js["m3u_account"] = js["m3u_account_id"].clone();
+            if let Some(p_id) = inserted.stream_profile_id {
+                js["stream_profile"] = json!(p_id);
+            }
+            (StatusCode::CREATED, Json(js))
+        },
+        Err(e) => (StatusCode::BAD_REQUEST, Json(json!({"error": format!("Failed to create stream: {}", e)}))),
+    }
 }
 
 pub async fn get_useragents() -> Json<Value> {
