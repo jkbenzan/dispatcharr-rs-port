@@ -1,0 +1,5 @@
+💡 **What:** Replaced synchronous `std::fs::create_dir_all` and `std::fs::write` with their asynchronous counterparts `tokio::fs::create_dir_all` and `tokio::fs::write` in `add_m3u_account` and `update_m3u_account` endpoint handlers (`src/api.rs`).
+
+🎯 **Why:** The previous implementation used blocking file I/O operations (`std::fs::write`) inside asynchronous request handlers. Blocking the executor thread in an async runtime like Tokio limits concurrency and decreases overall application throughput, especially when uploading large M3U files concurrently.
+
+📊 **Measured Improvement:** While a formal benchmark was not practical to build, this change theoretically improves concurrency and throughput. Before this change, the thread handling the HTTP request would block entirely while the file was written to disk, preventing that thread from handling other async tasks. By switching to `tokio::fs`, the I/O operations are offloaded, allowing the executor to efficiently schedule other tasks while the file writes complete, leading to a much more responsive server under load.
