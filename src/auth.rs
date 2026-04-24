@@ -148,4 +148,41 @@ mod tests {
             "Expiration time should be roughly now + JWT_EXPIRATION_SECS"
         );
     }
+
+    #[test]
+    fn test_generate_jwt_invalid_secret() {
+        let now = Utc::now().with_timezone(&FixedOffset::east_opt(0).unwrap());
+
+        let mock_user = user::Model {
+            id: 42,
+            password: "hashed_password".to_string(),
+            last_login: Some(now.clone()),
+            is_superuser: true,
+            username: "testuser".to_string(),
+            first_name: "Test".to_string(),
+            last_name: "User".to_string(),
+            email: "test@example.com".to_string(),
+            is_staff: true,
+            is_active: true,
+            date_joined: now,
+            avatar_config: None,
+            user_level: 1,
+            custom_properties: None,
+            api_key: None,
+            stream_limit: 10,
+        };
+
+        let token = generate_jwt(&mock_user).expect("JWT generation should succeed");
+
+        let mut validation = Validation::default();
+        validation.validate_exp = false;
+
+        let result = decode::<Claims>(
+            &token,
+            &DecodingKey::from_secret(b"wrong_secret"),
+            &validation,
+        );
+
+        assert!(result.is_err(), "JWT decoding should fail with an incorrect secret");
+    }
 }
