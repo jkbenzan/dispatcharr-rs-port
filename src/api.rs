@@ -512,7 +512,7 @@ pub async fn get_stream_filter_options(
     }))
 }
 
-pub async fn get_channel_ids(
+pub async fn get_ids_stub(
     State(state): State<Arc<AppState>>,
 ) -> Json<Value> {
     let ids = channel::Entity::find()
