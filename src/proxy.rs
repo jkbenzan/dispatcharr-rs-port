@@ -4,10 +4,10 @@ use axum::{
     http::StatusCode,
     response::Response,
 };
-use futures_util::StreamExt; 
-use sea_orm::EntityTrait;
+use futures_util::StreamExt;
+use sea_orm::{EntityTrait, QueryFilter, ColumnTrait, QueryOrder};
 use std::sync::Arc;
-use crate::{AppState, entities::channel};
+use crate::{AppState, entities::{channel, channel_stream, stream}};
 use jsonwebtoken::{decode, DecodingKey, Validation};
 use crate::auth::Claims;
 
@@ -36,24 +36,58 @@ pub async fn handle_proxy(
         .ok_or(StatusCode::NOT_FOUND)?;
 
     // 3. Determine Upstream URL
-    // TODO: Link with the ChannelStream entity mapped to `dispatcharr_channels_stream`
+    // Link with the ChannelStream entity mapped to `dispatcharr_channels_stream`
     // to pick the highest priority / active stream for the requested channel.
-    let target_url = "http://example.com/test_stream.m3u8".to_string(); // Placeholder
 
-    println!("▶️ Proxying Stream Channel: {} -> {}", parsed_id, target_url);
-
-    // 4. Request the Upstream bytes using our native Reqwest Client with timeouts
-    let resp = state.http_client
-        .get(&target_url)
-        .timeout(std::time::Duration::from_secs(15))
-        .send()
+    let channel_streams = channel_stream::Entity::find()
+        .filter(channel_stream::Column::ChannelId.eq(parsed_id))
+        .order_by_asc(channel_stream::Column::Order)
+        .all(&state.db)
         .await
-        .map_err(|_| StatusCode::BAD_GATEWAY)?;
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    if !resp.status().is_success() {
-        // If it fails, failover logic would trigger here to grab the next priority URL
+    if channel_streams.is_empty() {
         return Err(StatusCode::NOT_FOUND);
     }
+
+    let stream_ids: Vec<i64> = channel_streams.iter().map(|cs| cs.stream_id).collect();
+
+    let streams = stream::Entity::find()
+        .filter(stream::Column::Id.is_in(stream_ids))
+        .all(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let mut successful_resp = None;
+
+    for cs in channel_streams {
+        if let Some(stream) = streams.iter().find(|s| s.id == cs.stream_id) {
+            if let Some(target_url) = &stream.url {
+                println!("▶️ Proxying Stream Channel: {} -> {}", parsed_id, target_url);
+
+                let resp = state.http_client
+                    .get(target_url)
+                    .timeout(std::time::Duration::from_secs(15))
+                    .send()
+                    .await;
+
+                match resp {
+                    Ok(r) if r.status().is_success() => {
+                        successful_resp = Some(r);
+                        break;
+                    }
+                    Ok(r) => {
+                        println!("⚠️ Stream {} returned status {}, trying next", target_url, r.status());
+                    }
+                    Err(e) => {
+                        println!("⚠️ Stream {} failed: {}, trying next", target_url, e);
+                    }
+                }
+            }
+        }
+    }
+
+    let resp = successful_resp.ok_or(StatusCode::BAD_GATEWAY)?;
 
     // 5. Zero-Copy Byte Streaming
     // Stream the raw bytes directly to Axum to avoid consuming memory
