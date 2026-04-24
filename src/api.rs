@@ -462,7 +462,18 @@ pub async fn get_stream_filter_options(
     }))
 }
 
-pub async fn get_ids_stub() -> Json<Value> { get_flat_array().await }
+pub async fn get_channel_ids(
+    State(state): State<Arc<AppState>>,
+) -> Json<Value> {
+    let ids = channel::Entity::find()
+        .select_only()
+        .column(channel::Column::Id)
+        .into_tuple::<i64>()
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+    Json(json!(ids))
+}
 
 async fn get_channel_groups_for_account(account_id: i64, db: &sea_orm::DatabaseConnection) -> Vec<Value> {
     use crate::entities::channel_group_m3u_account;
