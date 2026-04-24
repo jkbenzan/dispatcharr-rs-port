@@ -2,7 +2,7 @@ use crate::entities::{
     stream, m3u_account, channel_group, channel_group_m3u_account,
     vod_category, vod_movie, vod_series,
     vod_m3uvodcategoryrelation, vod_m3umovierelation, vod_m3useriesrelation,
-    core_settings, core_useragent
+    core_settings, core_useragent, m3u_filter
 };
 use regex::Regex;
 use sea_orm::{DatabaseConnection, Set, EntityTrait, QueryFilter, ColumnTrait, ActiveModelTrait};
@@ -132,13 +132,57 @@ pub async fn fetch_and_parse_m3u(
         broadcast_progress(&ws_sender, account_id, "fetching", "downloading", 10, "Downloading M3U...");
     }
 
-    println!("Fetching M3U from {}", url);
-    let client = reqwest::Client::builder()
-        .user_agent(get_user_agent_string(db, ua_id).await)
-        .timeout(std::time::Duration::from_secs(60))
-        .build()?;
+    let body = if url.starts_with("http://") || url.starts_with("https://") {
+        println!("Fetching M3U from URL: {}", url);
+        let client = reqwest::Client::builder()
+            .user_agent(get_user_agent_string(db, ua_id).await)
+            .timeout(std::time::Duration::from_secs(60))
+            .build()?;
+        client.get(url).send().await?.error_for_status()?.text().await?
+    } else {
+        println!("Reading M3U from local file: {}", url);
+        let path = std::path::Path::new(url);
+        if url.ends_with(".gz") {
+            use std::io::Read;
+            let file = std::fs::File::open(path)?;
+            let mut decoder = flate2::read::GzDecoder::new(file);
+            let mut s = String::new();
+            decoder.read_to_string(&mut s)?;
+            s
+        } else if url.ends_with(".zip") {
+            use std::io::Read;
+            let file = std::fs::File::open(path)?;
+            let mut archive = zip::ZipArchive::new(file)?;
+            let mut s = String::new();
+            let mut found = false;
+            for i in 0..archive.len() {
+                let mut inner_file = archive.by_index(i)?;
+                if inner_file.name().ends_with(".m3u") {
+                    inner_file.read_to_string(&mut s)?;
+                    found = true;
+                    break;
+                }
+            }
+            if !found {
+                return Err("No .m3u file found in ZIP archive".into());
+            }
+            s
+        } else {
+            tokio::fs::read_to_string(path).await?
+        }
+    };
 
-    let body = client.get(url).send().await?.error_for_status()?.text().await?;
+    let filters = m3u_filter::Entity::find()
+        .filter(m3u_filter::Column::M3uAccountId.eq(account_id))
+        .all(db)
+        .await
+        .unwrap_or_default();
+
+    let compiled_filters: Vec<(m3u_filter::Model, Regex)> = filters.into_iter()
+        .filter_map(|f| Regex::new(&f.regex_pattern).ok().map(|r| (f, r)))
+        .collect();
+    
+    let has_inclusion_filters = compiled_filters.iter().any(|(f, _)| !f.exclude);
 
     let existing_records = stream::Entity::find()
         .filter(stream::Column::M3uAccountId.eq(account_id))
@@ -229,6 +273,44 @@ pub async fn fetch_and_parse_m3u(
         } else if !line.starts_with('#') {
             if let Some(mut stream_model) = current_extinf.take() {
                 stream_model.url = Set(Some(line.to_string()));
+
+                // --- M3UFilter Logic ---
+                let stream_name = stream_model.name.as_ref().clone();
+                let stream_url = line.to_string();
+                let mut group_title = String::new();
+                
+                if let sea_orm::ActiveValue::Set(Some(cp)) = &stream_model.custom_properties {
+                    if let Some(v) = cp.get("group_title").and_then(|v| v.as_str()) {
+                        group_title = v.to_string();
+                    }
+                }
+
+                let mut is_excluded = false;
+                let mut is_included = !has_inclusion_filters; // If no inclusion filters, default true
+
+                for (f, re) in &compiled_filters {
+                    let target = match f.filter_type.as_str() {
+                        "group" => &group_title,
+                        "name" => &stream_name,
+                        "url" => &stream_url,
+                        _ => &group_title,
+                    };
+
+                    if re.is_match(target) {
+                        if f.exclude {
+                            is_excluded = true;
+                            break;
+                        } else {
+                            is_included = true;
+                        }
+                    }
+                }
+
+                if is_excluded || !is_included {
+                    // Skip inserting this stream
+                    continue;
+                }
+                // --- End M3UFilter Logic ---
 
                 let mut hasher = Sha256::new();
                 hasher.update(line.as_bytes());
