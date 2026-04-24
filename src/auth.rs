@@ -1,13 +1,13 @@
+use crate::{entities::user, AppState};
 use axum::{
     async_trait,
     extract::FromRequestParts,
     http::{request::Parts, StatusCode},
 };
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
+use sea_orm::EntityTrait;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use crate::{AppState, entities::user};
-use sea_orm::EntityTrait;
 
 const JWT_SECRET: &[u8] = b"dispatcharr_super_secret_temporary_key"; // In prod, load from env
 const JWT_EXPIRATION_SECS: usize = 3600 * 24; // 1 day
@@ -78,7 +78,11 @@ pub fn generate_jwt(user: &user::Model) -> Result<String, jsonwebtoken::errors::
         exp: now + JWT_EXPIRATION_SECS,
     };
 
-    encode(&Header::default(), &claims, &EncodingKey::from_secret(JWT_SECRET))
+    encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(JWT_SECRET),
+    )
 }
 
 pub fn verify_password(hash: &str, password: &str) -> bool {
