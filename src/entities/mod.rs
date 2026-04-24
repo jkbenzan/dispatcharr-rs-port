@@ -24,6 +24,7 @@ pub mod vod_m3uepisoderelation;
 pub mod vod_m3umovierelation;
 pub mod vod_m3useriesrelation;
 pub mod vod_m3uepisoderelation;
+pub mod logo;
 pub mod core_useragent;
 pub mod core_systemnotification;
 pub mod core_notificationdismissal;

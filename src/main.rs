@@ -252,7 +252,7 @@ async fn main() {
         .route("/api/epg/refresh/:id/", post(api::refresh_epg_source))
         .route("/api/epg/epgdata/", get(api::get_epgdata))
         // --- DASHBOARD MISSING DEPENDENCIES ---
-        .route("/api/channels/logos/", get(api::get_flat_array))
+        .route("/api/channels/logos/", get(api::get_logos))
         .route("/api/channels/streams/ids/", get(api::get_stream_ids))
         .route("/api/channels/streams/by-ids/", post(api::get_streams_by_ids))
         .route("/api/channels/streams/filter-options/", get(api::get_stream_filter_options))
