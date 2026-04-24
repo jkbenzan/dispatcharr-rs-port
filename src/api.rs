@@ -1602,6 +1602,28 @@ pub async fn update_m3u_group_settings(
         }
     }
 
+    let _ = crate::channel_sync::sync_channels_for_account(&state.db, account_id).await;
+
+    if let Ok(Some(acc)) = crate::entities::m3u_account::Entity::find_by_id(account_id)
+        .one(&state.db)
+        .await
+    {
+        let mut active: crate::entities::m3u_account::ActiveModel = acc.into();
+        active.status = sea_orm::Set("success".to_string());
+        active.last_message = sea_orm::Set(Some("Groups mapped successfully".to_string()));
+        let _ = active.update(&state.db).await;
+        let _ = state.ws_sender.send(serde_json::json!({
+            "channel": format!("progress_{}", account_id),
+            "event": "progress",
+            "data": {
+                "status": "success",
+                "step": "completed",
+                "progress": 100,
+                "message": "Groups mapped successfully"
+            }
+        }));
+    }
+
     (StatusCode::OK, Json(json!({"success": true})))
 }
 
