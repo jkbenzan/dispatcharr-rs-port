@@ -1,3 +1,4 @@
+mod epg_api;
 use axum::{
     extract::ws::{WebSocket, WebSocketUpgrade},
     response::IntoResponse,
