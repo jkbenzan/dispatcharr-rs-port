@@ -187,7 +187,8 @@ async fn main() {
 
         // --- DASHBOARD MISSING DEPENDENCIES ---
         .route("/api/channels/logos/", get(api::get_flat_array))
-        .route("/api/channels/streams/ids/", get(api::get_flat_array))
+        .route("/api/channels/streams/ids/", get(api::get_stream_ids))
+        .route("/api/channels/streams/by-ids/", post(api::get_streams_by_ids))
         .route("/api/channels/streams/filter-options/", get(api::get_stream_filter_options))
         .route("/api/channels/dashboard-stats/", get(api::get_dashboard_stats))
         .route("/api/channels/streams/", get(api::get_streams).post(api::post_stub))

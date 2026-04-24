@@ -348,58 +348,35 @@ pub async fn get_streams(
         q = q.filter(stream::Column::M3uAccountId.eq(acc_id));
     }
 
-    let streams = q.order_by_asc(stream::Column::Id)
-        .all(&state.db).await.unwrap_or_default();
-
-    let mut filtered_streams = vec![];
-    let channel_group_filter = params.get("channel_group").cloned();
-    let group_name_filter = params.get("group").cloned(); // Legacy/name filter if used
-    let name_filter = params.get("name").cloned();
-    let tvg_id_filter = params.get("tvg_id").cloned();
-
-    for s in streams {
-        if let Some(ref tvg) = tvg_id_filter {
-            if let Some(ref s_tvg) = s.tvg_id {
-                if !s_tvg.to_lowercase().contains(&tvg.to_lowercase()) {
-                    continue;
-                }
-            } else {
-                continue;
-            }
+    if let Some(cg) = params.get("channel_group") {
+        let group_names: Vec<&str> = cg.split(',').collect();
+        let groups = crate::entities::channel_group::Entity::find()
+            .filter(crate::entities::channel_group::Column::Name.is_in(group_names))
+            .all(&state.db).await.unwrap_or_default();
+        let group_ids: Vec<i64> = groups.into_iter().map(|g| g.id).collect();
+        if !group_ids.is_empty() {
+            q = q.filter(stream::Column::ChannelGroupId.is_in(group_ids));
+        } else {
+            q = q.filter(stream::Column::Id.eq(-1));
         }
-
-        if let Some(ref name) = name_filter {
-            if !s.name.to_lowercase().contains(&name.to_lowercase()) {
-                continue;
-            }
-        }
-
-        if let Some(ref cg) = channel_group_filter {
-            let cg_names: Vec<&str> = cg.split(',').collect();
-            let matches = s.custom_properties.as_ref()
-                .and_then(|p| p.get("group_title"))
-                .and_then(|v| v.as_str())
-                .map(|v| cg_names.contains(&v))
-                .unwrap_or(false);
-            if !matches { continue; }
-        }
-
-        if let Some(ref g) = group_name_filter {
-            let matches = s.custom_properties.as_ref()
-                .and_then(|p| p.get("group_title"))
-                .and_then(|v| v.as_str())
-                .map(|v| v.to_lowercase().contains(&g.to_lowercase()))
-                .unwrap_or(false);
-            if !matches { continue; }
-        }
-        filtered_streams.push(s);
     }
 
-    let count = filtered_streams.len() as u64;
-    let paginated = filtered_streams.into_iter().skip(offset as usize).take(page_size as usize).collect::<Vec<_>>();
+    if let Some(name) = params.get("name") {
+        q = q.filter(stream::Column::Name.contains(name));
+    }
+    
+    if let Some(tvg) = params.get("tvg_id") {
+        q = q.filter(stream::Column::TvgId.contains(tvg));
+    }
+
+    let count = q.clone().count(&state.db).await.unwrap_or(0);
+    let streams = q.order_by_asc(stream::Column::Id)
+        .limit(page_size)
+        .offset(offset)
+        .all(&state.db).await.unwrap_or_default();
 
     let mut results = vec![];
-    for s in paginated {
+    for s in streams {
         let mut js = serde_json::to_value(&s).unwrap();
         if let Some(cg_id) = s.channel_group_id {
             js["channel_group"] = json!(cg_id);
@@ -422,13 +399,86 @@ pub async fn get_streams(
     let next_page = if has_next { Some(format!("/api/channels/streams/?page={}", page + 1)) } else { None };
     let prev_page = if page > 1 { Some(format!("/api/channels/streams/?page={}", page - 1)) } else { None };
 
-    // Standard paginator string mapping for DataGrids
     Json(json!({
         "count": count,
         "next": next_page,
         "previous": prev_page,
         "results": results
     }))
+}
+
+pub async fn get_stream_ids(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Json<Value> {
+    let mut q = stream::Entity::find();
+    if let Some(acc_id) = params.get("m3u_account").and_then(|p| p.parse::<i64>().ok()) {
+        q = q.filter(stream::Column::M3uAccountId.eq(acc_id));
+    }
+
+    if let Some(cg) = params.get("channel_group") {
+        let group_names: Vec<&str> = cg.split(',').collect();
+        let groups = crate::entities::channel_group::Entity::find()
+            .filter(crate::entities::channel_group::Column::Name.is_in(group_names))
+            .all(&state.db).await.unwrap_or_default();
+        let group_ids: Vec<i64> = groups.into_iter().map(|g| g.id).collect();
+        if !group_ids.is_empty() {
+            q = q.filter(stream::Column::ChannelGroupId.is_in(group_ids));
+        } else {
+            q = q.filter(stream::Column::Id.eq(-1));
+        }
+    }
+
+    if let Some(name) = params.get("name") {
+        q = q.filter(stream::Column::Name.contains(name));
+    }
+    
+    if let Some(tvg) = params.get("tvg_id") {
+        q = q.filter(stream::Column::TvgId.contains(tvg));
+    }
+
+    let ids = q.select_only()
+        .column(stream::Column::Id)
+        .order_by_asc(stream::Column::Id)
+        .into_tuple::<i64>()
+        .all(&state.db).await.unwrap_or_default();
+
+    Json(json!(ids))
+}
+
+#[derive(serde::Deserialize)]
+pub struct ByIdsRequest {
+    pub ids: Vec<i64>,
+}
+
+pub async fn get_streams_by_ids(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<ByIdsRequest>,
+) -> Json<Value> {
+    let streams = stream::Entity::find()
+        .filter(stream::Column::Id.is_in(payload.ids))
+        .all(&state.db).await.unwrap_or_default();
+
+    let mut results = vec![];
+    for s in streams {
+        let mut js = serde_json::to_value(&s).unwrap();
+        if let Some(cg_id) = s.channel_group_id {
+            js["channel_group"] = json!(cg_id);
+        } else {
+            js["channel_group"] = serde_json::Value::Null;
+        }
+        if let Some(m_id) = s.m3u_account_id {
+            js["m3u_account"] = json!(m_id);
+        } else {
+            js["m3u_account"] = serde_json::Value::Null;
+        }
+        if let Some(p_id) = s.stream_profile_id {
+            js["stream_profile"] = json!(p_id);
+            js["stream_profile_id"] = json!(p_id);
+        }
+        results.push(js);
+    }
+    Json(json!(results))
 }
 
 pub async fn get_stream_filter_options(
