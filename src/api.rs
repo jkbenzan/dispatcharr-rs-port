@@ -393,6 +393,7 @@ pub async fn get_notifications(
         if let Ok(parsed) = serde_json::from_str::<Value>(&n.action_data) {
             js["action_data"] = parsed;
         }
+        js["is_dismissed"] = serde_json::json!(false);
         js
     }).collect();
 
