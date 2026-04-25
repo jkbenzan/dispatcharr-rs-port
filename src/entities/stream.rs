@@ -21,6 +21,8 @@ pub struct Model {
     pub last_seen: DateTime<FixedOffset>,
     pub stream_hash: Option<String>,
     pub custom_properties: Option<Json>,
+    pub is_stale: bool,
+    pub is_adult: bool,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
