@@ -379,20 +379,23 @@ pub async fn get_notifications(
         q = q.filter(core_systemnotification::Column::AdminOnly.eq(false));
     }
 
-    let count = q.clone().count(&state.db).await.unwrap_or(0);
+    let count = q.clone().count(&state.db).await.unwrap_or_else(|e| {
+        println!("DB Error in get_notifications count: {:?}", e);
+        0
+    });
     let notifications = q
         .order_by_desc(core_systemnotification::Column::CreatedAt)
         .limit(page_size)
         .offset(offset)
         .all(&state.db)
         .await
-        .unwrap_or_default();
+        .unwrap_or_else(|e| {
+            println!("DB Error in get_notifications all: {:?}", e);
+            vec![]
+        });
 
     let results: Vec<Value> = notifications.into_iter().map(|n| {
         let mut js = serde_json::to_value(&n).unwrap();
-        if let Ok(parsed) = serde_json::from_str::<Value>(&n.action_data) {
-            js["action_data"] = parsed;
-        }
         js["is_dismissed"] = serde_json::json!(false);
         js
     }).collect();
@@ -450,7 +453,10 @@ pub async fn get_notifications_count(
         q = q.filter(core_systemnotification::Column::AdminOnly.eq(false));
     }
 
-    let count = q.count(&state.db).await.unwrap_or(0);
+    let count = q.count(&state.db).await.unwrap_or_else(|e| {
+        println!("DB Error in get_notifications_count: {:?}", e);
+        0
+    });
 
     Json(json!({ "count": count }))
 }

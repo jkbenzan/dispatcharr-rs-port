@@ -13,7 +13,7 @@ pub struct Model {
     pub title: String,
     #[sea_orm(column_type = "Text")]
     pub message: String,
-    pub action_data: String, // Assuming JSON stored as string or we can use Json
+    pub action_data: sea_orm::prelude::Json,
     pub is_active: bool,
     pub admin_only: bool,
     pub expires_at: Option<DateTimeWithTimeZone>,
