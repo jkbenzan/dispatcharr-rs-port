@@ -412,7 +412,8 @@ pub async fn get_notifications(
         "count": count,
         "next": next_page,
         "previous": prev_page,
-        "results": results
+        "results": results.clone(),
+        "notifications": results
     }))
 }
 
