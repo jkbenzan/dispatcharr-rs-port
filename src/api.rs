@@ -81,7 +81,7 @@ pub async fn get_core_settings() -> Json<Value> {
 }
 
 use crate::entities::{
-    channel, channel_group, channel_profile, core_settings, epg_source, m3u_account, stream, user,
+    channel, channel_group, channel_profile, core_settings, core_systemnotification, core_notificationdismissal, epg_source, m3u_account, stream, user,
 };
 use crate::{
     auth::{generate_jwt, verify_password, CurrentUser},
@@ -342,8 +342,115 @@ pub async fn get_channels(
     }))
 }
 
-pub async fn get_notifications() -> Json<Value> {
-    Json(json!({ "notifications": [] }))
+pub async fn get_notifications(
+    State(state): State<Arc<AppState>>,
+    current_user: CurrentUser,
+    Query(params): Query<HashMap<String, String>>,
+) -> Json<Value> {
+    let page: u64 = params.get("page").and_then(|p| p.parse().ok()).unwrap_or(1);
+    let page_size: u64 = 50;
+    let offset = (page.saturating_sub(1)) * page_size;
+
+    let user_id = current_user.0.id;
+    let is_admin = current_user.0.is_superuser || current_user.0.is_staff;
+    let now: chrono::DateTime<chrono::FixedOffset> = chrono::Utc::now().into();
+
+    let dismissals = core_notificationdismissal::Entity::find()
+        .filter(core_notificationdismissal::Column::UserId.eq(user_id))
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+    
+    let dismissed_ids: Vec<i64> = dismissals.into_iter().map(|d| d.notification_id).collect();
+
+    let mut q = core_systemnotification::Entity::find()
+        .filter(core_systemnotification::Column::IsActive.eq(true))
+        .filter(
+            sea_orm::Condition::any()
+                .add(core_systemnotification::Column::ExpiresAt.is_null())
+                .add(core_systemnotification::Column::ExpiresAt.gt(now))
+        );
+
+    if !dismissed_ids.is_empty() {
+        q = q.filter(core_systemnotification::Column::Id.is_not_in(dismissed_ids));
+    }
+
+    if !is_admin {
+        q = q.filter(core_systemnotification::Column::AdminOnly.eq(false));
+    }
+
+    let count = q.clone().count(&state.db).await.unwrap_or(0);
+    let notifications = q
+        .order_by_desc(core_systemnotification::Column::CreatedAt)
+        .limit(page_size)
+        .offset(offset)
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+
+    let results: Vec<Value> = notifications.into_iter().map(|n| {
+        let mut js = serde_json::to_value(&n).unwrap();
+        if let Ok(parsed) = serde_json::from_str::<Value>(&n.action_data) {
+            js["action_data"] = parsed;
+        }
+        js
+    }).collect();
+
+    let has_next = (offset + page_size) < count;
+    let next_page = if has_next {
+        Some(format!("/api/core/notifications/?page={}", page + 1))
+    } else {
+        None
+    };
+    let prev_page = if page > 1 {
+        Some(format!("/api/core/notifications/?page={}", page - 1))
+    } else {
+        None
+    };
+
+    Json(json!({
+        "count": count,
+        "next": next_page,
+        "previous": prev_page,
+        "results": results
+    }))
+}
+
+pub async fn get_notifications_count(
+    State(state): State<Arc<AppState>>,
+    current_user: CurrentUser,
+) -> Json<Value> {
+    let user_id = current_user.0.id;
+    let is_admin = current_user.0.is_superuser || current_user.0.is_staff;
+    let now: chrono::DateTime<chrono::FixedOffset> = chrono::Utc::now().into();
+
+    let dismissals = core_notificationdismissal::Entity::find()
+        .filter(core_notificationdismissal::Column::UserId.eq(user_id))
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+    
+    let dismissed_ids: Vec<i64> = dismissals.into_iter().map(|d| d.notification_id).collect();
+
+    let mut q = core_systemnotification::Entity::find()
+        .filter(core_systemnotification::Column::IsActive.eq(true))
+        .filter(
+            sea_orm::Condition::any()
+                .add(core_systemnotification::Column::ExpiresAt.is_null())
+                .add(core_systemnotification::Column::ExpiresAt.gt(now))
+        );
+
+    if !dismissed_ids.is_empty() {
+        q = q.filter(core_systemnotification::Column::Id.is_not_in(dismissed_ids));
+    }
+
+    if !is_admin {
+        q = q.filter(core_systemnotification::Column::AdminOnly.eq(false));
+    }
+
+    let count = q.count(&state.db).await.unwrap_or(0);
+
+    Json(json!({ "count": count }))
 }
 
 pub async fn create_stream(
