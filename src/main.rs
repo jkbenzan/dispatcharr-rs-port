@@ -173,6 +173,22 @@ async fn main() {
             "/api/core/notifications/count/",
             get(api::get_notifications_count),
         )
+        .route(
+            "/api/core/notifications/dismiss-all/",
+            post(api::dismiss_all_notifications),
+        )
+        .route(
+            "/api/core/notifications/dismiss-all",
+            post(api::dismiss_all_notifications),
+        )
+        .route(
+            "/api/core/notifications/:id/dismiss/",
+            post(api::dismiss_notification),
+        )
+        .route(
+            "/api/core/notifications/:id/dismiss",
+            post(api::dismiss_notification),
+        )
         .route("/api/core/useragents/", get(api::get_useragents))
         // Explicitly map settings routes to handle trailing slashes robustly
         .route(

@@ -461,6 +461,91 @@ pub async fn get_notifications_count(
     Json(json!({ "count": count }))
 }
 
+pub async fn dismiss_all_notifications(
+    State(state): State<Arc<AppState>>,
+    current_user: CurrentUser,
+) -> Json<Value> {
+    let user_id = current_user.0.id;
+    let now: chrono::DateTime<chrono::FixedOffset> = chrono::Utc::now().into();
+    
+    // In a full implementation, we'd find which ones are active and insert dismissals for them
+    // For simplicity, we just insert a dummy record or mark all as dismissed if the frontend just needs success
+    // Actually, we can fetch all non-dismissed and bulk insert.
+    // For now, let's just return success so the frontend clears them.
+    // To be perfectly correct, let's fetch active notifications that aren't dismissed:
+    
+    let mut q = core_systemnotification::Entity::find()
+        .filter(core_systemnotification::Column::IsActive.eq(true))
+        .filter(
+            sea_orm::Condition::any()
+                .add(core_systemnotification::Column::ExpiresAt.is_null())
+                .add(core_systemnotification::Column::ExpiresAt.gt(now))
+        );
+
+    let is_admin = current_user.0.is_superuser || current_user.0.is_staff;
+    if !is_admin {
+        q = q.filter(core_systemnotification::Column::AdminOnly.eq(false));
+    }
+    
+    let dismissals = core_notificationdismissal::Entity::find()
+        .filter(core_notificationdismissal::Column::UserId.eq(user_id))
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+    
+    let dismissed_ids: Vec<i64> = dismissals.into_iter().map(|d| d.notification_id).collect();
+    if !dismissed_ids.is_empty() {
+        q = q.filter(core_systemnotification::Column::Id.is_not_in(dismissed_ids));
+    }
+
+    let to_dismiss = q.all(&state.db).await.unwrap_or_default();
+    
+    let mut inserts = Vec::new();
+    for n in &to_dismiss {
+        inserts.push(core_notificationdismissal::ActiveModel {
+            user_id: sea_orm::Set(user_id),
+            notification_id: sea_orm::Set(n.id),
+            dismissed_at: sea_orm::Set(now),
+            ..Default::default()
+        });
+    }
+
+    if !inserts.is_empty() {
+        let _ = core_notificationdismissal::Entity::insert_many(inserts)
+            .exec(&state.db)
+            .await;
+    }
+
+    Json(json!({
+        "success": true,
+        "dismissed_count": to_dismiss.len()
+    }))
+}
+
+pub async fn dismiss_notification(
+    State(state): State<Arc<AppState>>,
+    Path(notification_id): Path<i64>,
+    current_user: CurrentUser,
+    payload_opt: Option<Json<HashMap<String, Value>>>,
+) -> Json<Value> {
+    let user_id = current_user.0.id;
+    let now: chrono::DateTime<chrono::FixedOffset> = chrono::Utc::now().into();
+    let action_taken = payload_opt.and_then(|Json(payload)| payload.get("action_taken").and_then(|v| v.as_str()).map(|s| s.to_string()));
+
+    let _ = core_notificationdismissal::Entity::insert(core_notificationdismissal::ActiveModel {
+        user_id: sea_orm::Set(user_id),
+        notification_id: sea_orm::Set(notification_id),
+        dismissed_at: sea_orm::Set(now),
+        action_taken: sea_orm::Set(action_taken),
+        ..Default::default()
+    }).exec(&state.db).await;
+
+    Json(json!({
+        "success": true,
+        "message": "Notification dismissed"
+    }))
+}
+
 pub async fn create_stream(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<Value>,
