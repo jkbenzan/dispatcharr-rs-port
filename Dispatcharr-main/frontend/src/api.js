@@ -1062,6 +1062,43 @@ export default class API {
     }
   }
 
+  static async checkStream(id) {
+    try {
+      const response = await request(`${host}/api/streams/${id}/check/`, {
+        method: 'POST',
+      });
+      return response;
+    } catch (error) {
+      console.error(`Failed to check stream ${id}:`, error);
+      throw error;
+    }
+  }
+
+  static async startBulkCheck(streamIds) {
+    try {
+      const response = await request(`${host}/api/streams/bulk-check/`, {
+        method: 'POST',
+        body: { stream_ids: streamIds },
+      });
+      return response;
+    } catch (error) {
+      console.error('Failed to start bulk stream check:', error);
+      throw error;
+    }
+  }
+
+  static async getBulkCheckStatus() {
+    try {
+      const response = await request(`${host}/api/streams/bulk-check/status/`, {
+        method: 'GET',
+      });
+      return response;
+    } catch (error) {
+      console.error('Failed to get bulk check status:', error);
+      throw error;
+    }
+  }
+
   static async deleteStream(id) {
     try {
       await request(`${host}/api/channels/streams/${id}/`, {

@@ -101,6 +101,13 @@ export const NAV_ITEMS = {
     adminOnly: false,
     canHide: false,
   },
+  streamChecker: {
+    id: 'streamChecker',
+    label: 'Stream Checker',
+    icon: ChartLine, // Reuse an icon since we didn't import a new one
+    path: '/stream-checker',
+    adminOnly: true,
+  },
 };
 
 export const DEFAULT_ADMIN_ORDER = [
@@ -110,6 +117,7 @@ export const DEFAULT_ADMIN_ORDER = [
   'guide',
   'dvr',
   'stats',
+  'streamChecker',
   'plugins',
   'integrations',
   'system',

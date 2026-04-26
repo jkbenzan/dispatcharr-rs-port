@@ -32,6 +32,7 @@ pub struct AppState {
     pub http_client: reqwest::Client,
     pub ws_sender: tokio::sync::broadcast::Sender<serde_json::Value>,
     pub active_streams: Arc<tokio::sync::RwLock<std::collections::HashMap<String, crate::proxy::ChannelStats>>>,
+    pub bulk_check_status: Arc<tokio::sync::RwLock<crate::stream_checker::checker::BulkCheckStatus>>,
 }
 
 async fn ws_handler(ws: WebSocketUpgrade, State(state): State<Arc<AppState>>) -> impl IntoResponse {
@@ -113,6 +114,7 @@ async fn main() {
         http_client,
         ws_sender,
         active_streams: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
+        bulk_check_status: Arc::new(tokio::sync::RwLock::new(Default::default())),
     });
 
     // SPA Routing: Serve index.html if the user hits a route like /channels directly
@@ -287,6 +289,14 @@ async fn main() {
         .route(
             "/api/streams/:id/check/",
             post(stream_checker::checker::test_stream),
+        )
+        .route(
+            "/api/streams/bulk-check/",
+            post(stream_checker::checker::start_bulk_check),
+        )
+        .route(
+            "/api/streams/bulk-check/status/",
+            get(stream_checker::checker::get_bulk_check_status),
         )
         .route(
             "/api/channels/streams/filter-options/",

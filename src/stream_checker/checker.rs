@@ -4,6 +4,7 @@ use axum::{
     response::IntoResponse,
     Json,
 };
+use serde::{Deserialize, Serialize};
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -14,28 +15,43 @@ use std::time::Duration;
 use crate::AppState;
 use crate::entities::stream;
 
-pub async fn test_stream(
-    State(state): State<Arc<AppState>>,
-    Path(stream_id): Path<i64>,
-) -> impl IntoResponse {
+#[derive(Clone, Serialize, Deserialize)]
+pub struct BulkCheckStatus {
+    pub is_running: bool,
+    pub total: usize,
+    pub completed: usize,
+    pub successful: usize,
+    pub failed: usize,
+    pub current_stream_id: Option<i64>,
+    pub current_stream_name: Option<String>,
+}
+
+impl Default for BulkCheckStatus {
+    fn default() -> Self {
+        Self {
+            is_running: false,
+            total: 0,
+            completed: 0,
+            successful: 0,
+            failed: 0,
+            current_stream_id: None,
+            current_stream_name: None,
+        }
+    }
+}
+
+pub async fn check_single_stream(
+    state: &Arc<AppState>,
+    stream_id: i64,
+) -> Result<serde_json::Value, (StatusCode, String)> {
     let stream_obj = match stream::Entity::find_by_id(stream_id).one(&state.db).await {
         Ok(Some(s)) => s,
-        _ => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(json!({"success": false, "message": "Stream not found"})),
-            );
-        }
+        _ => return Err((StatusCode::NOT_FOUND, "Stream not found".to_string())),
     };
 
     let stream_url = match &stream_obj.url {
         Some(url) => url.clone(),
-        None => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({"success": false, "message": "Stream has no URL"})),
-            );
-        }
+        None => return Err((StatusCode::BAD_REQUEST, "Stream has no URL".to_string())),
     };
 
     info!("🔍 Testing Stream: {} (ID: {})", stream_obj.name, stream_id);
@@ -58,17 +74,11 @@ pub async fn test_stream(
         Ok(Ok(output)) => output,
         Ok(Err(e)) => {
             error!("ffprobe failed to start: {}", e);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"success": false, "message": format!("ffprobe failed: {}", e)})),
-            );
+            return Err((StatusCode::INTERNAL_SERVER_ERROR, format!("ffprobe failed: {}", e)));
         }
         Err(_) => {
             error!("ffprobe timed out");
-            return (
-                StatusCode::GATEWAY_TIMEOUT,
-                Json(json!({"success": false, "message": "ffprobe timed out"})),
-            );
+            return Err((StatusCode::GATEWAY_TIMEOUT, "ffprobe timed out".to_string()));
         }
     };
 
@@ -83,10 +93,7 @@ pub async fn test_stream(
         active_stream.custom_properties = Set(Some(props));
         let _ = active_stream.update(&state.db).await;
 
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(json!({"success": false, "message": "ffprobe failed", "stderr": stderr.to_string()})),
-        );
+        return Err((StatusCode::BAD_REQUEST, format!("ffprobe failed: {}", stderr)));
     }
 
     let probe_output = String::from_utf8_lossy(&ffprobe_result.stdout);
@@ -94,10 +101,7 @@ pub async fn test_stream(
         Ok(d) => d,
         Err(e) => {
              error!("ffprobe output JSON parsing failed: {}", e);
-             return (
-                 StatusCode::INTERNAL_SERVER_ERROR,
-                 Json(json!({"success": false, "message": "Failed to parse ffprobe output"})),
-             );
+             return Err((StatusCode::INTERNAL_SERVER_ERROR, "Failed to parse ffprobe output".to_string()));
         }
     };
 
@@ -132,10 +136,7 @@ pub async fn test_stream(
         active_stream.custom_properties = Set(Some(props));
         let _ = active_stream.update(&state.db).await;
 
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(json!({"success": false, "message": "No streams found in ffprobe output"})),
-        );
+        return Err((StatusCode::BAD_REQUEST, "No streams found in ffprobe output".to_string()));
     }
 
     // 2. Run ffmpeg for bitrate
@@ -203,10 +204,7 @@ pub async fn test_stream(
 
     if let Err(e) = active_stream.update(&state.db).await {
          error!("Failed to update stream stats in DB: {}", e);
-         return (
-             StatusCode::INTERNAL_SERVER_ERROR,
-             Json(json!({"success": false, "message": "Failed to save stats to DB"})),
-         );
+         return Err((StatusCode::INTERNAL_SERVER_ERROR, "Failed to save stats to DB".to_string()));
     }
 
     // Prepare API response mirroring the DB stream model with updated stats
@@ -218,8 +216,105 @@ pub async fn test_stream(
         obj.insert("custom_properties".to_string(), new_props);
     }
 
-    (StatusCode::OK, Json(json!({
-        "success": true,
-        "stream": response_json
-    })))
+    Ok(response_json)
+}
+
+pub async fn test_stream(
+    State(state): State<Arc<AppState>>,
+    Path(stream_id): Path<i64>,
+) -> impl IntoResponse {
+    match check_single_stream(&state, stream_id).await {
+        Ok(stream_data) => (
+            StatusCode::OK,
+            Json(json!({ "success": true, "stream": stream_data })),
+        ),
+        Err((status, message)) => (
+            status,
+            Json(json!({ "success": false, "message": message })),
+        ),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct BulkCheckRequest {
+    pub stream_ids: Vec<i64>,
+}
+
+pub async fn start_bulk_check(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<BulkCheckRequest>,
+) -> impl IntoResponse {
+    let mut status = state.bulk_check_status.write().await;
+    if status.is_running {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"success": false, "message": "A bulk check is already running"})),
+        );
+    }
+    
+    let stream_ids = payload.stream_ids;
+    if stream_ids.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"success": false, "message": "No streams provided"})),
+        );
+    }
+
+    *status = BulkCheckStatus {
+        is_running: true,
+        total: stream_ids.len(),
+        completed: 0,
+        successful: 0,
+        failed: 0,
+        current_stream_id: None,
+        current_stream_name: None,
+    };
+
+    let state_clone = state.clone();
+    
+    tokio::spawn(async move {
+        for stream_id in stream_ids {
+            let stream_name = {
+                if let Ok(Some(s)) = stream::Entity::find_by_id(stream_id).one(&state_clone.db).await {
+                    s.name
+                } else {
+                    "Unknown".to_string()
+                }
+            };
+            
+            {
+                let mut st = state_clone.bulk_check_status.write().await;
+                st.current_stream_id = Some(stream_id);
+                st.current_stream_name = Some(stream_name.clone());
+            }
+            
+            match check_single_stream(&state_clone, stream_id).await {
+                Ok(_) => {
+                    let mut st = state_clone.bulk_check_status.write().await;
+                    st.successful += 1;
+                    st.completed += 1;
+                }
+                Err(e) => {
+                    error!("Bulk Check Failed for stream {}: {:?}", stream_name, e);
+                    let mut st = state_clone.bulk_check_status.write().await;
+                    st.failed += 1;
+                    st.completed += 1;
+                }
+            }
+        }
+        
+        let mut st = state_clone.bulk_check_status.write().await;
+        st.is_running = false;
+        st.current_stream_id = None;
+        st.current_stream_name = None;
+    });
+
+    (StatusCode::OK, Json(json!({"success": true, "message": "Bulk check started"})))
+}
+
+pub async fn get_bulk_check_status(
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    let status = state.bulk_check_status.read().await;
+    (StatusCode::OK, Json(status.clone()))
 }
