@@ -222,6 +222,14 @@ async fn main() {
         )
         // --- CHANNELS & M3U ---
         .route("/api/channels/channels/", get(api::get_channels))
+        .route(
+            "/api/channels/channels/:id/",
+            patch(api::update_channel),
+        )
+        .route(
+            "/api/channels/channels/edit/bulk/",
+            patch(api::bulk_update_channels),
+        )
         .route("/api/channels/groups/", get(api::get_channel_groups))
         .route("/api/channels/profiles/", get(api::get_channel_profiles))
         .route("/api/channels/channels/ids/", get(api::get_channel_ids))
