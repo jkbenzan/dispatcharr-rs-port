@@ -328,6 +328,8 @@ pub async fn get_channels(
 ) -> Json<Value> {
     let page: u64 = params.get("page").and_then(|p| p.parse().ok()).unwrap_or(1);
     let page_size: u64 = 50;
+
+    println!("get_channels PARAMS: {:?}", params);
     let offset = (page.saturating_sub(1)) * page_size;
 
     let mut q = channel::Entity::find();
@@ -356,11 +358,19 @@ pub async fn get_channels(
     if let Some(cg) = params.get("channel_group") {
         if !cg.is_empty() {
             let group_names: Vec<&str> = cg.split(',').collect();
+            let mut condition = sea_orm::sea_query::Condition::any();
+            for name in &group_names {
+                condition = condition.add(
+                    sea_orm::sea_query::Expr::col(crate::entities::channel_group::Column::Name).ilike(format!("%{}%", name))
+                );
+            }
+            
             let groups = crate::entities::channel_group::Entity::find()
-                .filter(crate::entities::channel_group::Column::Name.is_in(group_names))
+                .filter(condition)
                 .all(&state.db)
                 .await
                 .unwrap_or_default();
+                
             let group_ids: Vec<i64> = groups.into_iter().map(|g| g.id).collect();
             if !group_ids.is_empty() {
                 q = q.filter(channel::Column::ChannelGroupId.is_in(group_ids));
@@ -864,11 +874,19 @@ pub async fn get_streams(
     if let Some(cg) = params.get("channel_group") {
         if !cg.is_empty() {
             let group_names: Vec<&str> = cg.split(',').collect();
+            let mut condition = sea_orm::sea_query::Condition::any();
+            for name in &group_names {
+                condition = condition.add(
+                    sea_orm::sea_query::Expr::col(crate::entities::channel_group::Column::Name).ilike(format!("%{}%", name))
+                );
+            }
+
             let groups = crate::entities::channel_group::Entity::find()
-                .filter(crate::entities::channel_group::Column::Name.is_in(group_names))
+                .filter(condition)
                 .all(&state.db)
                 .await
                 .unwrap_or_default();
+                
             let group_ids: Vec<i64> = groups.into_iter().map(|g| g.id).collect();
             if !group_ids.is_empty() {
                 q = q.filter(stream::Column::ChannelGroupId.is_in(group_ids));
@@ -1062,9 +1080,17 @@ pub async fn get_stream_filter_options(
     let mut groups: Vec<String> = groups_set.into_iter().collect();
     groups.sort();
 
+    let m3u_accounts = crate::entities::m3u_account::Entity::find()
+        .all(&state.db)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|acc| json!({ "id": acc.id, "name": acc.name }))
+        .collect::<Vec<_>>();
+
     Json(json!({
         "groups": groups,
-        "m3u_accounts": []
+        "m3u_accounts": m3u_accounts
     }))
 }
 
