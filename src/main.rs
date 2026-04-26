@@ -85,12 +85,14 @@ async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
 
 #[tokio::main]
 async fn main() {
+    dotenvy::dotenv().ok();
+
+    let log_level = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
     tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::DEBUG)
+        .with_env_filter(tracing_subscriber::EnvFilter::new(log_level))
         .init();
 
     tracing::info!("🚀 BACKEND STARTING...");
-    dotenvy::dotenv().ok();
 
     let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL missing");
     let mut opt = ConnectOptions::new(db_url);

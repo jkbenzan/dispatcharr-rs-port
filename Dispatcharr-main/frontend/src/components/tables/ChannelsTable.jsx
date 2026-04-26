@@ -246,7 +246,7 @@ const ChannelRowActions = React.memo(
   }
 );
 
-const ChannelsTable = ({ onReady, hideLinks = false }) => {
+const ChannelsTable = ({ onReady, hideLinks = false, streamCheckerMode = false }) => {
   // EPG data lookup
   const tvgsById = useEPGsStore((s) => s.tvgsById);
   const epgs = useEPGsStore((s) => s.epgs);
