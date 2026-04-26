@@ -185,6 +185,9 @@ mod tests {
             &validation,
         );
 
-        assert!(result.is_err(), "JWT decoding should fail with an incorrect secret");
+        assert!(
+            result.is_err(),
+            "JWT decoding should fail with an incorrect secret"
+        );
     }
 }

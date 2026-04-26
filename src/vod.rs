@@ -205,8 +205,12 @@ pub async fn get_vod_series(
 
     if !search.is_empty() {
         query = query.filter(
-            sea_orm::Condition::any()
-                .add(sea_orm::sea_query::Expr::expr(sea_orm::sea_query::Func::lower(sea_orm::sea_query::Expr::col(vod_series::Column::Name))).like(format!("%{}%", search)))
+            sea_orm::Condition::any().add(
+                sea_orm::sea_query::Expr::expr(sea_orm::sea_query::Func::lower(
+                    sea_orm::sea_query::Expr::col(vod_series::Column::Name),
+                ))
+                .like(format!("%{}%", search)),
+            ),
         );
     }
 

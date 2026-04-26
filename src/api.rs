@@ -10,33 +10,115 @@ pub async fn get_flat_array() -> Json<Value> {
     Json(json!([]))
 }
 
-pub async fn get_logos(axum::extract::State(state): axum::extract::State<std::sync::Arc<crate::AppState>>) -> Json<Value> {
-    use sea_orm::{EntityTrait, ColumnTrait, QueryFilter};
+pub async fn get_logos(
+    axum::extract::State(state): axum::extract::State<std::sync::Arc<crate::AppState>>,
+) -> Json<Value> {
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     let logos = crate::entities::logo::Entity::find()
-        .all(&state.db).await.unwrap_or_default();
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
     Json(json!(logos))
 }
 
-pub async fn get_logo(axum::extract::State(state): axum::extract::State<std::sync::Arc<crate::AppState>>, axum::extract::Path(id): axum::extract::Path<i64>) -> Json<Value> { let logo = crate::entities::logo::Entity::find_by_id(id).one(&state.db).await.unwrap_or_default(); Json(json!(logo)) }
-pub async fn delete_logo(axum::extract::State(state): axum::extract::State<std::sync::Arc<crate::AppState>>, axum::extract::Path(id): axum::extract::Path<i64>) -> Json<Value> { let _ = crate::entities::logo::Entity::delete_by_id(id).exec(&state.db).await; Json(json!({"success": true})) }
+pub async fn get_logo(
+    axum::extract::State(state): axum::extract::State<std::sync::Arc<crate::AppState>>,
+    axum::extract::Path(id): axum::extract::Path<i64>,
+) -> Json<Value> {
+    let logo = crate::entities::logo::Entity::find_by_id(id)
+        .one(&state.db)
+        .await
+        .unwrap_or_default();
+    Json(json!(logo))
+}
+pub async fn delete_logo(
+    axum::extract::State(state): axum::extract::State<std::sync::Arc<crate::AppState>>,
+    axum::extract::Path(id): axum::extract::Path<i64>,
+) -> Json<Value> {
+    let _ = crate::entities::logo::Entity::delete_by_id(id)
+        .exec(&state.db)
+        .await;
+    Json(json!({"success": true}))
+}
 #[derive(serde::Deserialize)]
 pub struct UpdateLogoRequest {
     name: Option<String>,
     url: Option<String>,
 }
-pub async fn update_logo(axum::extract::State(state): axum::extract::State<std::sync::Arc<crate::AppState>>, axum::extract::Path(id): axum::extract::Path<i64>, axum::Json(payload): axum::Json<UpdateLogoRequest>) -> Json<Value> { use sea_orm::{ActiveModelTrait, Set}; if let Ok(Some(model)) = crate::entities::logo::Entity::find_by_id(id).one(&state.db).await { let mut active: crate::entities::logo::ActiveModel = model.into(); if let Some(n) = payload.name { active.name = Set(n); } if let Some(u) = payload.url { active.url = Set(u); } let _ = active.update(&state.db).await; } Json(json!({"success": true})) }
+pub async fn update_logo(
+    axum::extract::State(state): axum::extract::State<std::sync::Arc<crate::AppState>>,
+    axum::extract::Path(id): axum::extract::Path<i64>,
+    axum::Json(payload): axum::Json<UpdateLogoRequest>,
+) -> Json<Value> {
+    use sea_orm::{ActiveModelTrait, Set};
+    if let Ok(Some(model)) = crate::entities::logo::Entity::find_by_id(id)
+        .one(&state.db)
+        .await
+    {
+        let mut active: crate::entities::logo::ActiveModel = model.into();
+        if let Some(n) = payload.name {
+            active.name = Set(n);
+        }
+        if let Some(u) = payload.url {
+            active.url = Set(u);
+        }
+        let _ = active.update(&state.db).await;
+    }
+    Json(json!({"success": true}))
+}
 #[derive(serde::Deserialize)]
 pub struct BulkDeleteLogosRequest {
     logo_ids: Vec<i64>,
 }
-pub async fn bulk_delete_logos(axum::extract::State(state): axum::extract::State<std::sync::Arc<crate::AppState>>, axum::Json(payload): axum::Json<BulkDeleteLogosRequest>) -> Json<Value> { use sea_orm::{QueryFilter, ColumnTrait}; let _ = crate::entities::logo::Entity::delete_many().filter(crate::entities::logo::Column::Id.is_in(payload.logo_ids)).exec(&state.db).await; Json(json!({"success": true})) }
-pub async fn cleanup_unused_logos(axum::extract::State(state): axum::extract::State<std::sync::Arc<crate::AppState>>) -> Json<Value> { use sea_orm::{QueryFilter, ColumnTrait}; let channels = crate::entities::channel::Entity::find().all(&state.db).await.unwrap_or_default(); let mut used_logos = vec![]; for ch in channels { if let Some(logo_id) = ch.logo_id { used_logos.push(logo_id); } } let _ = crate::entities::logo::Entity::delete_many().filter(crate::entities::logo::Column::Id.is_not_in(used_logos)).exec(&state.db).await; Json(json!({"success": true})) }
+pub async fn bulk_delete_logos(
+    axum::extract::State(state): axum::extract::State<std::sync::Arc<crate::AppState>>,
+    axum::Json(payload): axum::Json<BulkDeleteLogosRequest>,
+) -> Json<Value> {
+    use sea_orm::{ColumnTrait, QueryFilter};
+    let _ = crate::entities::logo::Entity::delete_many()
+        .filter(crate::entities::logo::Column::Id.is_in(payload.logo_ids))
+        .exec(&state.db)
+        .await;
+    Json(json!({"success": true}))
+}
+pub async fn cleanup_unused_logos(
+    axum::extract::State(state): axum::extract::State<std::sync::Arc<crate::AppState>>,
+) -> Json<Value> {
+    use sea_orm::{ColumnTrait, QueryFilter};
+    let channels = crate::entities::channel::Entity::find()
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+    let mut used_logos = vec![];
+    for ch in channels {
+        if let Some(logo_id) = ch.logo_id {
+            used_logos.push(logo_id);
+        }
+    }
+    let _ = crate::entities::logo::Entity::delete_many()
+        .filter(crate::entities::logo::Column::Id.is_not_in(used_logos))
+        .exec(&state.db)
+        .await;
+    Json(json!({"success": true}))
+}
 #[derive(serde::Deserialize)]
 pub struct CreateLogoRequest {
     name: String,
     url: String,
 }
-pub async fn upload_logo(axum::extract::State(state): axum::extract::State<std::sync::Arc<crate::AppState>>, axum::Json(payload): axum::Json<CreateLogoRequest>) -> Json<Value> { use sea_orm::{ActiveModelTrait, Set}; let new_logo = crate::entities::logo::ActiveModel { name: Set(payload.name), url: Set(payload.url), ..Default::default() }; let _ = new_logo.insert(&state.db).await; Json(json!({"success": true})) }
+pub async fn upload_logo(
+    axum::extract::State(state): axum::extract::State<std::sync::Arc<crate::AppState>>,
+    axum::Json(payload): axum::Json<CreateLogoRequest>,
+) -> Json<Value> {
+    use sea_orm::{ActiveModelTrait, Set};
+    let new_logo = crate::entities::logo::ActiveModel {
+        name: Set(payload.name),
+        url: Set(payload.url),
+        ..Default::default()
+    };
+    let _ = new_logo.insert(&state.db).await;
+    Json(json!({"success": true}))
+}
 
 pub async fn get_timezones() -> Json<Value> {
     Json(json!({
@@ -81,7 +163,8 @@ pub async fn get_core_settings() -> Json<Value> {
 }
 
 use crate::entities::{
-    channel, channel_group, channel_profile, core_settings, core_systemnotification, core_notificationdismissal, epg_source, m3u_account, stream, user,
+    channel, channel_group, channel_profile, core_notificationdismissal, core_settings,
+    core_systemnotification, epg_source, m3u_account, stream, user,
 };
 use crate::{
     auth::{generate_jwt, verify_password, CurrentUser},
@@ -360,7 +443,7 @@ pub async fn get_notifications(
         .all(&state.db)
         .await
         .unwrap_or_default();
-    
+
     let dismissed_ids: Vec<i64> = dismissals.into_iter().map(|d| d.notification_id).collect();
 
     let mut q = core_systemnotification::Entity::find()
@@ -368,7 +451,7 @@ pub async fn get_notifications(
         .filter(
             sea_orm::Condition::any()
                 .add(core_systemnotification::Column::ExpiresAt.is_null())
-                .add(core_systemnotification::Column::ExpiresAt.gt(now))
+                .add(core_systemnotification::Column::ExpiresAt.gt(now)),
         );
 
     if !dismissed_ids.is_empty() {
@@ -394,11 +477,14 @@ pub async fn get_notifications(
             vec![]
         });
 
-    let results: Vec<Value> = notifications.into_iter().map(|n| {
-        let mut js = serde_json::to_value(&n).unwrap();
-        js["is_dismissed"] = serde_json::json!(false);
-        js
-    }).collect();
+    let results: Vec<Value> = notifications
+        .into_iter()
+        .map(|n| {
+            let mut js = serde_json::to_value(&n).unwrap();
+            js["is_dismissed"] = serde_json::json!(false);
+            js
+        })
+        .collect();
 
     let has_next = (offset + page_size) < count;
     let next_page = if has_next {
@@ -434,7 +520,7 @@ pub async fn get_notifications_count(
         .all(&state.db)
         .await
         .unwrap_or_default();
-    
+
     let dismissed_ids: Vec<i64> = dismissals.into_iter().map(|d| d.notification_id).collect();
 
     let mut q = core_systemnotification::Entity::find()
@@ -442,7 +528,7 @@ pub async fn get_notifications_count(
         .filter(
             sea_orm::Condition::any()
                 .add(core_systemnotification::Column::ExpiresAt.is_null())
-                .add(core_systemnotification::Column::ExpiresAt.gt(now))
+                .add(core_systemnotification::Column::ExpiresAt.gt(now)),
         );
 
     if !dismissed_ids.is_empty() {
@@ -467,39 +553,39 @@ pub async fn dismiss_all_notifications(
 ) -> Json<Value> {
     let user_id = current_user.0.id;
     let now: chrono::DateTime<chrono::FixedOffset> = chrono::Utc::now().into();
-    
+
     // In a full implementation, we'd find which ones are active and insert dismissals for them
     // For simplicity, we just insert a dummy record or mark all as dismissed if the frontend just needs success
     // Actually, we can fetch all non-dismissed and bulk insert.
     // For now, let's just return success so the frontend clears them.
     // To be perfectly correct, let's fetch active notifications that aren't dismissed:
-    
+
     let mut q = core_systemnotification::Entity::find()
         .filter(core_systemnotification::Column::IsActive.eq(true))
         .filter(
             sea_orm::Condition::any()
                 .add(core_systemnotification::Column::ExpiresAt.is_null())
-                .add(core_systemnotification::Column::ExpiresAt.gt(now))
+                .add(core_systemnotification::Column::ExpiresAt.gt(now)),
         );
 
     let is_admin = current_user.0.is_superuser || current_user.0.is_staff;
     if !is_admin {
         q = q.filter(core_systemnotification::Column::AdminOnly.eq(false));
     }
-    
+
     let dismissals = core_notificationdismissal::Entity::find()
         .filter(core_notificationdismissal::Column::UserId.eq(user_id))
         .all(&state.db)
         .await
         .unwrap_or_default();
-    
+
     let dismissed_ids: Vec<i64> = dismissals.into_iter().map(|d| d.notification_id).collect();
     if !dismissed_ids.is_empty() {
         q = q.filter(core_systemnotification::Column::Id.is_not_in(dismissed_ids));
     }
 
     let to_dismiss = q.all(&state.db).await.unwrap_or_default();
-    
+
     let mut inserts = Vec::new();
     for n in &to_dismiss {
         inserts.push(core_notificationdismissal::ActiveModel {
@@ -530,7 +616,12 @@ pub async fn dismiss_notification(
 ) -> Json<Value> {
     let user_id = current_user.0.id;
     let now: chrono::DateTime<chrono::FixedOffset> = chrono::Utc::now().into();
-    let action_taken = payload_opt.and_then(|Json(payload)| payload.get("action_taken").and_then(|v| v.as_str()).map(|s| s.to_string()));
+    let action_taken = payload_opt.and_then(|Json(payload)| {
+        payload
+            .get("action_taken")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+    });
 
     let _ = core_notificationdismissal::Entity::insert(core_notificationdismissal::ActiveModel {
         user_id: sea_orm::Set(user_id),
@@ -538,7 +629,9 @@ pub async fn dismiss_notification(
         dismissed_at: sea_orm::Set(now),
         action_taken: sea_orm::Set(action_taken),
         ..Default::default()
-    }).exec(&state.db).await;
+    })
+    .exec(&state.db)
+    .await;
 
     Json(json!({
         "success": true,
@@ -551,24 +644,67 @@ pub async fn create_stream(
     Json(payload): Json<Value>,
 ) -> impl IntoResponse {
     let active = stream::ActiveModel {
-        name: sea_orm::Set(payload.get("name").and_then(|v| v.as_str()).unwrap_or("New Stream").to_string()),
-        url: sea_orm::Set(payload.get("url").and_then(|v| v.as_str()).map(|s| s.to_string())),
-        logo_url: sea_orm::Set(payload.get("logo_url").and_then(|v| v.as_str()).map(|s| s.to_string())),
-        tvg_id: sea_orm::Set(payload.get("tvg_id").and_then(|v| v.as_str()).map(|s| s.to_string())),
-        local_file: sea_orm::Set(payload.get("local_file").and_then(|v| v.as_str()).map(|s| s.to_string())),
+        name: sea_orm::Set(
+            payload
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("New Stream")
+                .to_string(),
+        ),
+        url: sea_orm::Set(
+            payload
+                .get("url")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
+        ),
+        logo_url: sea_orm::Set(
+            payload
+                .get("logo_url")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
+        ),
+        tvg_id: sea_orm::Set(
+            payload
+                .get("tvg_id")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
+        ),
+        local_file: sea_orm::Set(
+            payload
+                .get("local_file")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
+        ),
         current_viewers: sea_orm::Set(0),
-        updated_at: sea_orm::Set(chrono::Utc::now().with_timezone(&chrono::FixedOffset::east_opt(0).unwrap())),
+        updated_at: sea_orm::Set(
+            chrono::Utc::now().with_timezone(&chrono::FixedOffset::east_opt(0).unwrap()),
+        ),
         m3u_account_id: sea_orm::Set(payload.get("m3u_account_id").and_then(|v| v.as_i64())),
         stream_profile_id: sea_orm::Set(payload.get("stream_profile_id").and_then(|v| v.as_i64())),
-        is_custom: sea_orm::Set(payload.get("is_custom").and_then(|v| v.as_bool()).unwrap_or(true)),
+        is_custom: sea_orm::Set(
+            payload
+                .get("is_custom")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true),
+        ),
         channel_group_id: sea_orm::Set(payload.get("channel_group").and_then(|v| v.as_i64())),
-        last_seen: sea_orm::Set(chrono::Utc::now().with_timezone(&chrono::FixedOffset::east_opt(0).unwrap())),
-        stream_hash: sea_orm::Set(payload.get("stream_hash").and_then(|v| v.as_str()).map(|s| s.to_string())),
+        last_seen: sea_orm::Set(
+            chrono::Utc::now().with_timezone(&chrono::FixedOffset::east_opt(0).unwrap()),
+        ),
+        stream_hash: sea_orm::Set(
+            payload
+                .get("stream_hash")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
+        ),
         custom_properties: sea_orm::Set(payload.get("custom_properties").cloned()),
         ..Default::default()
     };
 
-    match stream::Entity::insert(active).exec_with_returning(&state.db).await {
+    match stream::Entity::insert(active)
+        .exec_with_returning(&state.db)
+        .await
+    {
         Ok(inserted) => {
             let mut js = serde_json::to_value(&inserted).unwrap();
             js["channel_group"] = js["channel_group_id"].clone();
@@ -577,8 +713,11 @@ pub async fn create_stream(
                 js["stream_profile"] = json!(p_id);
             }
             (StatusCode::CREATED, Json(js))
-        },
-        Err(e) => (StatusCode::BAD_REQUEST, Json(json!({"error": format!("Failed to create stream: {}", e)}))),
+        }
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": format!("Failed to create stream: {}", e)})),
+        ),
     }
 }
 
