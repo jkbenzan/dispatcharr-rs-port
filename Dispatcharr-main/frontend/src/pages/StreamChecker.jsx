@@ -160,14 +160,32 @@ const StreamChecker = () => {
                   Testing takes ~30s per stream as FFmpeg analyzes the real-time bitrate.
                 </Text>
               </Box>
-              <Button
-                leftSection={<Play size={16} />}
-                color="blue"
-                disabled={selectedChannelIds.length === 0 || status.is_running}
-                onClick={handleStartBulkCheck}
-              >
-                Start Bulk Check ({selectedChannelIds.length} channels)
-              </Button>
+              <Group>
+                <Button
+                  leftSection={<Wand2 size={16} />}
+                  color="violet"
+                  disabled={selectedChannelIds.length === 0 || status.is_running}
+                  onClick={async () => {
+                    try {
+                      await API.bulkSortStreams(selectedChannelIds);
+                      notifications.show({ title: 'Success', message: 'Successfully sorted streams!', color: 'green' });
+                      setSelectedChannelIds([]);
+                    } catch (e) {
+                      notifications.show({ title: 'Error', message: 'Failed to sort streams.', color: 'red' });
+                    }
+                  }}
+                >
+                  Auto-Sort ({selectedChannelIds.length})
+                </Button>
+                <Button
+                  leftSection={<Play size={16} />}
+                  color="blue"
+                  disabled={selectedChannelIds.length === 0 || status.is_running}
+                  onClick={handleStartBulkCheck}
+                >
+                  Start Bulk Check ({selectedChannelIds.length})
+                </Button>
+              </Group>
             </Group>
           </Paper>
 
@@ -178,12 +196,22 @@ const StreamChecker = () => {
         </Tabs.Panel>
 
         <Tabs.Panel value="sorting" pt="xl">
+          <Paper withBorder shadow="sm" p="md" radius="md" mb="md">
+            <Group justify="space-between">
+              <Box>
+                <Title order={4}>Sorting Rules Engine</Title>
+                <Text size="sm" c="dimmed">
+                  Create rules to automatically sort streams within your channels based on FFprobe metrics.
+                </Text>
+              </Box>
+              <Button color="blue" onClick={() => notifications.show({ message: 'Sorting rules form coming next!'})}>
+                Add Rule
+              </Button>
+            </Group>
+          </Paper>
+
           <Paper withBorder shadow="sm" p="md" radius="md">
-            <Title order={4}>Sorting Rules Engine (Phase 2)</Title>
-            <Text size="sm" c="dimmed" mt="xs">
-              Here you will be able to create scoring rules based on FFprobe metrics (Bitrate, Resolution, Codec) 
-              to automatically sort streams within your channels. Coming soon!
-            </Text>
+             <Text c="dimmed" size="sm" fs="italic">Table of rules will be rendered here...</Text>
           </Paper>
         </Tabs.Panel>
 

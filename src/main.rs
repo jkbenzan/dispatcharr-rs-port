@@ -298,6 +298,21 @@ async fn main() {
             "/api/streams/bulk-check/status/",
             get(stream_checker::checker::get_bulk_check_status),
         )
+        // --- SORTING RULES ---
+        .route(
+            "/api/stream-checker/sorting-rules/",
+            get(stream_checker::checker::list_sorting_rules)
+                .post(stream_checker::checker::create_sorting_rule),
+        )
+        .route(
+            "/api/stream-checker/sorting-rules/:id/",
+            put(stream_checker::checker::update_sorting_rule)
+                .delete(stream_checker::checker::delete_sorting_rule),
+        )
+        .route(
+            "/api/channels/bulk-sort-streams/",
+            post(stream_checker::checker::bulk_sort_streams),
+        )
         .route(
             "/api/channels/streams/filter-options/",
             get(api::get_stream_filter_options),

@@ -14,6 +14,9 @@ use std::time::Duration;
 
 use crate::AppState;
 use crate::entities::stream;
+use crate::entities::stream_sorting_rule;
+use crate::entities::channel_stream;
+use sea_orm::{ActiveValue, QueryOrder};
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct BulkCheckStatus {
@@ -317,4 +320,196 @@ pub async fn get_bulk_check_status(
 ) -> impl IntoResponse {
     let status = state.bulk_check_status.read().await;
     (StatusCode::OK, Json(status.clone()))
+}
+
+// ================= SORTING RULES =================
+
+pub async fn list_sorting_rules(
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    match stream_sorting_rule::Entity::find().all(&state.db).await {
+        Ok(rules) => (StatusCode::OK, Json(rules)),
+        Err(e) => {
+            error!("Failed to fetch sorting rules: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(vec![]))
+        }
+    }
+}
+
+#[derive(Deserialize)]
+pub struct CreateRulePayload {
+    pub name: String,
+    pub priority: i32,
+    pub property: String,
+    pub operator: String,
+    pub value: String,
+    pub score_modifier: i32,
+}
+
+pub async fn create_sorting_rule(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<CreateRulePayload>,
+) -> impl IntoResponse {
+    let rule = stream_sorting_rule::ActiveModel {
+        name: ActiveValue::Set(payload.name),
+        priority: ActiveValue::Set(payload.priority),
+        property: ActiveValue::Set(payload.property),
+        operator: ActiveValue::Set(payload.operator),
+        value: ActiveValue::Set(payload.value),
+        score_modifier: ActiveValue::Set(payload.score_modifier),
+        ..Default::default()
+    };
+
+    match rule.insert(&state.db).await {
+        Ok(inserted) => (StatusCode::CREATED, Json(json!({"success": true, "rule": inserted}))),
+        Err(e) => {
+            error!("Failed to create rule: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"success": false, "message": "Failed to create rule"})))
+        }
+    }
+}
+
+pub async fn update_sorting_rule(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
+    Json(payload): Json<CreateRulePayload>,
+) -> impl IntoResponse {
+    let mut rule: stream_sorting_rule::ActiveModel = match stream_sorting_rule::Entity::find_by_id(id).one(&state.db).await {
+        Ok(Some(r)) => r.into(),
+        _ => return (StatusCode::NOT_FOUND, Json(json!({"success": false, "message": "Rule not found"}))),
+    };
+
+    rule.name = ActiveValue::Set(payload.name);
+    rule.priority = ActiveValue::Set(payload.priority);
+    rule.property = ActiveValue::Set(payload.property);
+    rule.operator = ActiveValue::Set(payload.operator);
+    rule.value = ActiveValue::Set(payload.value);
+    rule.score_modifier = ActiveValue::Set(payload.score_modifier);
+
+    match rule.update(&state.db).await {
+        Ok(updated) => (StatusCode::OK, Json(json!({"success": true, "rule": updated}))),
+        Err(e) => {
+            error!("Failed to update rule: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"success": false, "message": "Failed to update rule"})))
+        }
+    }
+}
+
+pub async fn delete_sorting_rule(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
+) -> impl IntoResponse {
+    match stream_sorting_rule::Entity::delete_by_id(id).exec(&state.db).await {
+        Ok(_) => (StatusCode::OK, Json(json!({"success": true}))),
+        Err(e) => {
+            error!("Failed to delete rule: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"success": false, "message": "Failed to delete rule"})))
+        }
+    }
+}
+
+// ================= SORTING LOGIC =================
+
+#[derive(Deserialize)]
+pub struct BulkSortRequest {
+    pub channel_ids: Vec<i64>,
+}
+
+fn evaluate_rule(rule: &stream_sorting_rule::Model, stream_stats: &Value) -> bool {
+    let val = stream_stats.get(&rule.property);
+    let target = &rule.value;
+    
+    match rule.operator.as_str() {
+        "==" => {
+            if let Some(v) = val {
+                if let Some(s) = v.as_str() { return s == target; }
+                if let Some(i) = v.as_i64() { return i.to_string() == *target; }
+            }
+            false
+        },
+        "!=" => {
+            if let Some(v) = val {
+                if let Some(s) = v.as_str() { return s != target; }
+                if let Some(i) = v.as_i64() { return i.to_string() != *target; }
+            }
+            true
+        },
+        ">=" => {
+            if let Some(v) = val {
+                if let (Some(i), Ok(t)) = (v.as_i64(), target.parse::<i64>()) { return i >= t; }
+            }
+            false
+        },
+        "<=" => {
+            if let Some(v) = val {
+                if let (Some(i), Ok(t)) = (v.as_i64(), target.parse::<i64>()) { return i <= t; }
+            }
+            false
+        },
+        "contains" => {
+            if let Some(v) = val {
+                if let Some(s) = v.as_str() { return s.contains(target); }
+            }
+            false
+        },
+        _ => false,
+    }
+}
+
+pub async fn bulk_sort_streams(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<BulkSortRequest>,
+) -> impl IntoResponse {
+    let rules = match stream_sorting_rule::Entity::find().order_by_asc(stream_sorting_rule::Column::Priority).all(&state.db).await {
+        Ok(r) => r,
+        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"success": false, "message": "Failed to load rules"}))),
+    };
+
+    let mut sorted_channels = 0;
+
+    for channel_id in payload.channel_ids {
+        // Find all channel streams
+        let channel_streams = match channel_stream::Entity::find()
+            .filter(channel_stream::Column::ChannelId.eq(channel_id))
+            .all(&state.db).await {
+                Ok(cs) => cs,
+                Err(_) => continue,
+            };
+
+        let mut scored_streams: Vec<(channel_stream::Model, i32)> = Vec::new();
+
+        for cs in channel_streams {
+            let mut score = 0;
+            // Load the stream
+            if let Ok(Some(stream)) = stream::Entity::find_by_id(cs.stream_id).one(&state.db).await {
+                if let Some(props) = stream.custom_properties {
+                    if let Some(stats) = props.get("stream_stats") {
+                        for rule in &rules {
+                            if evaluate_rule(rule, stats) {
+                                score += rule.score_modifier;
+                            }
+                        }
+                    }
+                }
+            }
+            scored_streams.push((cs, score));
+        }
+
+        // Sort descending by score
+        scored_streams.sort_by(|a, b| b.1.cmp(&a.1));
+
+        // Update the database with new ordering
+        for (index, (cs, _score)) in scored_streams.into_iter().enumerate() {
+            let mut active_cs: channel_stream::ActiveModel = cs.into();
+            active_cs.order = ActiveValue::Set(index as i32);
+            let _ = active_cs.update(&state.db).await;
+        }
+
+        sorted_channels += 1;
+    }
+
+    (StatusCode::OK, Json(json!({
+        "success": true, 
+        "message": format!("Successfully sorted {} channels.", sorted_channels)
+    })))
 }

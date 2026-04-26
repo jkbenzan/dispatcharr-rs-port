@@ -1099,6 +1099,69 @@ export default class API {
     }
   }
 
+  static async listSortingRules() {
+    try {
+      const response = await request(`${host}/api/stream-checker/sorting-rules/`, {
+        method: 'GET',
+      });
+      return response;
+    } catch (error) {
+      console.error('Failed to list sorting rules:', error);
+      throw error;
+    }
+  }
+
+  static async createSortingRule(payload) {
+    try {
+      const response = await request(`${host}/api/stream-checker/sorting-rules/`, {
+        method: 'POST',
+        body: payload,
+      });
+      return response;
+    } catch (error) {
+      console.error('Failed to create sorting rule:', error);
+      throw error;
+    }
+  }
+
+  static async updateSortingRule(id, payload) {
+    try {
+      const response = await request(`${host}/api/stream-checker/sorting-rules/${id}/`, {
+        method: 'PUT',
+        body: payload,
+      });
+      return response;
+    } catch (error) {
+      console.error('Failed to update sorting rule:', error);
+      throw error;
+    }
+  }
+
+  static async deleteSortingRule(id) {
+    try {
+      await request(`${host}/api/stream-checker/sorting-rules/${id}/`, {
+        method: 'DELETE',
+      });
+      return true;
+    } catch (error) {
+      console.error('Failed to delete sorting rule:', error);
+      throw error;
+    }
+  }
+
+  static async bulkSortStreams(channelIds) {
+    try {
+      const response = await request(`${host}/api/channels/bulk-sort-streams/`, {
+        method: 'POST',
+        body: { channel_ids: channelIds },
+      });
+      return response;
+    } catch (error) {
+      console.error('Failed to bulk sort streams:', error);
+      throw error;
+    }
+  }
+
   static async deleteStream(id) {
     try {
       await request(`${host}/api/channels/streams/${id}/`, {
