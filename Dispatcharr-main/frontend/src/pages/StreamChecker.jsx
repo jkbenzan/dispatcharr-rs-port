@@ -12,12 +12,12 @@ import {
   Badge,
 } from '@mantine/core';
 import {
-  IconActivity,
-  IconSettings,
-  IconWand,
-  IconCheck,
-  IconPlayerPlay,
-} from '@tabler/icons-react';
+  Activity,
+  Settings,
+  Wand2,
+  CheckSquare,
+  Play,
+} from 'lucide-react';
 import StreamsTable from '../components/tables/StreamsTable';
 import API from '../api';
 import useStreamsTableStore from '../store/streamsTable';
@@ -95,7 +95,7 @@ const StreamChecker = () => {
         <Card withBorder shadow="sm" radius="md" mb="xl" p="md">
           <Group justify="space-between" mb="xs">
             <Text fw={500} display="flex" style={{ alignItems: 'center', gap: '8px' }}>
-              <IconActivity size={18} /> Active Bulk Check
+              <Activity size={18} /> Active Bulk Check
             </Text>
             <Badge color="blue" variant="light">
               {status.completed} / {status.total} Completed
@@ -116,13 +116,13 @@ const StreamChecker = () => {
 
       <Tabs value={activeTab} onChange={setActiveTab} variant="outline" radius="md">
         <Tabs.List>
-          <Tabs.Tab value="bulk" leftSection={<IconCheck size={16} />}>
+          <Tabs.Tab value="bulk" leftSection={<CheckSquare size={16} />}>
             Bulk Tester
           </Tabs.Tab>
-          <Tabs.Tab value="sorting" leftSection={<IconSettings size={16} />}>
+          <Tabs.Tab value="sorting" leftSection={<Settings size={16} />}>
             Sorting Rules
           </Tabs.Tab>
-          <Tabs.Tab value="auto" leftSection={<IconWand size={16} />}>
+          <Tabs.Tab value="auto" leftSection={<Wand2 size={16} />}>
             Auto-Assignment
           </Tabs.Tab>
         </Tabs.List>
@@ -138,7 +138,7 @@ const StreamChecker = () => {
                 </Text>
               </Box>
               <Button
-                leftSection={<IconPlayerPlay size={16} />}
+                leftSection={<Play size={16} />}
                 color="blue"
                 disabled={selectedStreamIds.length === 0 || status.is_running}
                 onClick={handleStartBulkCheck}
