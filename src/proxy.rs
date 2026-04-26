@@ -73,8 +73,8 @@ pub async fn handle_proxy(
         if let Some(stream) = stream_opt {
             if let Some(target_url) = &stream.url {
                 println!(
-                    "▶️ Proxying Stream Channel: {} -> {}",
-                    parsed_id, target_url
+                    "▶️ Proxying Stream Identifier: {} -> {}",
+                    channel_id, target_url
                 );
 
                 let resp = state

@@ -2,7 +2,6 @@ use axum::Json;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use sea_orm::sea_query::extension::postgres::PgExpr;
-use sea_orm::QueryOrder;
 // --------------------------------------------------------
 // DATA SHAPES FOR THE FRONTEND
 // --------------------------------------------------------
