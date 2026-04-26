@@ -20,8 +20,33 @@
 4. Submit Pull Request
 
 ---
+1. [x] Implement `get_notifications`:
+   - Change `src/api.rs` to replace the mock implementation.
+   - Inject `State<Arc<AppState>>` and `CurrentUser` extractor into `get_notifications`.
+   - Query `core_systemnotification::Entity` to find active notifications.
+   - Filter by user permissions: non-admins shouldn't see `admin_only=true` notifications.
+   - Filter out expired and dismissed notifications.
+   - Make sure to format response to match DRF's output shape (usually `{"count": X, "next": null, "previous": null, "results": [...]}`).
+
+2. [x] Implement `get_notifications_count`:
+   - Create a separate handler in `src/api.rs` specifically for `/count/` endpoint.
+   - Count matching active notifications that have not been dismissed/expired.
+   - Return `{ "count": X }`.
+   - Update `src/main.rs` to point `/api/core/notifications/count/` to the new `get_notifications_count`.
+
+3. [x] Ensure Pre-commit Checks run
+   - [x] Format code
+   - [x] Lint code
+   - [x] Run tests
+
+4. Submit Pull Request
+
+---
 
 ## Future Stream Checker Features (Backlog)
 1. **Extended Performance Testing**: Add an option to run longer tests (e.g., 2-5 minutes) to monitor if stream performance drops off or buffering occurs after an initial period.
 2. **Static/Fake Stream Detection**: Integrate a filter into FFmpeg/FFprobe to detect static frames (e.g., a black screen or a single frozen image) to identify fake or unresponsive streams.
 3. **Auto-Delete Broken Streams**: Implement a feature to automatically delete or prune streams that fail the health check or are determined to be broken/fake.
+
+4. **Phase 3: Auto-Assignment Routing Rules (Low Priority)**: Create rules to automatically route newly imported M3U streams into existing channels based on predefined conditions.
+5. **Database Initialization Script**: Add a DB creation script so that new installs can automatically initialize the schema without manual SQL execution.
