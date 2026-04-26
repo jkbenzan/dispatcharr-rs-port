@@ -1,7 +1,7 @@
 use axum::Json;
+use sea_orm::sea_query::extension::postgres::PgExpr;
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use sea_orm::sea_query::extension::postgres::PgExpr;
 // --------------------------------------------------------
 // DATA SHAPES FOR THE FRONTEND
 // --------------------------------------------------------
@@ -335,10 +335,14 @@ pub async fn get_channels(
     let mut q = channel::Entity::find();
 
     if let Some(name) = params.get("name") {
-        q = q.filter(sea_orm::sea_query::Expr::col(channel::Column::Name).ilike(format!("%{}%", name)));
+        q = q.filter(
+            sea_orm::sea_query::Expr::col(channel::Column::Name).ilike(format!("%{}%", name)),
+        );
     }
     if let Some(search) = params.get("search") {
-        q = q.filter(sea_orm::sea_query::Expr::col(channel::Column::Name).ilike(format!("%{}%", search)));
+        q = q.filter(
+            sea_orm::sea_query::Expr::col(channel::Column::Name).ilike(format!("%{}%", search)),
+        );
     }
     if let Some(num) = params.get("channel_number") {
         if let Ok(num_val) = num.parse::<f64>() {
@@ -857,7 +861,8 @@ pub async fn get_streams(
             let mut condition = sea_orm::sea_query::Condition::any();
             for name in &group_names {
                 condition = condition.add(
-                    sea_orm::sea_query::Expr::col(crate::entities::channel_group::Column::Name).ilike(format!("%{}%", name))
+                    sea_orm::sea_query::Expr::col(crate::entities::channel_group::Column::Name)
+                        .ilike(format!("%{}%", name)),
                 );
             }
 
@@ -866,7 +871,7 @@ pub async fn get_streams(
                 .all(&state.db)
                 .await
                 .unwrap_or_default();
-                
+
             let group_ids: Vec<i64> = groups.into_iter().map(|g| g.id).collect();
             if !group_ids.is_empty() {
                 q = q.filter(stream::Column::ChannelGroupId.is_in(group_ids));
@@ -877,10 +882,14 @@ pub async fn get_streams(
     }
 
     if let Some(name) = params.get("name") {
-        q = q.filter(sea_orm::sea_query::Expr::col(stream::Column::Name).ilike(format!("%{}%", name)));
+        q = q.filter(
+            sea_orm::sea_query::Expr::col(stream::Column::Name).ilike(format!("%{}%", name)),
+        );
     }
     if let Some(search) = params.get("search") {
-        q = q.filter(sea_orm::sea_query::Expr::col(stream::Column::Name).ilike(format!("%{}%", search)));
+        q = q.filter(
+            sea_orm::sea_query::Expr::col(stream::Column::Name).ilike(format!("%{}%", search)),
+        );
     }
 
     if let Some(tvg) = params.get("tvg_id") {
@@ -888,7 +897,8 @@ pub async fn get_streams(
     }
 
     if let Some(url) = params.get("url") {
-        q = q.filter(sea_orm::sea_query::Expr::col(stream::Column::Url).ilike(format!("%{}%", url)));
+        q = q
+            .filter(sea_orm::sea_query::Expr::col(stream::Column::Url).ilike(format!("%{}%", url)));
     }
 
     let count = q.clone().count(&state.db).await.unwrap_or(0);
@@ -2396,8 +2406,8 @@ pub async fn delete_server_group(
 
 // --- Refresh Endpoints ---
 pub async fn refresh_m3u_all(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     use sea_orm::sea_query::extension::postgres::PgExpr;
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     let accounts = match m3u_account::Entity::find()
         .filter(m3u_account::Column::IsActive.eq(true))
         .all(&state.db)

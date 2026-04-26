@@ -17,9 +17,6 @@ const UserAgentsTable = React.lazy(
 const StreamProfilesTable = React.lazy(
   () => import('../components/tables/StreamProfilesTable.jsx')
 );
-const BackupManager = React.lazy(
-  () => import('../components/backups/BackupManager.jsx')
-);
 import useAuthStore from '../store/auth';
 import { USER_LEVELS } from '../constants';
 import UiSettingsForm from '../components/forms/settings/UiSettingsForm.jsx';
@@ -193,16 +190,6 @@ const SettingsPage = () => {
                 </AccordionPanel>
               </AccordionItem>
 
-              <AccordionItem value="backups">
-                <AccordionControl>Backup & Restore</AccordionControl>
-                <AccordionPanel>
-                  <ErrorBoundary>
-                    <Suspense fallback={<Loader />}>
-                      <BackupManager active={accordianValue === 'backups'} />
-                    </Suspense>
-                  </ErrorBoundary>
-                </AccordionPanel>
-              </AccordionItem>
 
               <AccordionItem value="user-limits">
                 <AccordionControl>User Limits</AccordionControl>
