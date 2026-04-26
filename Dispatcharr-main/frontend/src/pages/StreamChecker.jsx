@@ -22,6 +22,9 @@ import ChannelsTable from '../components/tables/ChannelsTable';
 import API from '../api';
 import useChannelsTableStore from '../store/channelsTable';
 import { notifications } from '@mantine/notifications';
+import SortingRuleForm from '../components/forms/SortingRuleForm';
+import { Table, ActionIcon, Center } from '@mantine/core';
+import { SquarePen, Trash2 } from 'lucide-react';
 
 const StreamChecker = () => {
   const [activeTab, setActiveTab] = useState('bulk');
@@ -38,6 +41,24 @@ const StreamChecker = () => {
   const selectedChannelIds = useChannelsTableStore((state) => state.selectedChannelIds) || [];
   const setSelectedChannelIds = useChannelsTableStore((state) => state.setSelectedChannelIds);
   const channels = useChannelsTableStore((state) => state.channels);
+
+  // Sorting Rules State
+  const [rules, setRules] = useState([]);
+  const [ruleModalOpen, setRuleModalOpen] = useState(false);
+  const [editingRule, setEditingRule] = useState(null);
+
+  const fetchRules = async () => {
+    try {
+      const data = await API.listSortingRules();
+      if (data) setRules(data);
+    } catch (e) {
+      console.error('Failed to fetch sorting rules', e);
+    }
+  };
+
+  useEffect(() => {
+    fetchRules();
+  }, []);
 
   useEffect(() => {
     let interval;
@@ -191,7 +212,7 @@ const StreamChecker = () => {
 
           {/* Render the standard ChannelsTable */}
           <Box style={{ border: '1px solid #333', borderRadius: '8px', overflow: 'hidden' }}>
-             <ChannelsTable />
+             <ChannelsTable hideLinks={true} />
           </Box>
         </Tabs.Panel>
 
@@ -204,14 +225,61 @@ const StreamChecker = () => {
                   Create rules to automatically sort streams within your channels based on FFprobe metrics.
                 </Text>
               </Box>
-              <Button color="blue" onClick={() => notifications.show({ message: 'Sorting rules form coming next!'})}>
+              <Button color="blue" onClick={() => { setEditingRule(null); setRuleModalOpen(true); }}>
                 Add Rule
               </Button>
             </Group>
           </Paper>
 
           <Paper withBorder shadow="sm" p="md" radius="md">
-             <Text c="dimmed" size="sm" fs="italic">Table of rules will be rendered here...</Text>
+             {rules.length === 0 ? (
+               <Center p="xl"><Text c="dimmed" size="sm" fs="italic">No sorting rules defined yet. Create one above.</Text></Center>
+             ) : (
+               <Table striped highlightOnHover withTableBorder>
+                 <Table.Thead>
+                   <Table.Tr>
+                     <Table.Th>Priority</Table.Th>
+                     <Table.Th>Name</Table.Th>
+                     <Table.Th>Condition</Table.Th>
+                     <Table.Th>Score Modifier</Table.Th>
+                     <Table.Th style={{ width: 100 }}>Actions</Table.Th>
+                   </Table.Tr>
+                 </Table.Thead>
+                 <Table.Tbody>
+                   {rules.sort((a,b) => a.priority - b.priority).map((rule) => (
+                     <Table.Tr key={rule.id}>
+                       <Table.Td>{rule.priority}</Table.Td>
+                       <Table.Td fw={500}>{rule.name}</Table.Td>
+                       <Table.Td>
+                         <Badge variant="light" color="gray">
+                           {rule.property.replace('stream_stats.', '')} {rule.operator} {rule.value}
+                         </Badge>
+                       </Table.Td>
+                       <Table.Td>
+                         <Badge color={rule.score_modifier > 0 ? 'green' : 'red'}>
+                           {rule.score_modifier > 0 ? '+' : ''}{rule.score_modifier}
+                         </Badge>
+                       </Table.Td>
+                       <Table.Td>
+                         <Group gap="xs">
+                           <ActionIcon variant="subtle" color="blue" onClick={() => { setEditingRule(rule); setRuleModalOpen(true); }}>
+                             <SquarePen size={16} />
+                           </ActionIcon>
+                           <ActionIcon variant="subtle" color="red" onClick={async () => {
+                             if (window.confirm('Delete this rule?')) {
+                               await API.deleteSortingRule(rule.id);
+                               fetchRules();
+                             }
+                           }}>
+                             <Trash2 size={16} />
+                           </ActionIcon>
+                         </Group>
+                       </Table.Td>
+                     </Table.Tr>
+                   ))}
+                 </Table.Tbody>
+               </Table>
+             )}
           </Paper>
         </Tabs.Panel>
 
@@ -224,6 +292,13 @@ const StreamChecker = () => {
           </Paper>
         </Tabs.Panel>
       </Tabs>
+
+      <SortingRuleForm 
+        opened={ruleModalOpen} 
+        onClose={() => setRuleModalOpen(false)} 
+        rule={editingRule} 
+        onSuccess={fetchRules} 
+      />
     </Box>
   );
 };

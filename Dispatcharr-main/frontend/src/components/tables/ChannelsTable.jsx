@@ -246,7 +246,7 @@ const ChannelRowActions = React.memo(
   }
 );
 
-const ChannelsTable = ({ onReady }) => {
+const ChannelsTable = ({ onReady, hideLinks = false }) => {
   // EPG data lookup
   const tvgsById = useEPGsStore((s) => s.tvgsById);
   const epgs = useEPGsStore((s) => s.epgs);
@@ -1216,20 +1216,22 @@ const ChannelsTable = ({ onReady }) => {
               marginLeft: 10,
             }}
           >
-            <Text
-              w={37}
-              h={17}
-              style={{
-                fontFamily: 'Inter, sans-serif',
-                fontWeight: 400,
-                fontSize: '14px',
-                lineHeight: 1,
-                letterSpacing: '-0.3px',
-                color: 'gray.6', // Adjust this to match MUI's theme.palette.text.secondary
-              }}
-            >
-              Links:
-            </Text>
+            {hideLinks ? null : (
+              <>
+                <Text
+                  w={37}
+                  h={17}
+                  style={{
+                    fontFamily: 'Inter, sans-serif',
+                    fontWeight: 400,
+                    fontSize: '14px',
+                    lineHeight: 1,
+                    letterSpacing: '-0.3px',
+                    color: 'gray.6', // Adjust this to match MUI's theme.palette.text.secondary
+                  }}
+                >
+                  Links:
+                </Text>
             <Group gap={5} style={{ paddingLeft: 10 }}>
               <Popover
                 withArrow
@@ -1499,6 +1501,8 @@ const ChannelsTable = ({ onReady }) => {
                 </Popover.Dropdown>
               </Popover>
             </Group>
+            </>
+          )}
           </Flex>
         </Flex>
 

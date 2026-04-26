@@ -18,3 +18,10 @@
    - [x] Run tests
 
 4. Submit Pull Request
+
+---
+
+## Future Stream Checker Features (Backlog)
+1. **Extended Performance Testing**: Add an option to run longer tests (e.g., 2-5 minutes) to monitor if stream performance drops off or buffering occurs after an initial period.
+2. **Static/Fake Stream Detection**: Integrate a filter into FFmpeg/FFprobe to detect static frames (e.g., a black screen or a single frozen image) to identify fake or unresponsive streams.
+3. **Auto-Delete Broken Streams**: Implement a feature to automatically delete or prune streams that fail the health check or are determined to be broken/fake.
