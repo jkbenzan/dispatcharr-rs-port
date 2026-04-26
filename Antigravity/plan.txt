@@ -49,4 +49,4 @@
 3. **Auto-Delete Broken Streams**: Implement a feature to automatically delete or prune streams that fail the health check or are determined to be broken/fake.
 
 4. **Phase 3: Auto-Assignment Routing Rules (Low Priority)**: Create rules to automatically route newly imported M3U streams into existing channels based on predefined conditions.
-5. **Database Initialization Script**: Add a DB creation script so that new installs can automatically initialize the schema without manual SQL execution.
+5. **Database Initialization Script**: Add a DB creation script so that new installs can automatically initialize the schema without manual SQL execution. This script should also include a permissions section to automatically configure required access rights for the API users.
