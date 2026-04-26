@@ -30,6 +30,7 @@ pub struct AppState {
     pub db: DatabaseConnection,
     pub http_client: reqwest::Client,
     pub ws_sender: tokio::sync::broadcast::Sender<serde_json::Value>,
+    pub active_streams: Arc<tokio::sync::RwLock<std::collections::HashMap<String, crate::proxy::ChannelStats>>>,
 }
 
 async fn ws_handler(ws: WebSocketUpgrade, State(state): State<Arc<AppState>>) -> impl IntoResponse {
@@ -110,6 +111,7 @@ async fn main() {
         db,
         http_client,
         ws_sender,
+        active_streams: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
     });
 
     // SPA Routing: Serve index.html if the user hits a route like /channels directly
@@ -313,6 +315,10 @@ async fn main() {
         .route("/stream/:channel_id", get(proxy::handle_proxy))
         .route("/proxy/ts/stream/:channel_id/", get(proxy::handle_proxy))
         .route("/proxy/ts/stream/:channel_id", get(proxy::handle_proxy))
+        .route("/proxy/ts/status", get(proxy::handle_ts_status))
+        .route("/proxy/ts/status/", get(proxy::handle_ts_status))
+        .route("/proxy/vod/stats", get(proxy::handle_vod_stats))
+        .route("/proxy/vod/stats/", get(proxy::handle_vod_stats))
         // Serve the compiled React frontend for non-API routes
         .nest("/api/accounts", accounts_routes)
         .nest("/api/vod", vod_routes)
