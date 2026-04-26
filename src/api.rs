@@ -165,7 +165,7 @@ pub async fn get_core_settings() -> Json<Value> {
 
 use crate::entities::{
     channel, channel_group, channel_profile, core_notificationdismissal, core_settings,
-    core_streamprofile, core_systemnotification, core_useragent, epg_source, m3u_account, stream, user,
+    core_streamprofile, core_systemnotification, core_useragent, epg_source, m3u_account, stream, user, channel_stream,
 };
 use crate::{
     auth::{generate_jwt, verify_password, CurrentUser},
@@ -426,6 +426,24 @@ pub async fn get_channels(
             .filter_map(|pr| pr.try_get("", "channelprofile_id").ok())
             .collect();
         ch_json["channel_profiles"] = json!(profile_ids);
+
+        // Fetch streams
+        let channel_streams = channel_stream::Entity::find()
+            .filter(channel_stream::Column::ChannelId.eq(ch.id))
+            .order_by_asc(channel_stream::Column::Order)
+            .all(&state.db)
+            .await
+            .unwrap_or_default();
+        
+        let mut streams_json = Vec::new();
+        for cs in channel_streams {
+            let mut cs_json = serde_json::to_value(&cs).unwrap();
+            if let Ok(Some(stream_model)) = stream::Entity::find_by_id(cs.stream_id).one(&state.db).await {
+                cs_json["stream"] = serde_json::to_value(&stream_model).unwrap();
+            }
+            streams_json.push(cs_json);
+        }
+        ch_json["streams"] = json!(streams_json);
 
         let epg = state.db.query_all(Statement::from_sql_and_values(
             sea_orm::DatabaseBackend::Postgres,

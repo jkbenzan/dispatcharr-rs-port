@@ -212,7 +212,7 @@ const StreamChecker = () => {
 
           {/* Render the standard ChannelsTable */}
           <Box style={{ border: '1px solid #333', borderRadius: '8px', overflow: 'hidden' }}>
-             <ChannelsTable hideLinks={true} />
+             <ChannelsTable hideLinks={true} streamCheckerMode={true} />
           </Box>
         </Tabs.Panel>
 
