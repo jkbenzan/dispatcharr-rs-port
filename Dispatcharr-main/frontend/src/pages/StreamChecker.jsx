@@ -35,8 +35,8 @@ const StreamChecker = () => {
     current_stream_name: null,
   });
 
-  const selectedStreamIds = useStreamsTableStore((state) => state.selectedIds);
-  const clearSelection = useStreamsTableStore((state) => state.clearSelection);
+  const selectedStreamIds = useStreamsTableStore((state) => state.selectedStreamIds) || [];
+  const setSelectedStreamIds = useStreamsTableStore((state) => state.setSelectedStreamIds);
 
   useEffect(() => {
     let interval;
@@ -73,7 +73,7 @@ const StreamChecker = () => {
         message: `Started checking ${selectedStreamIds.length} streams...`,
         color: 'blue',
       });
-      clearSelection();
+      setSelectedStreamIds([]);
     } catch (e) {
       notifications.show({
         title: 'Error',
