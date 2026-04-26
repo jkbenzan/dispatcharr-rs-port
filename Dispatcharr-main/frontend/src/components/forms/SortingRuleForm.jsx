@@ -35,11 +35,17 @@ const SortingRuleForm = ({ opened, onClose, rule, onSuccess }) => {
 
   const handleSubmit = async (values) => {
     try {
+      const payload = {
+        ...values,
+        priority: Number(values.priority) || 0,
+        score_modifier: Number(values.score_modifier) || 0,
+      };
+
       if (isEditing) {
-        await API.updateSortingRule(rule.id, values);
+        await API.updateSortingRule(rule.id, payload);
         notifications.show({ title: 'Success', message: 'Rule updated successfully', color: 'green' });
       } else {
-        await API.createSortingRule(values);
+        await API.createSortingRule(payload);
         notifications.show({ title: 'Success', message: 'Rule created successfully', color: 'green' });
       }
       onSuccess();
@@ -69,10 +75,10 @@ const SortingRuleForm = ({ opened, onClose, rule, onSuccess }) => {
             label="Property"
             description="The FFprobe property to evaluate"
             data={[
-              { value: 'video_resolution', label: 'Resolution (e.g. 1080)' },
-              { value: 'video_bitrate', label: 'Video Bitrate' },
-              { value: 'video_codec', label: 'Video Codec (e.g. h264)' },
-              { value: 'audio_codec', label: 'Audio Codec' },
+              { value: 'stream_stats.video_resolution', label: 'Resolution (e.g. 1080)' },
+              { value: 'stream_stats.video_bitrate', label: 'Video Bitrate' },
+              { value: 'stream_stats.video_codec', label: 'Video Codec (e.g. h264)' },
+              { value: 'stream_stats.audio_codec', label: 'Audio Codec' },
             ]}
             withAsterisk
             {...form.getInputProps('property')}
@@ -89,12 +95,38 @@ const SortingRuleForm = ({ opened, onClose, rule, onSuccess }) => {
             withAsterisk
             {...form.getInputProps('operator')}
           />
-          <TextInput
-            label="Target Value"
-            placeholder="e.g. 1080 or h264"
-            withAsterisk
-            {...form.getInputProps('value')}
-          />
+          {form.values.property === 'stream_stats.video_resolution' ? (
+            <Select
+              label="Target Value"
+              description="Resolution height (e.g. 1080)"
+              data={['2160', '1080', '720', '480', '360']}
+              withAsterisk
+              {...form.getInputProps('value')}
+            />
+          ) : form.values.property === 'stream_stats.video_codec' ? (
+            <Select
+              label="Target Value"
+              description="Common video codecs"
+              data={['hevc', 'h264', 'mpeg2video', 'av1']}
+              withAsterisk
+              {...form.getInputProps('value')}
+            />
+          ) : form.values.property === 'stream_stats.audio_codec' ? (
+            <Select
+              label="Target Value"
+              description="Common audio codecs"
+              data={['aac', 'ac3', 'eac3', 'mp3', 'flac']}
+              withAsterisk
+              {...form.getInputProps('value')}
+            />
+          ) : (
+            <TextInput
+              label="Target Value"
+              placeholder="e.g. 1080 or h264"
+              withAsterisk
+              {...form.getInputProps('value')}
+            />
+          )}
           <NumberInput
             label="Score Modifier"
             description="Amount to add (or subtract) to the stream's score if it matches"
