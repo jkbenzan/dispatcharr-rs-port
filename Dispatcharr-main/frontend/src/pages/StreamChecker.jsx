@@ -18,9 +18,9 @@ import {
   CheckSquare,
   Play,
 } from 'lucide-react';
-import StreamsTable from '../components/tables/StreamsTable';
+import ChannelsTable from '../components/tables/ChannelsTable';
 import API from '../api';
-import useStreamsTableStore from '../store/streamsTable';
+import useChannelsTableStore from '../store/channelsTable';
 import { notifications } from '@mantine/notifications';
 
 const StreamChecker = () => {
@@ -35,8 +35,9 @@ const StreamChecker = () => {
     current_stream_name: null,
   });
 
-  const selectedStreamIds = useStreamsTableStore((state) => state.selectedStreamIds) || [];
-  const setSelectedStreamIds = useStreamsTableStore((state) => state.setSelectedStreamIds);
+  const selectedChannelIds = useChannelsTableStore((state) => state.selectedChannelIds) || [];
+  const setSelectedChannelIds = useChannelsTableStore((state) => state.setSelectedChannelIds);
+  const channels = useChannelsTableStore((state) => state.channels);
 
   useEffect(() => {
     let interval;
@@ -57,23 +58,45 @@ const StreamChecker = () => {
   }, []);
 
   const handleStartBulkCheck = async () => {
-    if (selectedStreamIds.length === 0) {
+    if (selectedChannelIds.length === 0) {
       notifications.show({
         title: 'Error',
-        message: 'No streams selected for checking.',
+        message: 'No channels selected for checking.',
         color: 'red',
       });
       return;
     }
 
+    // Extract all stream IDs from the selected channels
+    const streamIdsToTest = [];
+    selectedChannelIds.forEach((channelId) => {
+      const channel = channels.find((c) => c.id === channelId);
+      if (channel && channel.streams) {
+        channel.streams.forEach((channelStream) => {
+          if (channelStream.stream && channelStream.stream.id) {
+            streamIdsToTest.push(channelStream.stream.id);
+          }
+        });
+      }
+    });
+
+    if (streamIdsToTest.length === 0) {
+      notifications.show({
+        title: 'Notice',
+        message: 'The selected channels have no streams assigned to them.',
+        color: 'yellow',
+      });
+      return;
+    }
+
     try {
-      await API.startBulkCheck(selectedStreamIds);
+      await API.startBulkCheck(streamIdsToTest);
       notifications.show({
         title: 'Started',
-        message: `Started checking ${selectedStreamIds.length} streams...`,
+        message: `Started checking ${streamIdsToTest.length} streams across ${selectedChannelIds.length} channels...`,
         color: 'blue',
       });
-      setSelectedStreamIds([]);
+      setSelectedChannelIds([]);
     } catch (e) {
       notifications.show({
         title: 'Error',
@@ -131,26 +154,26 @@ const StreamChecker = () => {
           <Paper withBorder shadow="sm" p="md" radius="md" mb="xl">
             <Group justify="space-between" mb="md">
               <Box>
-                <Title order={4}>Select Streams to Test</Title>
+                <Title order={4}>Select Channels to Test</Title>
                 <Text size="sm" c="dimmed">
-                  Use the table below to filter streams by Account or Group, select them, and hit Start.
+                  Use the table below to select channels. The Bulk Tester will extract and test all streams assigned to the selected channels.
                   Testing takes ~30s per stream as FFmpeg analyzes the real-time bitrate.
                 </Text>
               </Box>
               <Button
                 leftSection={<Play size={16} />}
                 color="blue"
-                disabled={selectedStreamIds.length === 0 || status.is_running}
+                disabled={selectedChannelIds.length === 0 || status.is_running}
                 onClick={handleStartBulkCheck}
               >
-                Start Bulk Check ({selectedStreamIds.length})
+                Start Bulk Check ({selectedChannelIds.length} channels)
               </Button>
             </Group>
           </Paper>
 
-          {/* Render the standard StreamsTable but hide its header so it integrates nicely */}
+          {/* Render the standard ChannelsTable */}
           <Box style={{ border: '1px solid #333', borderRadius: '8px', overflow: 'hidden' }}>
-             <StreamsTable />
+             <ChannelsTable />
           </Box>
         </Tabs.Panel>
 
