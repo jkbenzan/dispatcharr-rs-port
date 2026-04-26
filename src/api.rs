@@ -354,32 +354,36 @@ pub async fn get_channels(
     }
 
     if let Some(cg) = params.get("channel_group") {
-        let group_names: Vec<&str> = cg.split(',').collect();
-        let groups = crate::entities::channel_group::Entity::find()
-            .filter(crate::entities::channel_group::Column::Name.is_in(group_names))
-            .all(&state.db)
-            .await
-            .unwrap_or_default();
-        let group_ids: Vec<i64> = groups.into_iter().map(|g| g.id).collect();
-        if !group_ids.is_empty() {
-            q = q.filter(channel::Column::ChannelGroupId.is_in(group_ids));
-        } else {
-            q = q.filter(channel::Column::Id.eq(-1));
+        if !cg.is_empty() {
+            let group_names: Vec<&str> = cg.split(',').collect();
+            let groups = crate::entities::channel_group::Entity::find()
+                .filter(crate::entities::channel_group::Column::Name.is_in(group_names))
+                .all(&state.db)
+                .await
+                .unwrap_or_default();
+            let group_ids: Vec<i64> = groups.into_iter().map(|g| g.id).collect();
+            if !group_ids.is_empty() {
+                q = q.filter(channel::Column::ChannelGroupId.is_in(group_ids));
+            } else {
+                q = q.filter(channel::Column::Id.eq(-1));
+            }
         }
     }
 
     if let Some(epg) = params.get("epg") {
-        let epg_names: Vec<&str> = epg.split(',').collect();
-        let epgs = crate::entities::epg_data::Entity::find()
-            .filter(crate::entities::epg_data::Column::Name.is_in(epg_names))
-            .all(&state.db)
-            .await
-            .unwrap_or_default();
-        let epg_ids: Vec<i64> = epgs.into_iter().map(|e| e.id).collect();
-        if !epg_ids.is_empty() {
-            q = q.filter(channel::Column::EpgDataId.is_in(epg_ids));
-        } else {
-            q = q.filter(channel::Column::Id.eq(-1));
+        if !epg.is_empty() {
+            let epg_names: Vec<&str> = epg.split(',').collect();
+            let epgs = crate::entities::epg_data::Entity::find()
+                .filter(crate::entities::epg_data::Column::Name.is_in(epg_names))
+                .all(&state.db)
+                .await
+                .unwrap_or_default();
+            let epg_ids: Vec<i64> = epgs.into_iter().map(|e| e.id).collect();
+            if !epg_ids.is_empty() {
+                q = q.filter(channel::Column::EpgDataId.is_in(epg_ids));
+            } else {
+                q = q.filter(channel::Column::Id.eq(-1));
+            }
         }
     }
 
@@ -847,26 +851,30 @@ pub async fn get_streams(
 
     let mut q = stream::Entity::find();
     if let Some(acc_ids_str) = params.get("m3u_account") {
-        let acc_ids: Vec<i64> = acc_ids_str.split(',').filter_map(|s| s.parse().ok()).collect();
-        if !acc_ids.is_empty() {
-            q = q.filter(stream::Column::M3uAccountId.is_in(acc_ids));
-        } else {
-            q = q.filter(stream::Column::Id.eq(-1));
+        if !acc_ids_str.is_empty() {
+            let acc_ids: Vec<i64> = acc_ids_str.split(',').filter_map(|s| s.parse().ok()).collect();
+            if !acc_ids.is_empty() {
+                q = q.filter(stream::Column::M3uAccountId.is_in(acc_ids));
+            } else {
+                q = q.filter(stream::Column::Id.eq(-1));
+            }
         }
     }
 
     if let Some(cg) = params.get("channel_group") {
-        let group_names: Vec<&str> = cg.split(',').collect();
-        let groups = crate::entities::channel_group::Entity::find()
-            .filter(crate::entities::channel_group::Column::Name.is_in(group_names))
-            .all(&state.db)
-            .await
-            .unwrap_or_default();
-        let group_ids: Vec<i64> = groups.into_iter().map(|g| g.id).collect();
-        if !group_ids.is_empty() {
-            q = q.filter(stream::Column::ChannelGroupId.is_in(group_ids));
-        } else {
-            q = q.filter(stream::Column::Id.eq(-1));
+        if !cg.is_empty() {
+            let group_names: Vec<&str> = cg.split(',').collect();
+            let groups = crate::entities::channel_group::Entity::find()
+                .filter(crate::entities::channel_group::Column::Name.is_in(group_names))
+                .all(&state.db)
+                .await
+                .unwrap_or_default();
+            let group_ids: Vec<i64> = groups.into_iter().map(|g| g.id).collect();
+            if !group_ids.is_empty() {
+                q = q.filter(stream::Column::ChannelGroupId.is_in(group_ids));
+            } else {
+                q = q.filter(stream::Column::Id.eq(-1));
+            }
         }
     }
 
