@@ -464,7 +464,7 @@ const ChannelsTable = ({ onReady }) => {
           // Convert null values to "null" string for URL parameter
           const processedValue = value
             .map((v) => (v === null ? 'null' : v))
-            .join(',');
+            .join('::');
           params.append(key, processedValue);
         } else {
           params.append(key, value);
@@ -1024,6 +1024,7 @@ const ChannelsTable = ({ onReady }) => {
       case 'epg':
         return (
           <MultiSelect
+            autoComplete="off"
             placeholder="EPG"
             variant="unstyled"
             data={epgSelectOptions}
@@ -1037,7 +1038,7 @@ const ChannelsTable = ({ onReady }) => {
               Array.isArray(filters.epg)
                 ? filters.epg
                 : filters.epg
-                  ? filters.epg.split(',').filter(Boolean)
+                  ? filters.epg.split('::').filter(Boolean)
                   : []
             }
             style={{ width: '100%' }}
@@ -1106,6 +1107,7 @@ const ChannelsTable = ({ onReady }) => {
       case 'channel_group':
         return (
           <MultiSelect
+            autoComplete="off"
             placeholder="Group"
             className="table-input-header"
             variant="unstyled"
@@ -1119,7 +1121,7 @@ const ChannelsTable = ({ onReady }) => {
               Array.isArray(filters.channel_group)
                 ? filters.channel_group
                 : filters.channel_group
-                  ? filters.channel_group.split(',').filter(Boolean)
+                  ? filters.channel_group.split('::').filter(Boolean)
                   : []
             }
             style={{ width: '100%' }}

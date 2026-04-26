@@ -559,14 +559,14 @@ const StreamsTable = ({ onReady }) => {
   const handleGroupChange = (value) => {
     setFilters((prev) => ({
       ...prev,
-      channel_group: value && value.length > 0 ? value.join(',') : '',
+      channel_group: value && value.length > 0 ? value.join('::') : '',
     }));
   };
 
   const handleM3UChange = (value) => {
     setFilters((prev) => ({
       ...prev,
-      m3u_account: value && value.length > 0 ? value.join(',') : '',
+      m3u_account: value && value.length > 0 ? value.join('::') : '',
     }));
   };
 
@@ -589,6 +589,18 @@ const StreamsTable = ({ onReady }) => {
       const params = new URLSearchParams();
       params.append('page', pagination.pageIndex + 1);
       params.append('page_size', pagination.pageSize);
+
+      // Add column filters
+      if (columnFilters && columnFilters.length > 0) {
+        columnFilters.forEach(({ id: key, value }) => {
+          if (Array.isArray(value)) {
+            const processedValue = value.join('::');
+            params.append(key, processedValue);
+          } else {
+            params.append(key, value);
+          }
+        });
+      }
 
       // Apply sorting
       if (sorting.length > 0) {
@@ -1142,10 +1154,11 @@ const StreamsTable = ({ onReady }) => {
 
       case 'group': {
         const selectedGroups = filters.channel_group
-          ? filters.channel_group.split(',').filter(Boolean)
+          ? filters.channel_group.split('::').filter(Boolean)
           : [];
         return (
           <MultiSelect
+            autoComplete="off"
             placeholder="Group"
             searchable
             size="xs"
@@ -1173,11 +1186,12 @@ const StreamsTable = ({ onReady }) => {
 
       case 'm3u': {
         const selectedM3Us = filters.m3u_account
-          ? filters.m3u_account.split(',').filter(Boolean)
+          ? filters.m3u_account.split('::').filter(Boolean)
           : [];
         return (
           <Flex align="center" style={{ width: '100%', flex: 1 }}>
             <MultiSelect
+              autoComplete="off"
               placeholder="M3U"
               searchable
               clearable
@@ -1397,7 +1411,7 @@ const StreamsTable = ({ onReady }) => {
   useEffect(() => {
     // Clear group filter if the selected groups are no longer available
     if (filters.channel_group) {
-      const selectedGroups = filters.channel_group.split(',').filter(Boolean);
+      const selectedGroups = filters.channel_group.split('::').filter(Boolean);
       const stillValid = selectedGroups.filter((group) =>
         groupOptions.includes(group)
       );
@@ -1405,21 +1419,21 @@ const StreamsTable = ({ onReady }) => {
       if (stillValid.length !== selectedGroups.length) {
         setFilters((prev) => ({
           ...prev,
-          channel_group: stillValid.join(','),
+          channel_group: stillValid.join('::'),
         }));
       }
     }
 
     // Clear M3U filter if the selected M3Us are no longer available
     if (filters.m3u_account) {
-      const selectedIds = filters.m3u_account.split(',').filter(Boolean);
+      const selectedIds = filters.m3u_account.split('::').filter(Boolean);
       const availableIds = m3uOptions.map((opt) => opt.value);
       const stillValid = selectedIds.filter((id) => availableIds.includes(id));
 
       if (stillValid.length !== selectedIds.length) {
         setFilters((prev) => ({
           ...prev,
-          m3u_account: stillValid.join(','),
+          m3u_account: stillValid.join('::'),
         }));
       }
     }

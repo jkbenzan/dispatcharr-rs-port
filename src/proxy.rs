@@ -13,6 +13,28 @@ use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use std::sync::Arc;
 use uuid::Uuid;
 
+async fn get_stream_fallback(
+    channel_id: &str,
+    db: &sea_orm::DatabaseConnection,
+) -> Result<Vec<(channel_stream::Model, Option<stream::Model>)>, StatusCode> {
+    let _stream = stream::Entity::find()
+        .filter(stream::Column::StreamHash.eq(channel_id))
+        .one(db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    Ok(vec![(
+        channel_stream::Model {
+            id: 0,
+            channel_id: 0,
+            stream_id: _stream.id,
+            order: 0,
+        },
+        Some(_stream),
+    )])
+}
+
 pub async fn handle_proxy(
     Path(channel_id): Path<String>,
     State(state): State<Arc<AppState>>,
@@ -22,44 +44,36 @@ pub async fn handle_proxy(
 
     let channel_streams = if let Some(uuid) = parsed_uuid {
         // Fetch the channel gracefully from Postgres
-        let _channel = channel::Entity::find()
+        let channel_opt = channel::Entity::find()
             .filter(channel::Column::Uuid.eq(uuid))
             .one(&state.db)
             .await
             .map_err(|e| {
                 println!("DB Error fetching channel: {}", e);
                 StatusCode::INTERNAL_SERVER_ERROR
-            })?
-            .ok_or_else(|| {
-                println!("Channel {} not found", channel_id);
-                StatusCode::NOT_FOUND
             })?;
 
-        let parsed_id = _channel.id;
+        if let Some(_channel) = channel_opt {
+            let parsed_id = _channel.id;
 
-        channel_stream::Entity::find()
-            .filter(channel_stream::Column::ChannelId.eq(parsed_id))
-            .order_by_asc(channel_stream::Column::Order)
-            .find_also_related(stream::Entity)
-            .all(&state.db)
-            .await
-            .map_err(|e| {
-                println!("DB Error fetching channel streams: {}", e);
-                StatusCode::INTERNAL_SERVER_ERROR
-            })?
+            channel_stream::Entity::find()
+                .filter(channel_stream::Column::ChannelId.eq(parsed_id))
+                .order_by_asc(channel_stream::Column::Order)
+                .find_also_related(stream::Entity)
+                .all(&state.db)
+                .await
+                .map_err(|e| {
+                    println!("DB Error fetching channel streams: {}", e);
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?
+        } else {
+            // It parsed as a UUID, but no channel was found.
+            // MD5 hashes can falsely parse as UUIDs, so fallback to Stream lookup.
+            get_stream_fallback(&channel_id, &state.db).await?
+        }
     } else {
-        // It's a stream hash
-        let _stream = stream::Entity::find()
-            .filter(stream::Column::StreamHash.eq(&channel_id))
-            .one(&state.db)
-            .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-            .ok_or(StatusCode::NOT_FOUND)?;
-
-        vec![(
-            channel_stream::Model { id: 0, channel_id: 0, stream_id: _stream.id, order: 0 },
-            Some(_stream),
-        )]
+        // It's not a UUID, so it must be a stream hash
+        get_stream_fallback(&channel_id, &state.db).await?
     };
 
     if channel_streams.is_empty() {
