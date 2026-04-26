@@ -2,7 +2,7 @@ mod epg_api;
 use axum::{
     extract::ws::{WebSocket, WebSocketUpgrade},
     response::IntoResponse,
-    routing::{get, patch, post},
+    routing::{delete, get, patch, post, put},
     Router,
 };
 use sea_orm::{ConnectOptions, Database, DatabaseConnection};
@@ -207,7 +207,14 @@ async fn main() {
                 .patch(settings::update_setting),
         )
         .route("/api/core/settings/:id/check/", get(settings::get_setting))
-        .route("/api/core/streamprofiles/", get(api::get_streamprofiles))
+        .route(
+            "/api/core/streamprofiles/",
+            get(api::get_streamprofiles).post(api::create_streamprofile),
+        )
+        .route(
+            "/api/core/streamprofiles/:id/",
+            put(api::update_streamprofile).delete(api::delete_streamprofile),
+        )
         // --- CHANNELS & M3U ---
         .route("/api/channels/channels/", get(api::get_channels))
         .route("/api/channels/groups/", get(api::get_channel_groups))

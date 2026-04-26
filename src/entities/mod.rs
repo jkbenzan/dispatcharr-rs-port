@@ -11,6 +11,7 @@ pub mod core_notificationdismissal;
 pub mod core_settings;
 pub mod core_systemnotification;
 pub mod core_useragent;
+pub mod core_streamprofile;
 pub mod epg_data;
 pub mod epg_program;
 pub mod epg_source;

@@ -165,7 +165,7 @@ pub async fn get_core_settings() -> Json<Value> {
 
 use crate::entities::{
     channel, channel_group, channel_profile, core_notificationdismissal, core_settings,
-    core_systemnotification, core_useragent, epg_source, m3u_account, stream, user,
+    core_streamprofile, core_systemnotification, core_useragent, epg_source, m3u_account, stream, user,
 };
 use crate::{
     auth::{generate_jwt, verify_password, CurrentUser},
@@ -796,8 +796,18 @@ pub async fn get_useragents(State(state): State<Arc<AppState>>) -> Json<Value> {
     }
     Json(json!(result))
 }
+
+#[derive(serde::Deserialize)]
+pub struct StreamProfileReq {
+    pub name: String,
+    pub command: String,
+    pub parameters: String,
+    pub is_active: bool,
+    pub user_agent_id: Option<i64>,
+}
+
 pub async fn get_streamprofiles(State(state): State<Arc<AppState>>) -> Json<Value> {
-    let profiles = channel_profile::Entity::find()
+    let profiles = core_streamprofile::Entity::find()
         .all(&state.db)
         .await
         .unwrap_or_default();
@@ -807,9 +817,120 @@ pub async fn get_streamprofiles(State(state): State<Arc<AppState>>) -> Json<Valu
         result.push(json!({
             "id": p.id,
             "name": p.name,
+            "command": p.command,
+            "parameters": p.parameters,
+            "is_active": p.is_active,
+            "user_agent_id": p.user_agent_id,
+            "locked": p.locked,
         }));
     }
     Json(json!(result))
+}
+
+pub async fn create_streamprofile(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<StreamProfileReq>,
+) -> impl IntoResponse {
+    let new_profile = core_streamprofile::ActiveModel {
+        name: sea_orm::Set(payload.name.clone()),
+        command: sea_orm::Set(payload.command.clone()),
+        parameters: sea_orm::Set(payload.parameters.clone()),
+        is_active: sea_orm::Set(payload.is_active),
+        user_agent_id: sea_orm::Set(payload.user_agent_id),
+        locked: sea_orm::Set(false),
+        ..Default::default()
+    };
+
+    match new_profile.insert(&state.db).await {
+        Ok(inserted) => (
+            StatusCode::CREATED,
+            Json(json!({
+                "id": inserted.id,
+                "name": inserted.name,
+                "command": inserted.command,
+                "parameters": inserted.parameters,
+                "is_active": inserted.is_active,
+                "user_agent_id": inserted.user_agent_id,
+                "locked": inserted.locked,
+            })),
+        ),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": "Failed to create stream profile"})),
+        ),
+    }
+}
+
+pub async fn update_streamprofile(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
+    Json(payload): Json<StreamProfileReq>,
+) -> impl IntoResponse {
+    let mut profile: core_streamprofile::ActiveModel =
+        match core_streamprofile::Entity::find_by_id(id).one(&state.db).await {
+            Ok(Some(p)) => p.into(),
+            _ => {
+                return (
+                    StatusCode::NOT_FOUND,
+                    Json(json!({"error": "Stream profile not found"})),
+                );
+            }
+        };
+
+    profile.name = sea_orm::Set(payload.name);
+    profile.command = sea_orm::Set(payload.command);
+    profile.parameters = sea_orm::Set(payload.parameters);
+    profile.is_active = sea_orm::Set(payload.is_active);
+    profile.user_agent_id = sea_orm::Set(payload.user_agent_id);
+
+    match profile.update(&state.db).await {
+        Ok(updated) => (
+            StatusCode::OK,
+            Json(json!({
+                "id": updated.id,
+                "name": updated.name,
+                "command": updated.command,
+                "parameters": updated.parameters,
+                "is_active": updated.is_active,
+                "user_agent_id": updated.user_agent_id,
+                "locked": updated.locked,
+            })),
+        ),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": "Failed to update stream profile"})),
+        ),
+    }
+}
+
+pub async fn delete_streamprofile(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
+) -> impl IntoResponse {
+    let profile = match core_streamprofile::Entity::find_by_id(id).one(&state.db).await {
+        Ok(Some(p)) => p,
+        _ => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": "Stream profile not found"})),
+            );
+        }
+    };
+
+    if profile.locked {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "Cannot delete locked stream profile"})),
+        );
+    }
+
+    match core_streamprofile::Entity::delete_by_id(id).exec(&state.db).await {
+        Ok(_) => (StatusCode::NO_CONTENT, Json(json!({}))),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": "Failed to delete stream profile"})),
+        ),
+    }
 }
 pub async fn get_dashboard_stats(State(state): State<Arc<AppState>>) -> Json<Value> {
     let channels_count = channel::Entity::find().count(&state.db).await.unwrap_or(0);
