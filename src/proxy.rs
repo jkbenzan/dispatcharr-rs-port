@@ -14,36 +14,56 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 pub async fn handle_proxy(
-    Path(channel_uuid): Path<String>,
+    Path(channel_id): Path<String>,
     State(state): State<Arc<AppState>>,
 ) -> Result<Response<Body>, StatusCode> {
-    // We look up the channel using the UUID instead of token parsing
+    // Determine if identifier is a UUID (channel) or Hash (stream)
+    let parsed_uuid = Uuid::parse_str(&channel_id).ok();
 
-    let parsed_uuid = Uuid::parse_str(&channel_uuid).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let channel_streams = if let Some(uuid) = parsed_uuid {
+        // Fetch the channel gracefully from Postgres
+        let _channel = channel::Entity::find()
+            .filter(channel::Column::Uuid.eq(uuid))
+            .one(&state.db)
+            .await
+            .map_err(|e| {
+                println!("DB Error fetching channel: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?
+            .ok_or_else(|| {
+                println!("Channel {} not found", channel_id);
+                StatusCode::NOT_FOUND
+            })?;
 
-    // 2. Fetch the channel gracefully from Postgres
-    let _channel = channel::Entity::find()
-        .filter(channel::Column::Uuid.eq(parsed_uuid))
-        .one(&state.db)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .ok_or(StatusCode::NOT_FOUND)?;
+        let parsed_id = _channel.id;
 
-    let parsed_id = _channel.id;
+        channel_stream::Entity::find()
+            .filter(channel_stream::Column::ChannelId.eq(parsed_id))
+            .order_by_asc(channel_stream::Column::Order)
+            .find_also_related(stream::Entity)
+            .all(&state.db)
+            .await
+            .map_err(|e| {
+                println!("DB Error fetching channel streams: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?
+    } else {
+        // It's a stream hash
+        let _stream = stream::Entity::find()
+            .filter(stream::Column::StreamHash.eq(&channel_id))
+            .one(&state.db)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .ok_or(StatusCode::NOT_FOUND)?;
 
-    // 3. Determine Upstream URL
-    // Link with the ChannelStream entity mapped to `dispatcharr_channels_stream`
-    // to pick the highest priority / active stream for the requested channel.
-
-    let channel_streams = channel_stream::Entity::find()
-        .filter(channel_stream::Column::ChannelId.eq(parsed_id))
-        .order_by_asc(channel_stream::Column::Order)
-        .find_also_related(stream::Entity)
-        .all(&state.db)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        vec![(
+            channel_stream::Model { id: 0, channel_id: 0, stream_id: _stream.id, order: 0 },
+            Some(_stream),
+        )]
+    };
 
     if channel_streams.is_empty() {
+        println!("No streams found for identifier {}", channel_id);
         return Err(StatusCode::NOT_FOUND);
     }
 

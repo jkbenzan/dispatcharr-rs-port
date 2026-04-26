@@ -302,8 +302,10 @@ async fn main() {
         .route("/api/config/", get(api::get_config))
         .route("/ws", get(ws_handler))
         .route("/ws/", get(ws_handler))
-        .route("/stream/:channel_uuid/", get(proxy::handle_proxy))
-        .route("/stream/:channel_uuid", get(proxy::handle_proxy))
+        .route("/stream/:channel_id/", get(proxy::handle_proxy))
+        .route("/stream/:channel_id", get(proxy::handle_proxy))
+        .route("/proxy/ts/stream/:channel_id/", get(proxy::handle_proxy))
+        .route("/proxy/ts/stream/:channel_id", get(proxy::handle_proxy))
         // Serve the compiled React frontend for non-API routes
         .nest("/api/accounts", accounts_routes)
         .nest("/api/vod", vod_routes)
