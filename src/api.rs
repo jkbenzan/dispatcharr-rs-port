@@ -329,15 +329,42 @@ pub async fn get_channels(
     let page_size: u64 = 50;
     let offset = (page.saturating_sub(1)) * page_size;
 
-    let count = channel::Entity::find().count(&state.db).await.unwrap_or(0);
+    let mut q = channel::Entity::find();
 
-    let channels = match channel::Entity::find()
-        .order_by_asc(channel::Column::Id)
-        .limit(page_size)
-        .offset(offset)
-        .all(&state.db)
-        .await
-    {
+    if let Some(name) = params.get("name") {
+        q = q.filter(channel::Column::Name.contains(name));
+    }
+    if let Some(num) = params.get("channel_number") {
+        if let Ok(num_val) = num.parse::<f64>() {
+            q = q.filter(channel::Column::ChannelNumber.eq(num_val));
+        }
+    }
+    if let Some(is_adult) = params.get("is_adult") {
+        let is_adult_bool = is_adult == "true" || is_adult == "1";
+        q = q.filter(channel::Column::IsAdult.eq(is_adult_bool));
+    }
+    if let Some(uuid_str) = params.get("uuid") {
+        if let Ok(parsed_uuid) = uuid::Uuid::parse_str(uuid_str) {
+            q = q.filter(channel::Column::Uuid.eq(parsed_uuid));
+        }
+    }
+
+    let count = q.clone().count(&state.db).await.unwrap_or(0);
+
+    // Default sorting
+    let mut q = match params.get("ordering").map(|s| s.as_str()) {
+        Some("name") => q.order_by_asc(channel::Column::Name),
+        Some("-name") => q.order_by_desc(channel::Column::Name),
+        Some("channel_number") => q.order_by_asc(channel::Column::ChannelNumber),
+        Some("-channel_number") => q.order_by_desc(channel::Column::ChannelNumber),
+        Some("created_at") => q.order_by_asc(channel::Column::CreatedAt),
+        Some("-created_at") => q.order_by_desc(channel::Column::CreatedAt),
+        Some("updated_at") => q.order_by_asc(channel::Column::UpdatedAt),
+        Some("-updated_at") => q.order_by_desc(channel::Column::UpdatedAt),
+        _ => q.order_by_asc(channel::Column::ChannelNumber),
+    };
+
+    let channels = match q.limit(page_size).offset(offset).all(&state.db).await {
         Ok(c) => c,
         Err(_) => vec![],
     };
@@ -815,9 +842,21 @@ pub async fn get_streams(
         q = q.filter(stream::Column::TvgId.contains(tvg));
     }
 
+    if let Some(url) = params.get("url") {
+        q = q.filter(stream::Column::Url.contains(url));
+    }
+
     let count = q.clone().count(&state.db).await.unwrap_or(0);
+
+    let mut q = match params.get("ordering").map(|s| s.as_str()) {
+        Some("name") => q.order_by_asc(stream::Column::Name),
+        Some("-name") => q.order_by_desc(stream::Column::Name),
+        Some("updated_at") => q.order_by_asc(stream::Column::UpdatedAt),
+        Some("-updated_at") => q.order_by_desc(stream::Column::UpdatedAt),
+        _ => q.order_by_asc(stream::Column::Id),
+    };
+
     let streams = q
-        .order_by_asc(stream::Column::Id)
         .limit(page_size)
         .offset(offset)
         .all(&state.db)

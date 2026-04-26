@@ -1,4 +1,3 @@
-use crate::auth::Claims;
 use crate::{
     entities::{channel, channel_stream, stream},
     AppState,
@@ -10,35 +9,27 @@ use axum::{
     response::Response,
 };
 use futures_util::StreamExt;
-use jsonwebtoken::{decode, DecodingKey, Validation};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use std::sync::Arc;
-
-const STREAM_SECRET: &[u8] = b"dispatcharr_super_secret_temporary_key";
+use uuid::Uuid;
 
 pub async fn handle_proxy(
-    Path((token, channel_id)): Path<(String, String)>,
+    Path(channel_uuid): Path<String>,
     State(state): State<Arc<AppState>>,
 ) -> Result<Response<Body>, StatusCode> {
-    // 1. Authenticate the Token
-    // We decode the token to ensure the player making the GET request has an active session or an API key
-    let _token_data = decode::<Claims>(
-        &token,
-        &DecodingKey::from_secret(STREAM_SECRET),
-        &Validation::default(),
-    )
-    .map_err(|_| StatusCode::UNAUTHORIZED)?;
+    // We look up the channel using the UUID instead of token parsing
 
-    let parsed_id = channel_id
-        .parse::<i64>()
-        .map_err(|_| StatusCode::BAD_REQUEST)?;
+    let parsed_uuid = Uuid::parse_str(&channel_uuid).map_err(|_| StatusCode::BAD_REQUEST)?;
 
     // 2. Fetch the channel gracefully from Postgres
-    let _channel = channel::Entity::find_by_id(parsed_id)
+    let _channel = channel::Entity::find()
+        .filter(channel::Column::Uuid.eq(parsed_uuid))
         .one(&state.db)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
+
+    let parsed_id = _channel.id;
 
     // 3. Determine Upstream URL
     // Link with the ChannelStream entity mapped to `dispatcharr_channels_stream`

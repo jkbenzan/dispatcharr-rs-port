@@ -1,27 +1,19 @@
-use crate::auth::Claims;
 use crate::{entities::channel, AppState};
 use axum::{
     extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
 };
-use jsonwebtoken::{decode, DecodingKey, Validation};
 use sea_orm::EntityTrait;
 use std::sync::Arc;
 
 const STREAM_SECRET: &[u8] = b"dispatcharr_super_secret_temporary_key";
 
 pub async fn generate_m3u(
-    Path(token): Path<String>,
     State(state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, StatusCode> {
-    // Validate user identity using the token
-    let _token_data = decode::<Claims>(
-        &token,
-        &DecodingKey::from_secret(STREAM_SECRET),
-        &Validation::default(),
-    )
-    .map_err(|_| StatusCode::UNAUTHORIZED)?;
+    // Basic implementation for M3U without auth to match original Django (or use headers)
+    // In Django, /m3u/ was accessible without an explicit URL token parameter.
 
     let channels = channel::Entity::find()
         .all(&state.db)
@@ -42,7 +34,7 @@ pub async fn generate_m3u(
             "#EXTINF:-1 tvg-id=\"{}\" tvg-logo=\"{}\" group-title=\"Live TV\",{}\n",
             tvg_id, logo, name
         ));
-        m3u_body.push_str(&format!("{}/play/{}/{}\n", base_url, token, ch_id));
+        m3u_body.push_str(&format!("{}/stream/{}\n", base_url, ch.uuid));
     }
 
     Ok((
@@ -52,7 +44,6 @@ pub async fn generate_m3u(
 }
 
 pub async fn generate_xmltv(
-    Path(_token): Path<String>,
     State(_state): State<Arc<AppState>>,
 ) -> Result<impl IntoResponse, StatusCode> {
     // We simply return a valid, skeletal XMLTV frame

@@ -290,13 +290,20 @@ async fn main() {
         .route("/api/connect/integrations/", get(api::get_paginated_object))
         .route("/api/plugins/plugins/", get(api::get_paginated_object))
         // --- OUTPUTS & PROVISIONING ---
-        .route("/m3u/:token", get(outputs::generate_m3u))
-        .route("/xmltv/:token", get(outputs::generate_xmltv))
+        .route("/m3u/", get(outputs::generate_m3u))
+        .route("/m3u", get(outputs::generate_m3u))
+        .route("/m3u/:profile_name/", get(outputs::generate_m3u))
+        .route("/m3u/:profile_name", get(outputs::generate_m3u))
+        .route("/epg/", get(outputs::generate_xmltv))
+        .route("/epg", get(outputs::generate_xmltv))
+        .route("/epg/:profile_name/", get(outputs::generate_xmltv))
+        .route("/epg/:profile_name", get(outputs::generate_xmltv))
         // --- SYSTEM & PROXY ---
         .route("/api/config/", get(api::get_config))
         .route("/ws", get(ws_handler))
         .route("/ws/", get(ws_handler))
-        .route("/play/:token/:channel_id", get(proxy::handle_proxy))
+        .route("/stream/:channel_uuid/", get(proxy::handle_proxy))
+        .route("/stream/:channel_uuid", get(proxy::handle_proxy))
         // Serve the compiled React frontend for non-API routes
         .nest("/api/accounts", accounts_routes)
         .nest("/api/vod", vod_routes)
