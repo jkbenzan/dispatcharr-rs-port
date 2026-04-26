@@ -1081,6 +1081,7 @@ const ChannelsTable = ({ onReady }) => {
         return (
           <TextInput
             name="name"
+            autoComplete="off"
             placeholder="Name"
             value={filters.name || ''}
             onClick={(e) => e.stopPropagation()}

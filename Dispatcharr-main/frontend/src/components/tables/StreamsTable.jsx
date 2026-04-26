@@ -1117,6 +1117,7 @@ const StreamsTable = ({ onReady }) => {
           <Flex align="center" style={{ width: '100%', flex: 1 }}>
             <TextInput
               name="name"
+              autoComplete="off"
               placeholder="Name"
               value={filters.name || ''}
               onClick={(e) => e.stopPropagation()}
@@ -1208,6 +1209,7 @@ const StreamsTable = ({ onReady }) => {
           <Flex align="center" style={{ width: '100%', flex: 1 }}>
             <TextInput
               name="tvg_id"
+              autoComplete="off"
               placeholder="TVG-ID"
               value={filters.tvg_id || ''}
               onClick={(e) => e.stopPropagation()}
