@@ -165,7 +165,7 @@ pub async fn get_core_settings() -> Json<Value> {
 
 use crate::entities::{
     channel, channel_group, channel_profile, core_notificationdismissal, core_settings,
-    core_systemnotification, epg_source, m3u_account, stream, user,
+    core_systemnotification, core_useragent, epg_source, m3u_account, stream, user,
 };
 use crate::{
     auth::{generate_jwt, verify_password, CurrentUser},
@@ -780,11 +780,36 @@ pub async fn create_stream(
     }
 }
 
-pub async fn get_useragents() -> Json<Value> {
-    get_flat_array().await
+pub async fn get_useragents(State(state): State<Arc<AppState>>) -> Json<Value> {
+    let useragents = core_useragent::Entity::find()
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+
+    let mut result = Vec::new();
+    for u in useragents {
+        result.push(json!({
+            "id": u.id,
+            "name": u.name,
+            "user_agent": u.user_agent,
+        }));
+    }
+    Json(json!(result))
 }
-pub async fn get_streamprofiles() -> Json<Value> {
-    get_flat_array().await
+pub async fn get_streamprofiles(State(state): State<Arc<AppState>>) -> Json<Value> {
+    let profiles = channel_profile::Entity::find()
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+
+    let mut result = Vec::new();
+    for p in profiles {
+        result.push(json!({
+            "id": p.id,
+            "name": p.name,
+        }));
+    }
+    Json(json!(result))
 }
 pub async fn get_dashboard_stats(State(state): State<Arc<AppState>>) -> Json<Value> {
     let channels_count = channel::Entity::find().count(&state.db).await.unwrap_or(0);
