@@ -64,6 +64,7 @@ import {
   NumberInput,
   Tooltip,
   Skeleton,
+  Badge,
 } from '@mantine/core';
 import { getCoreRowModel, flexRender } from '@tanstack/react-table';
 import './table.css';
