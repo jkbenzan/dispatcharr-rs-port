@@ -23,6 +23,7 @@ mod proxy;
 mod settings;
 mod vod;
 mod xtream_codes;
+mod stream_checker;
 
 use axum::extract::State;
 
@@ -282,6 +283,10 @@ async fn main() {
         .route(
             "/api/channels/streams/by-ids/",
             post(api::get_streams_by_ids),
+        )
+        .route(
+            "/api/streams/:id/check/",
+            post(stream_checker::checker::test_stream),
         )
         .route(
             "/api/channels/streams/filter-options/",

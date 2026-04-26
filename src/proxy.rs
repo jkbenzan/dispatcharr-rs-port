@@ -13,6 +13,7 @@ use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use std::sync::Arc;
 use uuid::Uuid;
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 use axum::extract::ConnectInfo;
 use std::net::SocketAddr;
@@ -153,7 +154,7 @@ pub async fn handle_proxy(
 
     let mut successful_resp = None;
 
-    for (_cs, stream_opt) in channel_streams {
+    for (_cs, stream_opt) in &channel_streams {
         if let Some(stream) = stream_opt {
             if let Some(target_url) = &stream.url {
                 println!(
