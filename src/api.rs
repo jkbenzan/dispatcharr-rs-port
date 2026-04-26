@@ -357,21 +357,7 @@ pub async fn get_channels(
 
     if let Some(cg) = params.get("channel_group") {
         if !cg.is_empty() {
-            let group_names: Vec<&str> = cg.split("::").collect();
-            let mut condition = sea_orm::sea_query::Condition::any();
-            for name in &group_names {
-                condition = condition.add(
-                    sea_orm::sea_query::Expr::col(crate::entities::channel_group::Column::Name).ilike(format!("%{}%", name))
-                );
-            }
-            
-            let groups = crate::entities::channel_group::Entity::find()
-                .filter(condition)
-                .all(&state.db)
-                .await
-                .unwrap_or_default();
-                
-            let group_ids: Vec<i64> = groups.into_iter().map(|g| g.id).collect();
+            let group_ids: Vec<i64> = cg.split("::").filter_map(|s| s.parse().ok()).collect();
             if !group_ids.is_empty() {
                 q = q.filter(channel::Column::ChannelGroupId.is_in(group_ids));
             } else {
@@ -382,13 +368,7 @@ pub async fn get_channels(
 
     if let Some(epg) = params.get("epg") {
         if !epg.is_empty() {
-            let epg_names: Vec<&str> = epg.split("::").collect();
-            let epgs = crate::entities::epg_data::Entity::find()
-                .filter(crate::entities::epg_data::Column::Name.is_in(epg_names))
-                .all(&state.db)
-                .await
-                .unwrap_or_default();
-            let epg_ids: Vec<i64> = epgs.into_iter().map(|e| e.id).collect();
+            let epg_ids: Vec<i64> = epg.split("::").filter_map(|s| s.parse().ok()).collect();
             if !epg_ids.is_empty() {
                 q = q.filter(channel::Column::EpgDataId.is_in(epg_ids));
             } else {
@@ -861,11 +841,13 @@ pub async fn get_streams(
 
     let mut q = stream::Entity::find();
     if let Some(m3u) = params.get("m3u_account") {
-        let m3u_ids: Vec<i64> = m3u.split("::").filter_map(|s| s.parse().ok()).collect();
-        if !m3u_ids.is_empty() {
-            q = q.filter(stream::Column::M3uAccountId.is_in(m3u_ids));
-        } else {
-            q = q.filter(stream::Column::Id.eq(-1));
+        if !m3u.is_empty() {
+            let m3u_ids: Vec<i64> = m3u.split("::").filter_map(|s| s.parse().ok()).collect();
+            if !m3u_ids.is_empty() {
+                q = q.filter(stream::Column::M3uAccountId.is_in(m3u_ids));
+            } else {
+                q = q.filter(stream::Column::Id.eq(-1));
+            }
         }
     }
 

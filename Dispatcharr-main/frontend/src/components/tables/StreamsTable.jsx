@@ -590,17 +590,6 @@ const StreamsTable = ({ onReady }) => {
       params.append('page', pagination.pageIndex + 1);
       params.append('page_size', pagination.pageSize);
 
-      // Add column filters
-      if (columnFilters && columnFilters.length > 0) {
-        columnFilters.forEach(({ id: key, value }) => {
-          if (Array.isArray(value)) {
-            const processedValue = value.join('::');
-            params.append(key, processedValue);
-          } else {
-            params.append(key, value);
-          }
-        });
-      }
 
       // Apply sorting
       if (sorting.length > 0) {
