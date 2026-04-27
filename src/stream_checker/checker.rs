@@ -189,27 +189,24 @@ pub async fn check_single_stream(
     // 1. Run ffprobe
     let ffprobe_bin = resolve_ffprobe();
     let args = [
-        "-v", "error",
         "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.3",
-        "-skip_frame", "nokey",
         "-print_format", "json",
         "-show_streams",
         "-i", &stream_url,
     ];
-
-    info!("🚀 Executing ffprobe: {} {}", ffprobe_bin, args.join(" "));
-
     let mut ffprobe_cmd = Command::new(&ffprobe_bin);
     ffprobe_cmd.args(&args);
+    
+    info!("🚀 Executing ffprobe: {} {}", ffprobe_bin, args.join(" "));
 
     let ffprobe_result = match tokio::time::timeout(Duration::from_secs(40), ffprobe_cmd.output()).await {
         Ok(Ok(output)) => output,
         Ok(Err(e)) => {
             error!("ffprobe failed to start: {}", e);
-            return Err((StatusCode::INTERNAL_SERVER_ERROR, format!("ffprobe failed: {}", e)));
+            return Err((StatusCode::INTERNAL_SERVER_ERROR, format!("ffprobe failed to start: {}", e)));
         }
         Err(_) => {
-            error!("ffprobe timed out");
+            error!("ffprobe timed out after 40s");
             return Err((StatusCode::GATEWAY_TIMEOUT, "ffprobe timed out".to_string()));
         }
     };
@@ -217,9 +214,16 @@ pub async fn check_single_stream(
     if !ffprobe_result.status.success() {
         let stderr = String::from_utf8_lossy(&ffprobe_result.stderr);
         let stdout = String::from_utf8_lossy(&ffprobe_result.stdout);
-        error!("ffprobe error: {}\nstdout: {}", stderr, stdout);
+        let status = ffprobe_result.status;
+        error!("❌ ffprobe failed. Status: {:?}\nstderr: {}\nstdout: {}", status, stderr, stdout);
 
-        let err_msg = if stderr.is_empty() { stdout.to_string() } else { stderr.to_string() };
+        let err_msg = if !stderr.is_empty() { 
+            stderr.to_string() 
+        } else if !stdout.is_empty() { 
+            stdout.to_string() 
+        } else {
+            format!("Process exited with status {:?}", status)
+        };
 
         let mut active_stream: stream::ActiveModel = stream_obj.into();
         let mut props = active_stream.custom_properties.unwrap().unwrap_or_else(|| json!({}));
