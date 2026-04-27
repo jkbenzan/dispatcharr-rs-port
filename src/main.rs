@@ -25,6 +25,26 @@ mod vod;
 mod xtream_codes;
 mod stream_checker;
 
+// Ensure ffmpeg/ffprobe are available, downloading them if needed.
+fn ensure_ffmpeg() {
+    use ffmpeg_sidecar::{
+        download::auto_download,
+        version::ffmpeg_version,
+    };
+    match ffmpeg_version() {
+        Ok(v) => {
+            tracing::info!("✅ ffmpeg found: {}", v);
+        }
+        Err(_) => {
+            tracing::warn!("⚠️  ffmpeg not found on PATH — attempting auto-download...");
+            match auto_download() {
+                Ok(_) => tracing::info!("✅ ffmpeg downloaded successfully via ffmpeg-sidecar"),
+                Err(e) => tracing::error!("❌ ffmpeg auto-download failed: {}. Stream checking will not work.", e),
+            }
+        }
+    }
+}
+
 use axum::extract::State;
 
 pub struct AppState {
@@ -93,6 +113,9 @@ async fn main() {
         .init();
 
     tracing::info!("🚀 BACKEND STARTING...");
+
+    // Auto-download ffmpeg/ffprobe if not present
+    ensure_ffmpeg();
 
     let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL missing");
     let mut opt = ConnectOptions::new(db_url);

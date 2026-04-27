@@ -19,11 +19,20 @@ use crate::entities::channel_stream;
 use sea_orm::{ActiveValue, QueryOrder};
 
 /// Resolve the path to `ffprobe`. Checks the FFPROBE_PATH env var first,
-/// then a list of common install locations, then falls back to the bare name.
+/// then the ffmpeg-sidecar managed path, then common install locations,
+/// then falls back to the bare name.
 fn resolve_ffprobe() -> String {
     if let Ok(p) = std::env::var("FFPROBE_PATH") {
         if !p.is_empty() {
             return p;
+        }
+    }
+    // Check the sidecar-managed binary (auto-downloaded by ffmpeg-sidecar)
+    if let Ok(dir) = ffmpeg_sidecar::paths::sidecar_dir() {
+        let fname = if cfg!(windows) { "ffprobe.exe" } else { "ffprobe" };
+        let sidecar_path = dir.join(fname);
+        if sidecar_path.exists() {
+            return sidecar_path.to_string_lossy().to_string();
         }
     }
     let candidates = [
@@ -44,12 +53,18 @@ fn resolve_ffprobe() -> String {
 }
 
 /// Resolve the path to `ffmpeg`. Checks the FFMPEG_PATH env var first,
-/// then a list of common install locations, then falls back to the bare name.
+/// then the ffmpeg-sidecar managed path, then common install locations,
+/// then falls back to the bare name.
 fn resolve_ffmpeg() -> String {
     if let Ok(p) = std::env::var("FFMPEG_PATH") {
         if !p.is_empty() {
             return p;
         }
+    }
+    // Check the sidecar-managed binary (auto-downloaded by ffmpeg-sidecar)
+    let sidecar_path = ffmpeg_sidecar::paths::ffmpeg_path();
+    if sidecar_path.exists() {
+        return sidecar_path.to_string_lossy().to_string();
     }
     let candidates = [
         "/usr/bin/ffmpeg",
