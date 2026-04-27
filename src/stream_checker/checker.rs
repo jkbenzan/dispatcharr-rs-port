@@ -129,15 +129,12 @@ pub async fn check_single_stream(
     let mut ffprobe_cmd = Command::new(&ffprobe_bin);
     ffprobe_cmd.args(&[
         "-v", "error",
+        "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.3",
         "-skip_frame", "nokey",
         "-print_format", "json",
         "-show_streams",
-        &stream_url,
+        "-i", &stream_url,
     ]);
-
-    // Set user agent
-    ffprobe_cmd.arg("-user_agent");
-    ffprobe_cmd.arg("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.3");
 
     let ffprobe_result = match tokio::time::timeout(Duration::from_secs(40), ffprobe_cmd.output()).await {
         Ok(Ok(output)) => output,
@@ -153,7 +150,10 @@ pub async fn check_single_stream(
 
     if !ffprobe_result.status.success() {
         let stderr = String::from_utf8_lossy(&ffprobe_result.stderr);
-        error!("ffprobe error: {}", stderr);
+        let stdout = String::from_utf8_lossy(&ffprobe_result.stdout);
+        error!("ffprobe error: {}\nstdout: {}", stderr, stdout);
+
+        let err_msg = if stderr.is_empty() { stdout.to_string() } else { stderr.to_string() };
 
         let mut active_stream: stream::ActiveModel = stream_obj.into();
         let mut props = active_stream.custom_properties.unwrap().unwrap_or_else(|| json!({}));
@@ -162,7 +162,7 @@ pub async fn check_single_stream(
         active_stream.custom_properties = Set(Some(props));
         let _ = active_stream.update(&state.db).await;
 
-        return Err((StatusCode::BAD_REQUEST, format!("ffprobe failed: {}", stderr)));
+        return Err((StatusCode::BAD_REQUEST, format!("ffprobe failed: {}", err_msg)));
     }
 
     let probe_output = String::from_utf8_lossy(&ffprobe_result.stdout);
@@ -214,14 +214,12 @@ pub async fn check_single_stream(
     let mut ffmpeg_cmd = Command::new(&ffmpeg_bin);
     ffmpeg_cmd.args(&[
         "-t", "10", // Test duration
+        "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.3",
         "-i", &stream_url,
         "-c", "copy",
         "-f", "null",
         "-",
     ]);
-
-    ffmpeg_cmd.arg("-user_agent");
-    ffmpeg_cmd.arg("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.3");
 
     let ffmpeg_result = match tokio::time::timeout(Duration::from_secs(40), ffmpeg_cmd.output()).await {
         Ok(Ok(output)) => output,
