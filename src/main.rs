@@ -29,19 +29,34 @@ mod stream_checker;
 fn ensure_ffmpeg() {
     use ffmpeg_sidecar::{
         download::auto_download,
-        paths::ffmpeg_path,
+        paths::{ffmpeg_path, sidecar_dir},
     };
     
+    let cwd = std::env::current_dir().map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|_| "unknown".to_string());
+    tracing::info!("📂 Current working directory: {}", cwd);
+
     let sidecar = ffmpeg_path();
+    let s_dir = sidecar_dir().map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|_| "unknown".to_string());
+    
     if sidecar.is_file() {
         tracing::info!("✅ sidecar ffmpeg found: {}", sidecar.display());
         return;
     }
 
-    tracing::warn!("⚠️  sidecar ffmpeg not found — attempting auto-download...");
+    tracing::warn!("⚠️  sidecar ffmpeg not found at {}. Attempting auto-download...", sidecar.display());
+    
+    // Check if we can write to the sidecar directory
+    if let Ok(dir) = sidecar_dir() {
+        if let Err(e) = std::fs::create_dir_all(&dir) {
+            tracing::error!("❌ Cannot create sidecar directory {}: {}", dir.display(), e);
+        } else {
+            tracing::info!("📁 Sidecar directory verified/created: {}", dir.display());
+        }
+    }
+
     match auto_download() {
-        Ok(_) => tracing::info!("✅ ffmpeg downloaded successfully via ffmpeg-sidecar"),
-        Err(e) => tracing::error!("❌ ffmpeg auto-download failed: {}. Stream checking will not work.", e),
+        Ok(_) => tracing::info!("✅ ffmpeg downloaded successfully to {}", s_dir),
+        Err(e) => tracing::error!("❌ ffmpeg auto-download failed: {}. Make sure the container has internet access and write permissions to {}", e, s_dir),
     }
 }
 
