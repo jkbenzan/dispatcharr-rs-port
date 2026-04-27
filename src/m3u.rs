@@ -565,9 +565,20 @@ pub async fn fetch_and_parse_xc(
         crate::xtream_codes::get_live_streams(&client, &server_url, &username, &password).await?;
 
     let mut streams_batch = Vec::new();
-    let mut hash_set = HashSet::new();
     let mut group_id_map = HashMap::new();
     let mut current_hashes = Vec::new();
+
+    // Pre-load existing stream hashes to avoid duplicate key violations on re-sync
+    let existing_records = stream::Entity::find()
+        .filter(stream::Column::M3uAccountId.eq(account_id))
+        .all(db)
+        .await
+        .unwrap_or_default();
+    let mut hash_set: HashSet<String> = existing_records
+        .into_iter()
+        .filter_map(|r| r.stream_hash)
+        .collect();
+
 
     let auto_sync_live = acc
         .custom_properties
