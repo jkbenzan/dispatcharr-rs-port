@@ -36,12 +36,16 @@ fn resolve_ffprobe() -> String {
         let sidecar_path = dir.join(fname);
         if sidecar_path.is_file() {
             let p = sidecar_path.to_string_lossy().to_string();
-            // Smoke test
-            if StdCommand::new(&p).arg("-version").output().is_ok() {
-                info!("✅ Using sidecar ffprobe: {}", p);
-                return p;
+            // Smoke test: must start AND return success
+            if let Ok(output) = StdCommand::new(&p).arg("-version").output() {
+                if output.status.success() {
+                    info!("✅ Using sidecar ffprobe: {}", p);
+                    return p;
+                } else {
+                    info!("⚠️  Sidecar ffprobe found but returned error status on -version: {}", p);
+                }
             } else {
-                info!("⚠️  Sidecar ffprobe found but failed smoke test: {}", p);
+                info!("⚠️  Sidecar ffprobe found but failed to execute: {}", p);
             }
         }
     }
@@ -61,11 +65,15 @@ fn resolve_ffprobe() -> String {
     for c in &candidates {
         let path = std::path::Path::new(c);
         if path.is_file() {
-            if StdCommand::new(c).arg("-version").output().is_ok() {
-                info!("✅ Using system ffprobe: {}", c);
-                return c.to_string();
+            if let Ok(output) = StdCommand::new(c).arg("-version").output() {
+                if output.status.success() {
+                    info!("✅ Using system ffprobe: {}", c);
+                    return c.to_string();
+                } else {
+                    info!("⚠️  Candidate {} found but returned error status on -version", c);
+                }
             } else {
-                info!("⚠️  Candidate {} found but failed smoke test", c);
+                info!("⚠️  Candidate {} found but failed to execute", c);
             }
         }
     }
@@ -89,11 +97,15 @@ fn resolve_ffmpeg() -> String {
     let sidecar_path = ffmpeg_sidecar::paths::ffmpeg_path();
     if sidecar_path.is_file() {
         let p = sidecar_path.to_string_lossy().to_string();
-        if StdCommand::new(&p).arg("-version").output().is_ok() {
-            info!("✅ Using sidecar ffmpeg: {}", p);
-            return p;
+        if let Ok(output) = StdCommand::new(&p).arg("-version").output() {
+            if output.status.success() {
+                info!("✅ Using sidecar ffmpeg: {}", p);
+                return p;
+            } else {
+                info!("⚠️  Sidecar ffmpeg found but returned error status on -version: {}", p);
+            }
         } else {
-            info!("⚠️  Sidecar ffmpeg found but failed smoke test: {}", p);
+            info!("⚠️  Sidecar ffmpeg found but failed to execute: {}", p);
         }
     }
 
@@ -112,11 +124,15 @@ fn resolve_ffmpeg() -> String {
     for c in &candidates {
         let path = std::path::Path::new(c);
         if path.is_file() {
-            if StdCommand::new(c).arg("-version").output().is_ok() {
-                info!("✅ Using system ffmpeg: {}", c);
-                return c.to_string();
+            if let Ok(output) = StdCommand::new(c).arg("-version").output() {
+                if output.status.success() {
+                    info!("✅ Using system ffmpeg: {}", c);
+                    return c.to_string();
+                } else {
+                    info!("⚠️  Candidate {} found but returned error status on -version", c);
+                }
             } else {
-                info!("⚠️  Candidate {} found but failed smoke test", c);
+                info!("⚠️  Candidate {} found but failed to execute", c);
             }
         }
     }
