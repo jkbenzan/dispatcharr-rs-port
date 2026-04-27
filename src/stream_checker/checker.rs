@@ -39,7 +39,8 @@ fn resolve_ffprobe() -> String {
             // Smoke test: must start AND return success
             if let Ok(output) = StdCommand::new(&p).arg("-version").output() {
                 if output.status.success() {
-                    info!("✅ Using sidecar ffprobe: {}", p);
+                    let version = String::from_utf8_lossy(&output.stdout).lines().next().unwrap_or("unknown").to_string();
+                    info!("✅ Using sidecar ffprobe: {} (Version: {})", p, version);
                     return p;
                 } else {
                     info!("⚠️  Sidecar ffprobe found but returned error status on -version: {}", p);
@@ -67,7 +68,8 @@ fn resolve_ffprobe() -> String {
         if path.is_file() {
             if let Ok(output) = StdCommand::new(c).arg("-version").output() {
                 if output.status.success() {
-                    info!("✅ Using system ffprobe: {}", c);
+                    let version = String::from_utf8_lossy(&output.stdout).lines().next().unwrap_or("unknown").to_string();
+                    info!("✅ Using system ffprobe: {} (Version: {})", c, version);
                     return c.to_string();
                 } else {
                     info!("⚠️  Candidate {} found but returned error status on -version", c);
@@ -99,7 +101,8 @@ fn resolve_ffmpeg() -> String {
         let p = sidecar_path.to_string_lossy().to_string();
         if let Ok(output) = StdCommand::new(&p).arg("-version").output() {
             if output.status.success() {
-                info!("✅ Using sidecar ffmpeg: {}", p);
+                let version = String::from_utf8_lossy(&output.stdout).lines().next().unwrap_or("unknown").to_string();
+                info!("✅ Using sidecar ffmpeg: {} (Version: {})", p, version);
                 return p;
             } else {
                 info!("⚠️  Sidecar ffmpeg found but returned error status on -version: {}", p);
@@ -126,7 +129,8 @@ fn resolve_ffmpeg() -> String {
         if path.is_file() {
             if let Ok(output) = StdCommand::new(c).arg("-version").output() {
                 if output.status.success() {
-                    info!("✅ Using system ffmpeg: {}", c);
+                    let version = String::from_utf8_lossy(&output.stdout).lines().next().unwrap_or("unknown").to_string();
+                    info!("✅ Using system ffmpeg: {} (Version: {})", c, version);
                     return c.to_string();
                 } else {
                     info!("⚠️  Candidate {} found but returned error status on -version", c);
@@ -180,20 +184,23 @@ pub async fn check_single_stream(
         None => return Err((StatusCode::BAD_REQUEST, "Stream has no URL".to_string())),
     };
 
-    info!("🔍 Testing Stream: {} (ID: {})", stream_obj.name, stream_id);
+    info!("🔍 Testing Stream: {} (URL: {})", stream_obj.name, stream_url);
 
     // 1. Run ffprobe
     let ffprobe_bin = resolve_ffprobe();
-    info!("Using ffprobe binary: {}", ffprobe_bin);
-    let mut ffprobe_cmd = Command::new(&ffprobe_bin);
-    ffprobe_cmd.args(&[
+    let args = [
         "-v", "error",
         "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.3",
         "-skip_frame", "nokey",
         "-print_format", "json",
         "-show_streams",
         "-i", &stream_url,
-    ]);
+    ];
+
+    info!("🚀 Executing ffprobe: {} {}", ffprobe_bin, args.join(" "));
+
+    let mut ffprobe_cmd = Command::new(&ffprobe_bin);
+    ffprobe_cmd.args(&args);
 
     let ffprobe_result = match tokio::time::timeout(Duration::from_secs(40), ffprobe_cmd.output()).await {
         Ok(Ok(output)) => output,
