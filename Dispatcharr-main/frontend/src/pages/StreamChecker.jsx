@@ -93,9 +93,12 @@ const StreamChecker = () => {
     selectedChannelIds.forEach((channelId) => {
       const channel = channels.find((c) => c.id === channelId);
       if (channel && channel.streams) {
-        channel.streams.forEach((channelStream) => {
-          if (channelStream.stream && channelStream.stream.id) {
-            streamIdsToTest.push(channelStream.stream.id);
+        channel.streams.forEach((streamObj) => {
+          // Rust backend returns flattened stream objects directly
+          if (streamObj.id) {
+            streamIdsToTest.push(streamObj.id);
+          } else if (streamObj.stream && streamObj.stream.id) {
+            streamIdsToTest.push(streamObj.stream.id);
           }
         });
       }
