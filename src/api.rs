@@ -989,30 +989,6 @@ pub async fn get_streams(
 
     let mut q = stream::Entity::find();
 
-    // Always exclude streams whose channel group is disabled for their M3U account.
-    // A stream is shown if:
-    //   - it has no group (channel_group_id IS NULL), OR
-    //   - it has no m3u_account (custom stream), OR
-    //   - its group+account mapping has enabled = true (or no mapping exists yet)
-    use sea_orm::ConnectionTrait;
-    let disabled_stream_ids: Vec<i64> = state.db.query_all(
-        sea_orm::Statement::from_string(
-            sea_orm::DatabaseBackend::Postgres,
-            r#"SELECT s.id FROM dispatcharr_channels_stream s
-               INNER JOIN dispatcharr_channels_channelgroupm3uaccount m
-                 ON m.channel_group_id = s.channel_group_id
-                AND m.m3u_account_id   = s.m3u_account_id
-               WHERE m.enabled = false"#.to_owned(),
-        )
-    ).await.unwrap_or_default()
-    .into_iter()
-    .filter_map(|r| r.try_get::<i64>("", "id").ok())
-    .collect();
-
-    if !disabled_stream_ids.is_empty() {
-        q = q.filter(stream::Column::Id.is_not_in(disabled_stream_ids));
-    }
-
     if let Some(m3u) = params.get("m3u_account") {
         if !m3u.is_empty() {
             let m3u_ids: Vec<i64> = m3u.split("::").filter_map(|s| s.parse().ok()).collect();

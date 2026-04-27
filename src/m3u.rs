@@ -229,6 +229,38 @@ pub async fn fetch_and_parse_m3u(
         }
     }
 
+    // Load disabled group IDs for this account so we can skip their streams during ingestion.
+    // This is the primary enforcement point - disabled group streams must never enter the DB.
+    let disabled_group_ids: HashSet<i64> = if is_initial {
+        // On first import all groups are new (enabled by default), nothing to skip yet.
+        HashSet::new()
+    } else {
+        channel_group_m3u_account::Entity::find()
+            .filter(channel_group_m3u_account::Column::M3uAccountId.eq(account_id))
+            .filter(channel_group_m3u_account::Column::Enabled.eq(false))
+            .all(db)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .map(|m| m.channel_group_id as i64)
+            .collect()
+    };
+
+    // Purge any existing streams that now belong to a disabled group
+    // (handles groups that were disabled since the last sync).
+    if !disabled_group_ids.is_empty() {
+        let ids: Vec<i64> = disabled_group_ids.iter().cloned().collect();
+        let _ = stream::Entity::delete_many()
+            .filter(stream::Column::M3uAccountId.eq(account_id))
+            .filter(stream::Column::ChannelGroupId.is_in(ids))
+            .exec(db)
+            .await;
+        tracing::info!(
+            "[M3U] Purged existing streams for {} disabled groups on account {}",
+            disabled_group_ids.len(), account_id
+        );
+    }
+
     let attr_re = Regex::new(r#"([a-zA-Z0-9_-]+)="([^"]*)""#)?;
     let mut current_extinf: Option<stream::ActiveModel> = None;
     let mut streams_batch = vec![];
@@ -365,6 +397,13 @@ pub async fn fetch_and_parse_m3u(
                     continue;
                 }
                 // --- End M3UFilter Logic ---
+
+                // Skip streams whose group is disabled for this account
+                if let sea_orm::ActiveValue::Set(Some(cg_id)) = &stream_model.channel_group_id {
+                    if disabled_group_ids.contains(cg_id) {
+                        continue;
+                    }
+                }
 
                 let mut hasher = Sha256::new();
                 hasher.update(line.as_bytes());
@@ -552,6 +591,30 @@ pub async fn fetch_and_parse_xc(
         .await;
     }
 
+    // Load disabled group IDs and purge any existing streams in those groups.
+    let xc_disabled_group_ids: HashSet<i64> = channel_group_m3u_account::Entity::find()
+        .filter(channel_group_m3u_account::Column::M3uAccountId.eq(account_id))
+        .filter(channel_group_m3u_account::Column::Enabled.eq(false))
+        .all(db)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|m| m.channel_group_id as i64)
+        .collect();
+
+    if !xc_disabled_group_ids.is_empty() {
+        let ids: Vec<i64> = xc_disabled_group_ids.iter().cloned().collect();
+        let _ = stream::Entity::delete_many()
+            .filter(stream::Column::M3uAccountId.eq(account_id))
+            .filter(stream::Column::ChannelGroupId.is_in(ids))
+            .exec(db)
+            .await;
+        tracing::info!(
+            "[XC] Purged existing streams for {} disabled groups on account {}",
+            xc_disabled_group_ids.len(), account_id
+        );
+    }
+
     for s in xc_streams {
         let group_title = category_map
             .get(&s.category_id)
@@ -586,6 +649,13 @@ pub async fn fetch_and_parse_xc(
             }
 
             let cg_id = group_id_map.get(&group_title).cloned();
+
+            // Skip streams whose group is disabled for this account
+            if let Some(gid) = cg_id {
+                if xc_disabled_group_ids.contains(&gid) {
+                    continue;
+                }
+            }
 
             let stream_model = stream::ActiveModel {
                 m3u_account_id: Set(Some(account_id)),
