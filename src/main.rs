@@ -61,11 +61,33 @@ fn ensure_ffmpeg() {
 
     tracing::warn!("⚠️  ffmpeg not found. Attempting auto-download...");
     
-    match auto_download() {
+    use ffmpeg_sidecar::download::{auto_download_with_progress, FfmpegDownloadProgressEvent};
+
+    let download_result = auto_download_with_progress(|event| {
+        match event {
+            FfmpegDownloadProgressEvent::Starting => {
+                tracing::info!("⬇️ Starting ffmpeg download...");
+            }
+            FfmpegDownloadProgressEvent::Downloading { total_bytes, downloaded_bytes } => {
+                if total_bytes > 0 && downloaded_bytes % (1024 * 1024 * 5) == 0 { // Log every 5MB
+                    let percent = (downloaded_bytes as f64 / total_bytes as f64) * 100.0;
+                    tracing::info!("⏳ Progress: {:.1}% ({:.1}MB / {:.1}MB)", percent, downloaded_bytes as f64 / 1024.0 / 1024.0, total_bytes as f64 / 1024.0 / 1024.0);
+                }
+            }
+            FfmpegDownloadProgressEvent::UnpackingArchive => {
+                tracing::info!("📦 Unpacking binaries...");
+            }
+            FfmpegDownloadProgressEvent::Done => {
+                tracing::info!("✅ Download and unpacking complete.");
+            }
+        }
+    });
+
+    match download_result {
         Ok(_) => {
             let s_dir = sidecar_dir().map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|_| "unknown".to_string());
-            tracing::info!("✅ ffmpeg downloaded successfully to {}", s_dir);
-        },
+            tracing::info!("✅ ffmpeg binaries verified in {}", s_dir);
+        }
         Err(e) => tracing::error!("❌ ffmpeg auto-download failed: {}. Make sure the container has internet access and write permissions.", e),
     }
 }
