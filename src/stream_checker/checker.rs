@@ -18,6 +18,55 @@ use crate::entities::stream_sorting_rule;
 use crate::entities::channel_stream;
 use sea_orm::{ActiveValue, QueryOrder};
 
+/// Resolve the path to `ffprobe`. Checks the FFPROBE_PATH env var first,
+/// then a list of common install locations, then falls back to the bare name.
+fn resolve_ffprobe() -> String {
+    if let Ok(p) = std::env::var("FFPROBE_PATH") {
+        if !p.is_empty() {
+            return p;
+        }
+    }
+    let candidates = [
+        "/usr/bin/ffprobe",
+        "/usr/local/bin/ffprobe",
+        "/usr/local/sbin/ffprobe",
+        "/opt/ffmpeg/bin/ffprobe",
+        // Common Windows paths when running under WSL or native
+        "C:/ffmpeg/bin/ffprobe.exe",
+        "C:/Program Files/ffmpeg/bin/ffprobe.exe",
+    ];
+    for c in &candidates {
+        if std::path::Path::new(c).exists() {
+            return c.to_string();
+        }
+    }
+    "ffprobe".to_string()
+}
+
+/// Resolve the path to `ffmpeg`. Checks the FFMPEG_PATH env var first,
+/// then a list of common install locations, then falls back to the bare name.
+fn resolve_ffmpeg() -> String {
+    if let Ok(p) = std::env::var("FFMPEG_PATH") {
+        if !p.is_empty() {
+            return p;
+        }
+    }
+    let candidates = [
+        "/usr/bin/ffmpeg",
+        "/usr/local/bin/ffmpeg",
+        "/usr/local/sbin/ffmpeg",
+        "/opt/ffmpeg/bin/ffmpeg",
+        "C:/ffmpeg/bin/ffmpeg.exe",
+        "C:/Program Files/ffmpeg/bin/ffmpeg.exe",
+    ];
+    for c in &candidates {
+        if std::path::Path::new(c).exists() {
+            return c.to_string();
+        }
+    }
+    "ffmpeg".to_string()
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct BulkCheckStatus {
     pub is_running: bool,
@@ -60,7 +109,9 @@ pub async fn check_single_stream(
     info!("🔍 Testing Stream: {} (ID: {})", stream_obj.name, stream_id);
 
     // 1. Run ffprobe
-    let mut ffprobe_cmd = Command::new("ffprobe");
+    let ffprobe_bin = resolve_ffprobe();
+    info!("Using ffprobe binary: {}", ffprobe_bin);
+    let mut ffprobe_cmd = Command::new(&ffprobe_bin);
     ffprobe_cmd.args(&[
         "-v", "error",
         "-skip_frame", "nokey",
@@ -144,7 +195,8 @@ pub async fn check_single_stream(
 
     // 2. Run ffmpeg for bitrate
     info!("🎬 FFmpeg Bitrate Analysis for {}", stream_obj.name);
-    let mut ffmpeg_cmd = Command::new("ffmpeg");
+    let ffmpeg_bin = resolve_ffmpeg();
+    let mut ffmpeg_cmd = Command::new(&ffmpeg_bin);
     ffmpeg_cmd.args(&[
         "-t", "10", // Test duration
         "-i", &stream_url,
