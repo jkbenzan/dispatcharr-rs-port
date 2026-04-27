@@ -29,19 +29,19 @@ mod stream_checker;
 fn ensure_ffmpeg() {
     use ffmpeg_sidecar::{
         download::auto_download,
-        version::ffmpeg_version,
+        paths::ffmpeg_path,
     };
-    match ffmpeg_version() {
-        Ok(v) => {
-            tracing::info!("✅ ffmpeg found: {}", v);
-        }
-        Err(_) => {
-            tracing::warn!("⚠️  ffmpeg not found on PATH — attempting auto-download...");
-            match auto_download() {
-                Ok(_) => tracing::info!("✅ ffmpeg downloaded successfully via ffmpeg-sidecar"),
-                Err(e) => tracing::error!("❌ ffmpeg auto-download failed: {}. Stream checking will not work.", e),
-            }
-        }
+    
+    let sidecar = ffmpeg_path();
+    if sidecar.is_file() {
+        tracing::info!("✅ sidecar ffmpeg found: {}", sidecar.display());
+        return;
+    }
+
+    tracing::warn!("⚠️  sidecar ffmpeg not found — attempting auto-download...");
+    match auto_download() {
+        Ok(_) => tracing::info!("✅ ffmpeg downloaded successfully via ffmpeg-sidecar"),
+        Err(e) => tracing::error!("❌ ffmpeg auto-download failed: {}. Stream checking will not work.", e),
     }
 }
 

@@ -17,6 +17,7 @@ use crate::entities::stream;
 use crate::entities::stream_sorting_rule;
 use crate::entities::channel_stream;
 use sea_orm::{ActiveValue, QueryOrder};
+use std::process::Command as StdCommand;
 
 /// Resolve the path to `ffprobe`. Checks the FFPROBE_PATH env var first,
 /// then the ffmpeg-sidecar managed path, then common install locations,
@@ -24,31 +25,50 @@ use sea_orm::{ActiveValue, QueryOrder};
 fn resolve_ffprobe() -> String {
     if let Ok(p) = std::env::var("FFPROBE_PATH") {
         if !p.is_empty() {
+            info!("🔍 Using FFPROBE_PATH from env: {}", p);
             return p;
         }
     }
-    // Check the sidecar-managed binary (auto-downloaded by ffmpeg-sidecar)
+
+    // Check sidecar first
     if let Ok(dir) = ffmpeg_sidecar::paths::sidecar_dir() {
         let fname = if cfg!(windows) { "ffprobe.exe" } else { "ffprobe" };
         let sidecar_path = dir.join(fname);
-        if sidecar_path.exists() {
-            return sidecar_path.to_string_lossy().to_string();
+        if sidecar_path.is_file() {
+            let p = sidecar_path.to_string_lossy().to_string();
+            // Smoke test
+            if StdCommand::new(&p).arg("-version").output().is_ok() {
+                info!("✅ Using sidecar ffprobe: {}", p);
+                return p;
+            } else {
+                info!("⚠️  Sidecar ffprobe found but failed smoke test: {}", p);
+            }
         }
     }
+
     let candidates = [
         "/usr/bin/ffprobe",
         "/usr/local/bin/ffprobe",
         "/usr/local/sbin/ffprobe",
         "/opt/ffmpeg/bin/ffprobe",
-        // Common Windows paths when running under WSL or native
         "C:/ffmpeg/bin/ffprobe.exe",
         "C:/Program Files/ffmpeg/bin/ffprobe.exe",
+        "C:/Program Files/DownloadHelper CoApp/ffprobe.exe",
     ];
+
     for c in &candidates {
-        if std::path::Path::new(c).exists() {
-            return c.to_string();
+        let path = std::path::Path::new(c);
+        if path.is_file() {
+            if StdCommand::new(c).arg("-version").output().is_ok() {
+                info!("✅ Using system ffprobe: {}", c);
+                return c.to_string();
+            } else {
+                info!("⚠️  Candidate {} found but failed smoke test", c);
+            }
         }
     }
+
+    info!("⚠️  No ffprobe found in common locations, falling back to PATH");
     "ffprobe".to_string()
 }
 
@@ -58,14 +78,23 @@ fn resolve_ffprobe() -> String {
 fn resolve_ffmpeg() -> String {
     if let Ok(p) = std::env::var("FFMPEG_PATH") {
         if !p.is_empty() {
+            info!("🔍 Using FFMPEG_PATH from env: {}", p);
             return p;
         }
     }
-    // Check the sidecar-managed binary (auto-downloaded by ffmpeg-sidecar)
+
+    // Check sidecar first
     let sidecar_path = ffmpeg_sidecar::paths::ffmpeg_path();
-    if sidecar_path.exists() {
-        return sidecar_path.to_string_lossy().to_string();
+    if sidecar_path.is_file() {
+        let p = sidecar_path.to_string_lossy().to_string();
+        if StdCommand::new(&p).arg("-version").output().is_ok() {
+            info!("✅ Using sidecar ffmpeg: {}", p);
+            return p;
+        } else {
+            info!("⚠️  Sidecar ffmpeg found but failed smoke test: {}", p);
+        }
     }
+
     let candidates = [
         "/usr/bin/ffmpeg",
         "/usr/local/bin/ffmpeg",
@@ -73,12 +102,22 @@ fn resolve_ffmpeg() -> String {
         "/opt/ffmpeg/bin/ffmpeg",
         "C:/ffmpeg/bin/ffmpeg.exe",
         "C:/Program Files/ffmpeg/bin/ffmpeg.exe",
+        "C:/Program Files/DownloadHelper CoApp/ffmpeg.exe",
     ];
+
     for c in &candidates {
-        if std::path::Path::new(c).exists() {
-            return c.to_string();
+        let path = std::path::Path::new(c);
+        if path.is_file() {
+            if StdCommand::new(c).arg("-version").output().is_ok() {
+                info!("✅ Using system ffmpeg: {}", c);
+                return c.to_string();
+            } else {
+                info!("⚠️  Candidate {} found but failed smoke test", c);
+            }
         }
     }
+
+    info!("⚠️  No ffmpeg found in common locations, falling back to PATH");
     "ffmpeg".to_string()
 }
 
