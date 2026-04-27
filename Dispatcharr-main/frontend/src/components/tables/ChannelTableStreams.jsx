@@ -80,7 +80,7 @@ const RowDragHandleCell = ({ rowId }) => {
 // Row Component
 const DraggableRow = ({ row, index }) => {
   const { transform, transition, setNodeRef, isDragging } = useSortable({
-    id: row.original.id,
+    id: row.original.channel_stream_id || row.original.id,
   });
 
   const style = {
@@ -94,7 +94,7 @@ const DraggableRow = ({ row, index }) => {
     <Box
       ref={setNodeRef}
       key={row.id}
-      className={`tr ${index % 2 == 0 ? 'tr-even' : 'tr-odd'}${(row.original.is_stale || row.original.stream?.is_stale) ? ' stale-stream-row' : ''}`}
+      className={`tr ${index % 2 == 0 ? 'tr-even' : 'tr-odd'}${row.original.is_stale ? ' stale-stream-row' : ''}`}
       style={{
         ...style,
         display: 'flex',
@@ -160,7 +160,7 @@ const ChannelStreams = ({ channel, isExpanded }) => {
     const newStreamList = data.filter((s) => s.id !== stream.id);
     await API.updateChannel({
       ...channel,
-      streams: newStreamList.map((s) => s.stream_id || s.stream?.id || s.id),
+      streams: newStreamList.map((s) => s.id),
     });
     await API.requeryChannels();
     await API.requeryStreams();
@@ -339,15 +339,15 @@ const ChannelStreams = ({ channel, isExpanded }) => {
           header: 'Stream Info',
           accessorKey: 'name',
           cell: ({ row }) => {
-            const streamData = row.original.stream || row.original;
-            const accountId = streamData.m3u_account_id || streamData.m3u_account;
+            const stream = row.original;
+            const accountId = stream.m3u_account_id || stream.m3u_account;
             const playlistName =
               playlists[accountId]?.name || 'Unknown';
             const accountName =
               m3uAccountsMap[accountId] || playlistName;
 
             // Categorize stream stats
-            const stats = streamData.stream_stats || streamData.custom_properties?.stream_stats;
+            const stats = stream.stream_stats;
             const categorizedStats = categorizeStreamStats(stats);
             const hasAdvancedStats = Object.values(categorizedStats).some(
               (category) => Object.keys(category).length > 0
@@ -357,19 +357,19 @@ const ChannelStreams = ({ channel, isExpanded }) => {
               <Box>
                 <Group gap="xs" align="center">
                   <Text fw={500} size="sm">
-                    {streamData.name || 'Unknown Stream'}
+                    {stream.name || 'Unknown Stream'}
                   </Text>
                   <Badge size="xs" variant="light" color="teal">
                     {accountName}
                   </Badge>
-                  {streamData.quality && (
+                  {stream.quality && (
                     <Badge size="xs" variant="light" color="gray">
-                      {streamData.quality}
+                      {stream.quality}
                     </Badge>
                   )}
-                  {streamData.url && (
+                  {stream.url && (
                     <>
-                      <Tooltip label={streamData.url}>
+                      <Tooltip label={stream.url}>
                         <Badge
                           size="xs"
                           variant="light"
@@ -377,7 +377,7 @@ const ChannelStreams = ({ channel, isExpanded }) => {
                           style={{ cursor: 'pointer' }}
                           onClick={async (e) => {
                             e.stopPropagation();
-                            await copyToClipboard(streamData.url, {
+                            await copyToClipboard(stream.url, {
                               successTitle: 'URL Copied',
                               successMessage: 'Stream URL copied to clipboard',
                             });
@@ -393,8 +393,8 @@ const ChannelStreams = ({ channel, isExpanded }) => {
                           variant="light"
                           onClick={() =>
                             handleWatchStream(
-                              streamData.stream_hash || streamData.id,
-                              streamData.name
+                              stream.stream_hash || stream.id,
+                              stream.name
                             )
                           }
                           style={{ marginLeft: 2 }}
@@ -573,7 +573,7 @@ const ChannelStreams = ({ channel, isExpanded }) => {
     manualSorting: true,
     manualFiltering: true,
     enableRowSelection: true,
-    getRowId: (row) => row.id,
+    getRowId: (row) => row.channel_stream_id || row.id,
     getCoreRowModel: getCoreRowModel(),
   });
 
@@ -592,7 +592,7 @@ const ChannelStreams = ({ channel, isExpanded }) => {
         const { streams: _, ...channelUpdate } = channel;
         API.updateChannel({
           ...channelUpdate,
-          streams: retval.map((row) => row.stream_id || row.stream?.id || row.id),
+          streams: retval.map((row) => row.id),
         }).then(() => {
           API.requeryChannels();
         });

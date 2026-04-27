@@ -1156,11 +1156,10 @@ const ChannelsTable = ({ onReady, hideLinks = false, streamCheckerMode = false }
           let maxRes = 0;
           const providers = new Set();
 
-          streams.forEach(cs => {
-            if (cs.stream) {
+          streams.forEach(s => {
               // Use m3u_account_id for provider tracking (correct field)
-              if (cs.stream.m3u_account_id) providers.add(cs.stream.m3u_account_id);
-              const stats = cs.stream.custom_properties?.stream_stats;
+              if (s.m3u_account_id) providers.add(s.m3u_account_id);
+              const stats = s.stream_stats;
               if (stats) {
                 // Only count as unreachable if test explicitly determined it (reachable===false)
                 if (stats.reachable === false) unreachable++;
@@ -1170,8 +1169,8 @@ const ChannelsTable = ({ onReady, hideLinks = false, streamCheckerMode = false }
                   if (!isNaN(res) && res > maxRes) maxRes = res;
                 }
               }
-            }
           });
+
 
           return (
             <Group gap="xs" style={{ fontSize: '12px' }}>
