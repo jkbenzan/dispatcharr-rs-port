@@ -94,7 +94,7 @@ const DraggableRow = ({ row, index }) => {
     <Box
       ref={setNodeRef}
       key={row.id}
-      className={`tr ${index % 2 == 0 ? 'tr-even' : 'tr-odd'}${row.original.is_stale ? ' stale-stream-row' : ''}`}
+      className={`tr ${index % 2 == 0 ? 'tr-even' : 'tr-odd'}${(row.original.is_stale || row.original.stream?.is_stale) ? ' stale-stream-row' : ''}`}
       style={{
         ...style,
         display: 'flex',
@@ -160,7 +160,7 @@ const ChannelStreams = ({ channel, isExpanded }) => {
     const newStreamList = data.filter((s) => s.id !== stream.id);
     await API.updateChannel({
       ...channel,
-      streams: newStreamList.map((s) => s.id),
+      streams: newStreamList.map((s) => s.stream_id || s.stream?.id || s.id),
     });
     await API.requeryChannels();
     await API.requeryStreams();
@@ -339,14 +339,16 @@ const ChannelStreams = ({ channel, isExpanded }) => {
           header: 'Stream Info',
           accessorKey: 'name',
           cell: ({ row }) => {
-            const stream = row.original;
+            const streamData = row.original.stream || row.original;
+            const accountId = streamData.m3u_account_id || streamData.m3u_account;
             const playlistName =
-              playlists[stream.m3u_account]?.name || 'Unknown';
+              playlists[accountId]?.name || 'Unknown';
             const accountName =
-              m3uAccountsMap[stream.m3u_account] || playlistName;
+              m3uAccountsMap[accountId] || playlistName;
 
             // Categorize stream stats
-            const categorizedStats = categorizeStreamStats(stream.stream_stats);
+            const stats = streamData.stream_stats || streamData.custom_properties?.stream_stats;
+            const categorizedStats = categorizeStreamStats(stats);
             const hasAdvancedStats = Object.values(categorizedStats).some(
               (category) => Object.keys(category).length > 0
             );
@@ -355,19 +357,19 @@ const ChannelStreams = ({ channel, isExpanded }) => {
               <Box>
                 <Group gap="xs" align="center">
                   <Text fw={500} size="sm">
-                    {stream.name}
+                    {streamData.name || 'Unknown Stream'}
                   </Text>
                   <Badge size="xs" variant="light" color="teal">
                     {accountName}
                   </Badge>
-                  {stream.quality && (
+                  {streamData.quality && (
                     <Badge size="xs" variant="light" color="gray">
-                      {stream.quality}
+                      {streamData.quality}
                     </Badge>
                   )}
-                  {stream.url && (
+                  {streamData.url && (
                     <>
-                      <Tooltip label={stream.url}>
+                      <Tooltip label={streamData.url}>
                         <Badge
                           size="xs"
                           variant="light"
@@ -375,7 +377,7 @@ const ChannelStreams = ({ channel, isExpanded }) => {
                           style={{ cursor: 'pointer' }}
                           onClick={async (e) => {
                             e.stopPropagation();
-                            await copyToClipboard(stream.url, {
+                            await copyToClipboard(streamData.url, {
                               successTitle: 'URL Copied',
                               successMessage: 'Stream URL copied to clipboard',
                             });
@@ -391,8 +393,8 @@ const ChannelStreams = ({ channel, isExpanded }) => {
                           variant="light"
                           onClick={() =>
                             handleWatchStream(
-                              stream.stream_hash || stream.id,
-                              stream.name
+                              streamData.stream_hash || streamData.id,
+                              streamData.name
                             )
                           }
                           style={{ marginLeft: 2 }}
@@ -405,79 +407,79 @@ const ChannelStreams = ({ channel, isExpanded }) => {
                 </Group>
 
                 {/* Basic Stream Stats (always shown) */}
-                {stream.stream_stats && (
+                {stats && (
                   <Group gap="xs" mt={4} align="center">
                     {/* Video Information */}
-                    {(stream.stream_stats.video_codec ||
-                      stream.stream_stats.resolution ||
-                      stream.stream_stats.video_bitrate ||
-                      stream.stream_stats.source_fps) && (
+                    {(stats.video_codec ||
+                      stats.resolution ||
+                      stats.video_bitrate ||
+                      stats.source_fps) && (
                       <>
                         <Text size="xs" c="dimmed" fw={500}>
                           Video:
                         </Text>
-                        {stream.stream_stats.resolution && (
+                        {stats.resolution && (
                           <Badge size="xs" variant="light" color="red">
-                            {stream.stream_stats.resolution}
+                            {stats.resolution}
                           </Badge>
                         )}
-                        {stream.stream_stats.video_bitrate && (
+                        {stats.video_bitrate && (
                           <Badge
                             size="xs"
                             variant="light"
                             color="orange"
                             style={{ textTransform: 'none' }}
                           >
-                            {stream.stream_stats.video_bitrate} kbps
+                            {stats.video_bitrate} kbps
                           </Badge>
                         )}
-                        {stream.stream_stats.source_fps && (
+                        {stats.source_fps && (
                           <Badge size="xs" variant="light" color="orange">
-                            {stream.stream_stats.source_fps} FPS
+                            {stats.source_fps} FPS
                           </Badge>
                         )}
-                        {stream.stream_stats.video_codec && (
+                        {stats.video_codec && (
                           <Badge size="xs" variant="light" color="blue">
-                            {stream.stream_stats.video_codec.toUpperCase()}
+                            {stats.video_codec.toUpperCase()}
                           </Badge>
                         )}
                       </>
                     )}
 
                     {/* Audio Information */}
-                    {(stream.stream_stats.audio_codec ||
-                      stream.stream_stats.audio_channels) && (
+                    {(stats.audio_codec ||
+                      stats.audio_channels) && (
                       <>
                         <Text size="xs" c="dimmed" fw={500}>
                           Audio:
                         </Text>
-                        {stream.stream_stats.audio_channels && (
+                        {stats.audio_channels && (
                           <Badge size="xs" variant="light" color="pink">
-                            {stream.stream_stats.audio_channels}
+                            {stats.audio_channels}
                           </Badge>
                         )}
-                        {stream.stream_stats.audio_codec && (
+                        {stats.audio_codec && (
                           <Badge size="xs" variant="light" color="pink">
-                            {stream.stream_stats.audio_codec.toUpperCase()}
+                            {stats.audio_codec.toUpperCase()}
                           </Badge>
                         )}
                       </>
                     )}
 
                     {/* Output Bitrate */}
-                    {stream.stream_stats.ffmpeg_output_bitrate && (
+                    {stats.ffmpeg_output_bitrate && (
                       <>
                         <Text size="xs" c="dimmed" fw={500}>
                           Output Bitrate:
                         </Text>
-                        {stream.stream_stats.ffmpeg_output_bitrate && (
+                        {stats.ffmpeg_output_bitrate && (
                           <Badge
                             size="xs"
                             variant="light"
                             color="orange"
                             style={{ textTransform: 'none' }}
                           >
-                            {stream.stream_stats.ffmpeg_output_bitrate} kbps
+                            {stats.ffmpeg_output_bitrate} kbps
                           </Badge>
                         )}
                       </>
@@ -526,11 +528,11 @@ const ChannelStreams = ({ channel, isExpanded }) => {
                     {renderStatsCategory('Other', categorizedStats.other)}
 
                     {/* Show when stats were last updated */}
-                    {stream.stream_stats_updated_at && (
+                    {stats_updated_at && (
                       <Text size="xs" c="dimmed" mt="xs">
                         Last updated:{' '}
                         {new Date(
-                          stream.stream_stats_updated_at
+                          stats_updated_at
                         ).toLocaleString()}
                       </Text>
                     )}
@@ -590,7 +592,7 @@ const ChannelStreams = ({ channel, isExpanded }) => {
         const { streams: _, ...channelUpdate } = channel;
         API.updateChannel({
           ...channelUpdate,
-          streams: retval.map((row) => row.id),
+          streams: retval.map((row) => row.stream_id || row.stream?.id || row.id),
         }).then(() => {
           API.requeryChannels();
         });
