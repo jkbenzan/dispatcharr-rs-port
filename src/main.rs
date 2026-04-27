@@ -35,14 +35,13 @@ fn ensure_ffmpeg() {
     let cwd = std::env::current_dir().map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|_| "unknown".to_string());
     tracing::info!("📂 Current working directory: {}", cwd);
 
-    // If /data exists, we want to prioritize it for persistence in Docker/Unraid
-    if std::path::Path::new("/data").is_dir() {
-        tracing::info!("📦 /data directory found, prioritizing for persistence");
-        // We can't easily change where ffmpeg-sidecar downloads via high-level API
-        // without setting the working directory or using lower level functions.
-        // However, auto_download() uses sidecar_dir().
-        // If we are on Linux and /data exists, we'll suggest the user maps their volume to the app's sidecar dir
-        // OR we can try to manually download to /data if missing.
+    // Check if ffmpeg is already on PATH (installed via Dockerfile or system)
+    if let Ok(output) = std::process::Command::new("ffmpeg").arg("-version").output() {
+        if output.status.success() {
+            let version = String::from_utf8_lossy(&output.stdout).lines().next().unwrap_or("unknown").to_string();
+            tracing::info!("✅ system ffmpeg found on PATH: {}", version);
+            return;
+        }
     }
 
     let sidecar = ffmpeg_path();

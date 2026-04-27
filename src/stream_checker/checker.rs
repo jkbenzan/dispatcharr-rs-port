@@ -23,6 +23,13 @@ use std::process::Command as StdCommand;
 /// then the ffmpeg-sidecar managed path, then common install locations,
 /// then falls back to the bare name.
 fn resolve_ffprobe() -> String {
+    // Check system PATH first
+    if let Ok(output) = StdCommand::new("ffprobe").arg("-version").output() {
+        if output.status.success() {
+            return "ffprobe".to_string();
+        }
+    }
+
     if let Ok(p) = std::env::var("FFPROBE_PATH") {
         if !p.is_empty() {
             info!("🔍 Using FFPROBE_PATH from env: {}", p);
@@ -52,10 +59,10 @@ fn resolve_ffprobe() -> String {
     }
 
     let candidates = [
-        "/data/ffmpeg-sidecar/ffprobe",
-        "/data/ffprobe",
         "/usr/bin/ffprobe",
         "/usr/local/bin/ffprobe",
+        "/data/ffmpeg-sidecar/ffprobe",
+        "/data/ffprobe",
         "/usr/local/sbin/ffprobe",
         "/opt/ffmpeg/bin/ffprobe",
         "C:/ffmpeg/bin/ffprobe.exe",
@@ -88,6 +95,13 @@ fn resolve_ffprobe() -> String {
 /// then the ffmpeg-sidecar managed path, then common install locations,
 /// then falls back to the bare name.
 fn resolve_ffmpeg() -> String {
+    // Check system PATH first
+    if let Ok(output) = StdCommand::new("ffmpeg").arg("-version").output() {
+        if output.status.success() {
+            return "ffmpeg".to_string();
+        }
+    }
+
     if let Ok(p) = std::env::var("FFMPEG_PATH") {
         if !p.is_empty() {
             info!("🔍 Using FFMPEG_PATH from env: {}", p);
@@ -113,10 +127,10 @@ fn resolve_ffmpeg() -> String {
     }
 
     let candidates = [
-        "/data/ffmpeg-sidecar/ffmpeg",
-        "/data/ffmpeg",
         "/usr/bin/ffmpeg",
         "/usr/local/bin/ffmpeg",
+        "/data/ffmpeg-sidecar/ffmpeg",
+        "/data/ffmpeg",
         "/usr/local/sbin/ffmpeg",
         "/opt/ffmpeg/bin/ffmpeg",
         "C:/ffmpeg/bin/ffmpeg.exe",

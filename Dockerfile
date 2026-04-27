@@ -23,10 +23,11 @@ RUN cargo build --release
 # STEP 3: Create the slim Production Image
 FROM debian:bookworm-slim
 
-# Install runtime OpenSSL (needed for the binary to actually run)
+# Install runtime OpenSSL and ffmpeg
 RUN apt-get update && apt-get install -y \
     libssl3 \
     ca-certificates \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
