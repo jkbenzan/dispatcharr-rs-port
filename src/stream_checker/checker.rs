@@ -91,8 +91,8 @@ pub async fn check_single_stream(
 
         let mut active_stream: stream::ActiveModel = stream_obj.into();
         let mut props = active_stream.custom_properties.unwrap().unwrap_or_else(|| json!({}));
-        props["stream_stats"] = json!({});
-        props["stream_stats_updated_at"] = Value::Null;
+        props["stream_stats"] = json!({"reachable": false, "status": "offline"});
+        props["stream_stats_updated_at"] = json!(chrono::Utc::now().to_rfc3339());
         active_stream.custom_properties = Set(Some(props));
         let _ = active_stream.update(&state.db).await;
 
@@ -134,8 +134,8 @@ pub async fn check_single_stream(
     if streams.is_empty() {
         let mut active_stream: stream::ActiveModel = stream_obj.into();
         let mut props = active_stream.custom_properties.unwrap().unwrap_or_else(|| json!({}));
-        props["stream_stats"] = json!({});
-        props["stream_stats_updated_at"] = Value::Null;
+        props["stream_stats"] = json!({"reachable": false, "status": "offline"});
+        props["stream_stats_updated_at"] = json!(chrono::Utc::now().to_rfc3339());
         active_stream.custom_properties = Set(Some(props));
         let _ = active_stream.update(&state.db).await;
 
@@ -189,6 +189,7 @@ pub async fn check_single_stream(
     }
 
     let stats = json!({
+        "reachable": true,
         "video_codec": video_codec,
         "width": width,
         "height": height,

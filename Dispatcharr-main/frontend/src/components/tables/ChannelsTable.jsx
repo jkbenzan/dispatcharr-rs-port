@@ -1147,7 +1147,7 @@ const ChannelsTable = ({ onReady, hideLinks = false, streamCheckerMode = false }
       filtered.push({
         id: 'stream_aggregations',
         header: 'Stream Aggregations',
-        size: 350,
+        size: 380,
         enableResizing: true,
         cell: ({ row }) => {
           const streams = row.original.streams || [];
@@ -1155,26 +1155,30 @@ const ChannelsTable = ({ onReady, hideLinks = false, streamCheckerMode = false }
           let unreachable = 0;
           let maxRes = 0;
           const providers = new Set();
-          
+
           streams.forEach(cs => {
-             if (cs.stream) {
-                 if (cs.stream.m3u_playlist_id) providers.add(cs.stream.m3u_playlist_id);
-                 const stats = cs.stream.custom_properties?.stream_stats;
-                 if (stats) {
-                     if (stats.video_resolution) {
-                         const res = parseInt(stats.video_resolution, 10);
-                         if (!isNaN(res) && res > maxRes) maxRes = res;
-                     }
-                 } else {
-                     unreachable++;
-                 }
-             }
+            if (cs.stream) {
+              // Use m3u_account_id for provider tracking (correct field)
+              if (cs.stream.m3u_account_id) providers.add(cs.stream.m3u_account_id);
+              const stats = cs.stream.custom_properties?.stream_stats;
+              if (stats) {
+                // Only count as unreachable if test explicitly determined it (reachable===false)
+                if (stats.reachable === false) unreachable++;
+                // Parse max resolution
+                if (stats.video_resolution) {
+                  const res = parseInt(stats.video_resolution, 10);
+                  if (!isNaN(res) && res > maxRes) maxRes = res;
+                }
+              }
+            }
           });
-          
+
           return (
             <Group gap="xs" style={{ fontSize: '12px' }}>
               <Badge size="sm" color="blue">Total: {total}</Badge>
-              <Badge size="sm" color={unreachable > 0 ? "red" : "green"}>Unreachable: {unreachable}</Badge>
+              {unreachable > 0 && (
+                <Badge size="sm" color="red">Unreachable: {unreachable}</Badge>
+              )}
               <Badge size="sm" color="grape">Providers: {providers.size}</Badge>
               {maxRes > 0 && <Badge size="sm" color="teal">Max Res: {maxRes}p</Badge>}
             </Group>

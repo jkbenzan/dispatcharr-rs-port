@@ -89,7 +89,7 @@ const StreamRowActions = ({
       id: selectedChannelIds[0],
       streams: [
         ...new Set(
-          channelSelectionStreams.map((s) => s.id).concat([row.original.id])
+          (channelSelectionStreams || []).map((s) => s.stream_id ?? s.stream?.id ?? s.id).concat([row.original.id])
         ),
       ],
     });

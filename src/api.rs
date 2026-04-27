@@ -2179,8 +2179,10 @@ pub async fn update_m3u_group_settings(
                     .one(&state.db)
                     .await
                 {
+                    let was_enabled = mapping.enabled;
                     let mut active: channel_group_m3u_account::ActiveModel = mapping.into();
-                    if let Some(enabled) = setting.get("enabled").and_then(|v| v.as_bool()) {
+                    let new_enabled = setting.get("enabled").and_then(|v| v.as_bool());
+                    if let Some(enabled) = new_enabled {
                         active.enabled = sea_orm::Set(enabled);
                     }
                     if let Some(auto_sync) =
@@ -2189,6 +2191,39 @@ pub async fn update_m3u_group_settings(
                         active.auto_channel_sync = sea_orm::Set(auto_sync);
                     }
                     let _ = active.update(&state.db).await;
+
+                    // When a group is disabled, delete its streams from the DB
+                    if was_enabled && new_enabled == Some(false) {
+                        tracing::info!(
+                            "[M3U] Group {} disabled - deleting streams for account {}",
+                            cg_id, account_id
+                        );
+                        let streams_to_delete: Vec<i64> = stream::Entity::find()
+                            .filter(stream::Column::M3uAccountId.eq(account_id))
+                            .filter(stream::Column::ChannelGroupId.eq(cg_id))
+                            .all(&state.db)
+                            .await
+                            .unwrap_or_default()
+                            .into_iter()
+                            .map(|s| s.id)
+                            .collect();
+
+                        if !streams_to_delete.is_empty() {
+                            // Remove from channel assignments first
+                            let _ = state.db.execute(
+                                sea_orm::Statement::from_sql_and_values(
+                                    sea_orm::DatabaseBackend::Postgres,
+                                    "DELETE FROM dispatcharr_channels_channelstream WHERE stream_id = ANY($1)",
+                                    vec![streams_to_delete.clone().into()],
+                                )
+                            ).await;
+                            // Delete the streams themselves
+                            let _ = stream::Entity::delete_many()
+                                .filter(stream::Column::Id.is_in(streams_to_delete))
+                                .exec(&state.db)
+                                .await;
+                        }
+                    }
                 }
             }
         }
@@ -2875,7 +2910,36 @@ pub async fn update_channel(
         }
     }
 
-    Ok(Json(serde_json::json!({"id": id, "success": true})))
+    // Return full channel with nested streams so the frontend store updates correctly
+    let channel_streams = channel_stream::Entity::find()
+        .filter(channel_stream::Column::ChannelId.eq(id))
+        .order_by_asc(channel_stream::Column::Order)
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+
+    let updated_ch = crate::entities::channel::Entity::find_by_id(id)
+        .one(&state.db)
+        .await
+        .ok()
+        .flatten();
+
+    let mut ch_json = match updated_ch {
+        Some(ch) => serde_json::to_value(&ch).unwrap(),
+        None => json!({"id": id}),
+    };
+
+    let mut streams_json = Vec::new();
+    for cs in channel_streams {
+        let mut cs_json = serde_json::to_value(&cs).unwrap();
+        if let Ok(Some(s)) = stream::Entity::find_by_id(cs.stream_id).one(&state.db).await {
+            cs_json["stream"] = serde_json::to_value(&s).unwrap();
+        }
+        streams_json.push(cs_json);
+    }
+    ch_json["streams"] = json!(streams_json);
+
+    Ok(Json(ch_json))
 }
 
 pub async fn bulk_update_channels(
