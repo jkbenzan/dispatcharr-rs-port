@@ -456,27 +456,7 @@ pub async fn get_channels(
             .collect();
         ch_json["epg_sources"] = json!(epg_ids);
 
-        let stream_links = state
-            .db
-            .query_all(Statement::from_sql_and_values(
-                sea_orm::DatabaseBackend::Postgres,
-                "SELECT stream_id FROM dispatcharr_channels_channelstream WHERE channel_id = $1",
-                vec![ch.id.into()],
-            ))
-            .await
-            .unwrap_or_default();
-
-        let mut streams_arr = vec![];
-        for link in stream_links {
-            if let Ok(stream_id) = link.try_get::<i64>("", "stream_id") {
-                if let Ok(Some(stream_obj)) =
-                    stream::Entity::find_by_id(stream_id).one(&state.db).await
-                {
-                    streams_arr.push(stream_obj);
-                }
-            }
-        }
-        ch_json["streams"] = json!(streams_arr);
+        // streams already attached above via channel_stream::Entity
 
         results.push(ch_json);
     }
