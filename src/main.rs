@@ -35,28 +35,38 @@ fn ensure_ffmpeg() {
     let cwd = std::env::current_dir().map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|_| "unknown".to_string());
     tracing::info!("📂 Current working directory: {}", cwd);
 
+    // If /data exists, we want to prioritize it for persistence in Docker/Unraid
+    if std::path::Path::new("/data").is_dir() {
+        tracing::info!("📦 /data directory found, prioritizing for persistence");
+        // We can't easily change where ffmpeg-sidecar downloads via high-level API
+        // without setting the working directory or using lower level functions.
+        // However, auto_download() uses sidecar_dir().
+        // If we are on Linux and /data exists, we'll suggest the user maps their volume to the app's sidecar dir
+        // OR we can try to manually download to /data if missing.
+    }
+
     let sidecar = ffmpeg_path();
-    let s_dir = sidecar_dir().map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|_| "unknown".to_string());
     
     if sidecar.is_file() {
         tracing::info!("✅ sidecar ffmpeg found: {}", sidecar.display());
         return;
     }
 
-    tracing::warn!("⚠️  sidecar ffmpeg not found at {}. Attempting auto-download...", sidecar.display());
-    
-    // Check if we can write to the sidecar directory
-    if let Ok(dir) = sidecar_dir() {
-        if let Err(e) = std::fs::create_dir_all(&dir) {
-            tracing::error!("❌ Cannot create sidecar directory {}: {}", dir.display(), e);
-        } else {
-            tracing::info!("📁 Sidecar directory verified/created: {}", dir.display());
-        }
+    // Fallback check for /data/ffprobe or /data/ffmpeg
+    let data_ffmpeg = std::path::Path::new("/data/ffmpeg");
+    if data_ffmpeg.is_file() {
+        tracing::info!("✅ ffmpeg found in /data");
+        return;
     }
 
+    tracing::warn!("⚠️  ffmpeg not found. Attempting auto-download...");
+    
     match auto_download() {
-        Ok(_) => tracing::info!("✅ ffmpeg downloaded successfully to {}", s_dir),
-        Err(e) => tracing::error!("❌ ffmpeg auto-download failed: {}. Make sure the container has internet access and write permissions to {}", e, s_dir),
+        Ok(_) => {
+            let s_dir = sidecar_dir().map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|_| "unknown".to_string());
+            tracing::info!("✅ ffmpeg downloaded successfully to {}", s_dir);
+        },
+        Err(e) => tracing::error!("❌ ffmpeg auto-download failed: {}. Make sure the container has internet access and write permissions.", e),
     }
 }
 

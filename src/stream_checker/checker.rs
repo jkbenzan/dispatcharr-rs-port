@@ -47,6 +47,8 @@ fn resolve_ffprobe() -> String {
     }
 
     let candidates = [
+        "/data/ffmpeg-sidecar/ffprobe",
+        "/data/ffprobe",
         "/usr/bin/ffprobe",
         "/usr/local/bin/ffprobe",
         "/usr/local/sbin/ffprobe",
@@ -96,6 +98,8 @@ fn resolve_ffmpeg() -> String {
     }
 
     let candidates = [
+        "/data/ffmpeg-sidecar/ffmpeg",
+        "/data/ffmpeg",
         "/usr/bin/ffmpeg",
         "/usr/local/bin/ffmpeg",
         "/usr/local/sbin/ffmpeg",
