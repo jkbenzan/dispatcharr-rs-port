@@ -528,14 +528,15 @@ const ChannelStreams = ({ channel, isExpanded }) => {
                     {renderStatsCategory('Other', categorizedStats.other)}
 
                     {/* Show when stats were last updated */}
-                    {stats_updated_at && (
+                    {stream.stream_stats_updated_at && (
                       <Text size="xs" c="dimmed" mt="xs">
                         Last updated:{' '}
                         {new Date(
-                          stats_updated_at
+                          stream.stream_stats_updated_at
                         ).toLocaleString()}
                       </Text>
                     )}
+
                   </Box>
                 </Collapse>
               </Box>
