@@ -74,7 +74,7 @@ const StreamChecker = () => {
     // Initial fetch
     fetchStatus();
 
-    interval = setInterval(fetchStatus, 2000);
+    interval = setInterval(fetchStatus, 1000);
     return () => clearInterval(interval);
   }, []);
 

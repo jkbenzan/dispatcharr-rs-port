@@ -257,7 +257,7 @@ const StreamsTable = ({ onReady }) => {
     group: true,
     m3u: true,
     tvg_id: false,
-    stats: false,
+    stats: true,
   };
 
   const [storedColumnVisibility, setStoredColumnVisibility] = useLocalStorage(

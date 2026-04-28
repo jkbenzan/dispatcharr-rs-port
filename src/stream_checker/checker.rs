@@ -340,12 +340,13 @@ pub async fn check_single_stream(
     let stats = json!({
         "reachable": true,
         "video_codec": video_codec,
+        "resolution": format!("{}x{}", width.unwrap_or(0), height.unwrap_or(0)),
         "width": width,
         "height": height,
-        "fps": fps,
+        "source_fps": fps,
         "audio_codec": audio_codec,
-        "channels": channels,
-        "bitrate": bitrate,
+        "audio_channels": channels,
+        "video_bitrate": bitrate,
         "status": "online"
     });
 
@@ -364,9 +365,13 @@ pub async fn check_single_stream(
     let mut response_json = serde_json::to_value(&stream_obj).unwrap();
     if let Some(obj) = response_json.as_object_mut() {
         let mut new_props = stream_obj.custom_properties.clone().unwrap_or_else(|| json!({}));
-        new_props["stream_stats"] = stats;
+        new_props["stream_stats"] = stats.clone();
         new_props["stream_stats_updated_at"] = json!(chrono::Utc::now().to_rfc3339());
         obj.insert("custom_properties".to_string(), new_props);
+        
+        // Flatten for frontend
+        obj.insert("stream_stats".to_string(), stats);
+        obj.insert("stream_stats_updated_at".to_string(), json!(chrono::Utc::now().to_rfc3339()));
     }
 
     Ok(response_json)

@@ -1099,6 +1099,15 @@ pub async fn get_streams(
         } else {
             js["m3u_account"] = serde_json::Value::Null;
         }
+
+        if let Some(props) = s.custom_properties.as_ref() {
+            if let Some(stats) = props.get("stream_stats") {
+                js["stream_stats"] = stats.clone();
+            }
+            if let Some(updated) = props.get("stream_stats_updated_at") {
+                js["stream_stats_updated_at"] = updated.clone();
+            }
+        }
         if let Some(p_id) = s.stream_profile_id {
             js["stream_profile"] = json!(p_id);
             js["stream_profile_id"] = json!(p_id);
@@ -1200,6 +1209,15 @@ pub async fn get_streams_by_ids(
             js["m3u_account"] = json!(m_id);
         } else {
             js["m3u_account"] = serde_json::Value::Null;
+        }
+
+        if let Some(props) = s.custom_properties.as_ref() {
+            if let Some(stats) = props.get("stream_stats") {
+                js["stream_stats"] = stats.clone();
+            }
+            if let Some(updated) = props.get("stream_stats_updated_at") {
+                js["stream_stats_updated_at"] = updated.clone();
+            }
         }
         if let Some(p_id) = s.stream_profile_id {
             js["stream_profile"] = json!(p_id);
