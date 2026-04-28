@@ -12,21 +12,26 @@ import {
   Badge,
   Stack,
   Loader,
+  Grid,
+  RingProgress,
+  Center,
+  Slider,
+  ActionIcon,
+  Table
 } from '@mantine/core';
 import {
-  Activity,
   Settings,
   Wand2,
   CheckSquare,
   Play,
+  SquarePen,
+  Trash2
 } from 'lucide-react';
 import ChannelsTable from '../components/tables/ChannelsTable';
 import API from '../api';
 import useChannelsTableStore from '../store/channelsTable';
 import { notifications } from '@mantine/notifications';
 import SortingRuleForm from '../components/forms/SortingRuleForm';
-import { Table, ActionIcon, Center } from '@mantine/core';
-import { SquarePen, Trash2 } from 'lucide-react';
 
 const StreamChecker = () => {
   const [activeTab, setActiveTab] = useState('bulk');
@@ -38,7 +43,10 @@ const StreamChecker = () => {
     failed: 0,
     current_stream_id: null,
     current_stream_name: null,
+    workers: [],
+    last_results: []
   });
+  const [parallelProviders, setParallelProviders] = useState(1);
 
   const selectedChannelIds = useChannelsTableStore((state) => state.selectedChannelIds) || [];
   const setSelectedChannelIds = useChannelsTableStore((state) => state.setSelectedChannelIds);
@@ -58,8 +66,47 @@ const StreamChecker = () => {
     }
   };
 
+  const fetchSettings = async () => {
+    try {
+      const data = await API.listSettings();
+      const streamSettings = data.find(s => s.key === 'stream_settings');
+      if (streamSettings && streamSettings.value && streamSettings.value.stream_checker_parallel_providers) {
+        setParallelProviders(streamSettings.value.stream_checker_parallel_providers);
+      }
+    } catch(e) {
+      console.error('Failed to fetch settings', e);
+    }
+  };
+
+  const updateParallelProviders = async (value) => {
+    setParallelProviders(value);
+    try {
+      const data = await API.listSettings();
+      let streamSettings = data.find(s => s.key === 'stream_settings');
+      if (streamSettings) {
+        const updatedValue = { ...streamSettings.value, stream_checker_parallel_providers: value };
+        await API.updateSetting(streamSettings.id, {
+          key: streamSettings.key,
+          name: streamSettings.name,
+          value: updatedValue
+        });
+        notifications.show({ title: 'Saved', message: 'Parallel providers setting saved', color: 'green' });
+      } else {
+        await API.createSetting({
+          key: 'stream_settings',
+          name: 'Stream Settings',
+          value: { stream_checker_parallel_providers: value }
+        });
+      }
+    } catch(e) {
+      console.error('Failed to update setting', e);
+      notifications.show({ title: 'Error', message: 'Failed to save setting', color: 'red' });
+    }
+  };
+
   useEffect(() => {
     fetchRules();
+    fetchSettings();
   }, []);
 
   useEffect(() => {
@@ -73,30 +120,22 @@ const StreamChecker = () => {
       }
     };
 
-    // Initial fetch
     fetchStatus();
-
     interval = setInterval(fetchStatus, 1000);
     return () => clearInterval(interval);
   }, []);
 
   const handleStartBulkCheck = async () => {
     if (selectedChannelIds.length === 0) {
-      notifications.show({
-        title: 'Error',
-        message: 'No channels selected for checking.',
-        color: 'red',
-      });
+      notifications.show({ title: 'Error', message: 'No channels selected for checking.', color: 'red' });
       return;
     }
 
-    // Extract all stream IDs from the selected channels
     const streamIdsToTest = [];
     selectedChannelIds.forEach((channelId) => {
       const channel = channels.find((c) => c.id === channelId);
       if (channel && channel.streams) {
         channel.streams.forEach((streamObj) => {
-          // Rust backend returns flattened stream objects directly
           if (streamObj.id) {
             streamIdsToTest.push(streamObj.id);
           } else if (streamObj.stream && streamObj.stream.id) {
@@ -107,28 +146,16 @@ const StreamChecker = () => {
     });
 
     if (streamIdsToTest.length === 0) {
-      notifications.show({
-        title: 'Notice',
-        message: 'The selected channels have no streams assigned to them.',
-        color: 'yellow',
-      });
+      notifications.show({ title: 'Notice', message: 'The selected channels have no streams assigned to them.', color: 'yellow' });
       return;
     }
 
     try {
       await API.startBulkCheck(streamIdsToTest);
-      notifications.show({
-        title: 'Started',
-        message: `Started checking ${streamIdsToTest.length} streams across ${selectedChannelIds.length} channels...`,
-        color: 'blue',
-      });
+      notifications.show({ title: 'Started', message: `Started checking streams across ${selectedChannelIds.length} channels...`, color: 'blue' });
       setSelectedChannelIds([]);
     } catch (e) {
-      notifications.show({
-        title: 'Error',
-        message: 'Failed to start bulk check.',
-        color: 'red',
-      });
+      notifications.show({ title: 'Error', message: 'Failed to start bulk check.', color: 'red' });
     }
   };
 
@@ -140,142 +167,138 @@ const StreamChecker = () => {
         <Title order={2}>Stream Checker Engine</Title>
       </Group>
 
-      {status.is_running && (
-        <Card withBorder shadow="md" radius="lg" mb="xl" style={{ borderLeft: '4px solid var(--mantine-color-blue-filled)' }}>
-          <Stack gap="md">
-            <Group justify="space-between" align="center">
-              <Stack gap={0}>
-                <Text fw={800} size="xl" variant="gradient" gradient={{ from: 'blue', to: 'cyan', deg: 45 }}>
-                  Bulk Stream Analysis
-                </Text>
-                <Text size="sm" c="dimmed">
-                  Analyzing and verifying stream availability and metadata
-                </Text>
-              </Stack>
-              <Group gap="xs">
-                <Badge color="blue" variant="light" size="lg">Total: {status.total}</Badge>
-                <Badge color="green" variant="light" size="lg">Success: {status.successful}</Badge>
-                <Badge color="red" variant="light" size="lg">Failed: {status.failed}</Badge>
-              </Group>
-            </Group>
-
-            <Box>
-              <Group justify="space-between" mb={5}>
-                <Text size="sm" fw={600}>{Math.round(progressPercent)}% Complete</Text>
-                <Text size="sm" c="dimmed">{status.completed} of {status.total} processed</Text>
-              </Group>
-              <Progress 
-                value={progressPercent} 
-                size="xl" 
-                radius="xl" 
-                animated 
-                color="blue"
-                striped
-              />
-            </Box>
-
-            {status.current_stream_name && (
-              <Paper withBorder p="md" radius="md" bg="var(--mantine-color-gray-0)">
-                <Group wrap="nowrap">
-                  <Loader size="sm" />
-                  <Stack gap={0}>
-                    <Text size="xs" c="dimmed" fw={700} tt="uppercase">Currently Testing</Text>
-                    <Text fw={600} truncate>{status.current_stream_name}</Text>
-                  </Stack>
-                </Group>
-              </Paper>
-            )}
-            
-            <Box>
-              <Text size="xs" c="dimmed" fw={700} tt="uppercase" mb="xs">Live Activity Log</Text>
-              <Paper withBorder p="xs" radius="md" bg="dark.7" style={{ 
-                maxHeight: '150px', 
-                overflowY: 'auto',
-                fontFamily: 'monospace'
-              }}>
-                {!status.last_results || status.last_results.length === 0 ? (
-                  <Text size="xs" c="dimmed" fs="italic">Waiting for results...</Text>
-                ) : (
-                  status.last_results.slice().reverse().map((s, i) => (
-                    <Group key={`${s.id}-${i}`} justify="space-between" p={4} style={{ 
-                      borderBottom: i < status.last_results.length - 1 ? '1px solid var(--mantine-color-dark-4)' : 'none'
-                    }}>
-                      <Group gap="xs">
-                        {s.stream_stats?.reachable ? (
-                          <Text color="green" size="xs">✓</Text>
-                        ) : (
-                          <Text color="red" size="xs">✗</Text>
-                        )}
-                        <Text size="xs" c="gray.3" truncate style={{ maxWidth: '300px' }}>{s.name}</Text>
-                      </Group>
-                      {s.stream_stats?.resolution && (
-                        <Text size="xs" c="dimmed">{s.stream_stats.resolution}</Text>
-                      )}
-                    </Group>
-                  ))
-                )}
-              </Paper>
-            </Box>
-          </Stack>
-        </Card>
-      )}
-
       <Tabs value={activeTab} onChange={setActiveTab} variant="outline" radius="md">
         <Tabs.List>
-          <Tabs.Tab value="bulk" leftSection={<CheckSquare size={16} />}>
-            Bulk Tester
-          </Tabs.Tab>
-          <Tabs.Tab value="sorting" leftSection={<Settings size={16} />}>
-            Sorting Rules
-          </Tabs.Tab>
-          <Tabs.Tab value="auto" leftSection={<Wand2 size={16} />}>
-            Auto-Assignment
-          </Tabs.Tab>
+          <Tabs.Tab value="bulk" leftSection={<CheckSquare size={16} />}>Bulk Tester</Tabs.Tab>
+          <Tabs.Tab value="sorting" leftSection={<Settings size={16} />}>Sorting Rules</Tabs.Tab>
+          <Tabs.Tab value="auto" leftSection={<Wand2 size={16} />}>Auto-Assignment</Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="bulk" pt="xl">
-          <Paper withBorder shadow="sm" p="md" radius="md" mb="xl">
-            <Group justify="space-between" mb="md">
-              <Box>
-                <Title order={4}>Select Channels to Test</Title>
-                <Text size="sm" c="dimmed">
-                  Use the table below to select channels. The Bulk Tester will extract and test all streams assigned to the selected channels.
-                  Testing takes ~30s per stream as FFmpeg analyzes the real-time bitrate.
-                </Text>
+          <Grid>
+            <Grid.Col span={8}>
+              <Paper withBorder shadow="sm" p="md" radius="md" mb="xl">
+                <Group justify="space-between" mb="md">
+                  <Box>
+                    <Title order={4}>Select Channels to Test</Title>
+                    <Text size="sm" c="dimmed">
+                      Select channels. The Bulk Tester will test M3U streams within them in parallel by provider.
+                    </Text>
+                  </Box>
+                  <Group>
+                    <Button leftSection={<Wand2 size={16} />} color="violet" disabled={selectedChannelIds.length === 0 || status.is_running}
+                      onClick={async () => {
+                        try {
+                          await API.bulkSortStreams(selectedChannelIds);
+                          notifications.show({ title: 'Success', message: 'Successfully sorted streams!', color: 'green' });
+                          setSelectedChannelIds([]);
+                        } catch (e) {
+                          notifications.show({ title: 'Error', message: 'Failed to sort streams.', color: 'red' });
+                        }
+                      }}>
+                      Auto-Sort ({selectedChannelIds.length})
+                    </Button>
+                    <Button leftSection={<Play size={16} />} color="blue" disabled={selectedChannelIds.length === 0 || status.is_running} onClick={handleStartBulkCheck}>
+                      Start Bulk Check ({selectedChannelIds.length})
+                    </Button>
+                  </Group>
+                </Group>
+              </Paper>
+              <Box style={{ border: '1px solid #333', borderRadius: '8px', overflow: 'hidden' }}>
+                 <ChannelsTable hideLinks={true} streamCheckerMode={true} />
               </Box>
-              <Group>
-                <Button
-                  leftSection={<Wand2 size={16} />}
-                  color="violet"
-                  disabled={selectedChannelIds.length === 0 || status.is_running}
-                  onClick={async () => {
-                    try {
-                      await API.bulkSortStreams(selectedChannelIds);
-                      notifications.show({ title: 'Success', message: 'Successfully sorted streams!', color: 'green' });
-                      setSelectedChannelIds([]);
-                    } catch (e) {
-                      notifications.show({ title: 'Error', message: 'Failed to sort streams.', color: 'red' });
-                    }
-                  }}
-                >
-                  Auto-Sort ({selectedChannelIds.length})
-                </Button>
-                <Button
-                  leftSection={<Play size={16} />}
-                  color="blue"
-                  disabled={selectedChannelIds.length === 0 || status.is_running}
-                  onClick={handleStartBulkCheck}
-                >
-                  Start Bulk Check ({selectedChannelIds.length})
-                </Button>
-              </Group>
-            </Group>
-          </Paper>
+            </Grid.Col>
 
-          {/* Render the standard ChannelsTable */}
-          <Box style={{ border: '1px solid #333', borderRadius: '8px', overflow: 'hidden' }}>
-             <ChannelsTable hideLinks={true} streamCheckerMode={true} />
-          </Box>
+            <Grid.Col span={4}>
+              <Stack gap="md">
+                <Card withBorder shadow="sm" radius="md" p="md">
+                  <Title order={5} mb="sm">Settings</Title>
+                  <Text size="sm" fw={500} mb={5}>Max Concurrent Providers</Text>
+                  <Text size="xs" c="dimmed" mb="sm">Higher numbers check streams faster but consume more bandwidth.</Text>
+                  <Slider 
+                    value={parallelProviders} 
+                    onChange={setParallelProviders}
+                    onChangeEnd={updateParallelProviders}
+                    min={1} 
+                    max={10} 
+                    marks={[{ value: 1, label: '1' }, { value: 5, label: '5' }, { value: 10, label: '10' }]} 
+                    mb="lg"
+                    disabled={status.is_running}
+                  />
+                </Card>
+
+                <Card withBorder shadow="md" radius="lg" style={{ borderLeft: '4px solid var(--mantine-color-blue-filled)' }}>
+                  <Stack gap="md">
+                    <Stack gap={0}>
+                      <Text fw={800} size="xl" variant="gradient" gradient={{ from: 'blue', to: 'cyan', deg: 45 }}>Analytics</Text>
+                      <Text size="sm" c="dimmed">Overall Bulk Check Progress</Text>
+                    </Stack>
+                    
+                    <Group justify="space-between">
+                      <Badge color="blue" variant="light">Total: {status.total}</Badge>
+                      <Badge color="green" variant="light">Success: {status.successful}</Badge>
+                      <Badge color="red" variant="light">Failed: {status.failed}</Badge>
+                    </Group>
+
+                    <Box>
+                      <Group justify="space-between" mb={5}>
+                        <Text size="sm" fw={600}>{Math.round(progressPercent)}%</Text>
+                        <Text size="sm" c="dimmed">{status.completed} / {status.total}</Text>
+                      </Group>
+                      <Progress value={progressPercent} size="xl" radius="xl" animated={status.is_running} color="blue" striped={status.is_running} />
+                    </Box>
+
+                    {status.workers && status.workers.length > 0 && (
+                      <Box mt="sm">
+                        <Text size="xs" c="dimmed" fw={700} tt="uppercase" mb="xs">Active Workers</Text>
+                        <Stack gap="sm">
+                          {status.workers.map((worker) => {
+                            const workerProgress = worker.total > 0 ? (worker.completed / worker.total) * 100 : 0;
+                            return (
+                              <Paper key={worker.m3u_account_id} withBorder p="sm" radius="sm">
+                                <Group wrap="nowrap" align="center">
+                                  <RingProgress
+                                    size={40}
+                                    thickness={4}
+                                    roundCaps
+                                    sections={[{ value: workerProgress, color: 'blue' }]}
+                                    label={<Center><Text size="10px" fw={700}>{Math.round(workerProgress)}%</Text></Center>}
+                                  />
+                                  <Stack gap={0} style={{ flex: 1 }}>
+                                    <Text size="sm" fw={700} truncate>{worker.m3u_account_name}</Text>
+                                    <Text size="xs" c="dimmed" truncate>{worker.current_stream_name || 'Idle'}</Text>
+                                  </Stack>
+                                </Group>
+                              </Paper>
+                            );
+                          })}
+                        </Stack>
+                      </Box>
+                    )}
+
+                    <Box mt="sm">
+                      <Text size="xs" c="dimmed" fw={700} tt="uppercase" mb="xs">Live Activity Log</Text>
+                      <Paper withBorder p="xs" radius="md" bg="dark.7" style={{ maxHeight: '200px', overflowY: 'auto', fontFamily: 'monospace' }}>
+                        {!status.last_results || status.last_results.length === 0 ? (
+                          <Text size="xs" c="dimmed" fs="italic">Waiting for results...</Text>
+                        ) : (
+                          status.last_results.slice().reverse().map((s, i) => (
+                            <Group key={`${s.id}-${i}`} justify="space-between" p={4} style={{ borderBottom: i < status.last_results.length - 1 ? '1px solid var(--mantine-color-dark-4)' : 'none' }}>
+                              <Group gap="xs">
+                                {s.stream_stats?.reachable ? <Text color="green" size="xs">✓</Text> : <Text color="red" size="xs">✗</Text>}
+                                <Text size="xs" c="gray.3" truncate style={{ maxWidth: '150px' }}>{s.name}</Text>
+                              </Group>
+                              {s.stream_stats?.resolution && <Text size="xs" c="dimmed">{s.stream_stats.resolution}</Text>}
+                            </Group>
+                          ))
+                        )}
+                      </Paper>
+                    </Box>
+                  </Stack>
+                </Card>
+              </Stack>
+            </Grid.Col>
+          </Grid>
         </Tabs.Panel>
 
         <Tabs.Panel value="sorting" pt="xl">
@@ -283,13 +306,9 @@ const StreamChecker = () => {
             <Group justify="space-between">
               <Box>
                 <Title order={4}>Sorting Rules Engine</Title>
-                <Text size="sm" c="dimmed">
-                  Create rules to automatically sort streams within your channels based on FFprobe metrics.
-                </Text>
+                <Text size="sm" c="dimmed">Create rules to automatically sort streams within your channels based on FFprobe metrics.</Text>
               </Box>
-              <Button color="blue" onClick={() => { setEditingRule(null); setRuleModalOpen(true); }}>
-                Add Rule
-              </Button>
+              <Button color="blue" onClick={() => { setEditingRule(null); setRuleModalOpen(true); }}>Add Rule</Button>
             </Group>
           </Paper>
 
@@ -348,19 +367,12 @@ const StreamChecker = () => {
         <Tabs.Panel value="auto" pt="xl">
           <Paper withBorder shadow="sm" p="md" radius="md">
             <Title order={4}>Auto-Assignment Rules (Phase 3)</Title>
-            <Text size="sm" c="dimmed" mt="xs">
-              Create rules to automatically route newly imported M3U streams into existing channels. Coming soon!
-            </Text>
+            <Text size="sm" c="dimmed" mt="xs">Create rules to automatically route newly imported M3U streams into existing channels. Coming soon!</Text>
           </Paper>
         </Tabs.Panel>
       </Tabs>
 
-      <SortingRuleForm 
-        opened={ruleModalOpen} 
-        onClose={() => setRuleModalOpen(false)} 
-        rule={editingRule} 
-        onSuccess={fetchRules} 
-      />
+      <SortingRuleForm opened={ruleModalOpen} onClose={() => setRuleModalOpen(false)} rule={editingRule} onSuccess={fetchRules} />
     </Box>
   );
 };

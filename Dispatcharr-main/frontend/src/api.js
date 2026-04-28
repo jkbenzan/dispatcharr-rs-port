@@ -3676,4 +3676,40 @@ export default class API {
       errorNotification('Failed to fetch connect logs', e);
     }
   }
+  // =========================================================================
+  // CORE SETTINGS
+  // =========================================================================
+
+  static async listSettings() {
+    try {
+      return await request(`${host}/api/core/settings/`);
+    } catch (e) {
+      errorNotification('Failed to fetch settings', e);
+      throw e;
+    }
+  }
+
+  static async createSetting(values) {
+    try {
+      return await request(`${host}/api/core/settings/`, {
+        method: 'POST',
+        body: values,
+      });
+    } catch (e) {
+      errorNotification('Failed to create setting', e);
+      throw e;
+    }
+  }
+
+  static async updateSetting(id, values) {
+    try {
+      return await request(`${host}/api/core/settings/${id}/`, {
+        method: 'PUT',
+        body: values,
+      });
+    } catch (e) {
+      errorNotification('Failed to update setting', e);
+      throw e;
+    }
+  }
 }

@@ -18,6 +18,8 @@ use crate::entities::stream_sorting_rule;
 use crate::entities::channel_stream;
 use sea_orm::{ActiveValue, QueryOrder};
 use std::process::Command as StdCommand;
+use futures_util::stream::{self as future_stream, StreamExt};
+use std::collections::HashMap;
 
 /// Resolve the path to `ffprobe`. Checks the FFPROBE_PATH env var first,
 /// then the ffmpeg-sidecar managed path, then common install locations,
@@ -160,6 +162,15 @@ fn resolve_ffmpeg() -> String {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
+pub struct WorkerStatus {
+    pub m3u_account_id: i64,
+    pub m3u_account_name: String,
+    pub current_stream_name: String,
+    pub completed: usize,
+    pub total: usize,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 pub struct BulkCheckStatus {
     pub is_running: bool,
     pub total: usize,
@@ -168,6 +179,7 @@ pub struct BulkCheckStatus {
     pub failed: usize,
     pub current_stream_id: Option<i64>,
     pub current_stream_name: Option<String>,
+    pub workers: Vec<WorkerStatus>,
     pub last_results: Vec<Value>,
 }
 
@@ -181,6 +193,7 @@ impl Default for BulkCheckStatus {
             failed: 0,
             current_stream_id: None,
             current_stream_name: None,
+            workers: Vec::new(),
             last_results: Vec::new(),
         }
     }
@@ -432,78 +445,145 @@ pub async fn start_bulk_check(
         );
     }
     
-    let stream_ids = payload.stream_ids;
-    if stream_ids.is_empty() {
+    let streams = stream::Entity::find()
+        .filter(stream::Column::Id.is_in(payload.stream_ids))
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+
+    let mut m3u_groups: HashMap<i64, Vec<stream::Model>> = HashMap::new();
+    let mut total_streams = 0;
+
+    for s in streams {
+        if let Some(account_id) = s.m3u_account_id {
+            m3u_groups.entry(account_id).or_insert_with(Vec::new).push(s);
+            total_streams += 1;
+        }
+    }
+
+    if total_streams == 0 {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({"success": false, "message": "No streams provided"})),
+            Json(json!({"success": false, "message": "No valid M3U streams provided for checking"})),
         );
+    }
+
+    // Get the parallel providers setting
+    let settings = crate::entities::core_settings::Entity::find()
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+    
+    let mut max_concurrent = 1;
+    for s in settings {
+        if s.key == "stream_settings" {
+            if let Some(v) = s.value.get("stream_checker_parallel_providers") {
+                if let Some(num) = v.as_i64() {
+                    max_concurrent = num as usize;
+                }
+            }
+        }
+    }
+    if max_concurrent < 1 { max_concurrent = 1; }
+
+    // Fetch account names
+    let mut account_names = HashMap::new();
+    let accounts = crate::entities::m3u_account::Entity::find().all(&state.db).await.unwrap_or_default();
+    for acc in accounts {
+        account_names.insert(acc.id, acc.name);
     }
 
     *status = BulkCheckStatus {
         is_running: true,
-        total: stream_ids.len(),
+        total: total_streams,
         completed: 0,
         successful: 0,
         failed: 0,
         current_stream_id: None,
         current_stream_name: None,
+        workers: Vec::new(),
         last_results: Vec::new(),
     };
+    drop(status);
 
     let state_clone = state.clone();
     
     tokio::spawn(async move {
-        for stream_id in stream_ids {
-            let stream_name = {
-                if let Ok(Some(s)) = stream::Entity::find_by_id(stream_id).one(&state_clone.db).await {
-                    s.name
-                } else {
-                    "Unknown".to_string()
+        // Build the stream of provider groups
+        let groups_stream = future_stream::iter(m3u_groups.into_iter());
+        
+        groups_stream.for_each_concurrent(max_concurrent, |(account_id, streams)| {
+            let state_c = state_clone.clone();
+            let acc_name = account_names.get(&account_id).cloned().unwrap_or_else(|| "Unknown Provider".to_string());
+            let total_in_group = streams.len();
+            
+            async move {
+                // Register this worker
+                {
+                    let mut st = state_c.bulk_check_status.write().await;
+                    st.workers.push(WorkerStatus {
+                        m3u_account_id: account_id,
+                        m3u_account_name: acc_name.clone(),
+                        current_stream_name: String::new(),
+                        completed: 0,
+                        total: total_in_group,
+                    });
                 }
-            };
-            
-            {
-                let mut st = state_clone.bulk_check_status.write().await;
-                st.current_stream_id = Some(stream_id);
-                st.current_stream_name = Some(stream_name.clone());
-            }
-            
-            let res = check_single_stream(&state_clone, stream_id).await;
-            {
-                let mut st = state_clone.bulk_check_status.write().await;
-                st.completed += 1;
-                match res {
-                    Ok(stats) => {
-                        st.successful += 1;
-                        let mut result_obj = stats.clone();
-                        result_obj["name"] = json!(stream_name);
-                        result_obj["id"] = json!(stream_id);
-                        st.last_results.push(result_obj);
-                        if st.last_results.len() > 10 {
-                            st.last_results.remove(0);
+
+                for (idx, stream_obj) in streams.into_iter().enumerate() {
+                    {
+                        let mut st = state_c.bulk_check_status.write().await;
+                        if let Some(w) = st.workers.iter_mut().find(|w| w.m3u_account_id == account_id) {
+                            w.current_stream_name = stream_obj.name.clone();
+                            w.completed = idx;
                         }
                     }
-                    Err(_) => {
-                        st.failed += 1;
-                        let result_obj = json!({
-                            "name": stream_name,
-                            "id": stream_id,
-                            "stream_stats": { "reachable": false }
-                        });
-                        st.last_results.push(result_obj);
-                        if st.last_results.len() > 10 {
-                            st.last_results.remove(0);
+                    
+                    let res = check_single_stream(&state_c, stream_obj.id).await;
+                    
+                    {
+                        let mut st = state_c.bulk_check_status.write().await;
+                        st.completed += 1;
+                        match res {
+                            Ok(stats) => {
+                                st.successful += 1;
+                                let mut result_obj = stats.clone();
+                                result_obj["name"] = json!(stream_obj.name);
+                                result_obj["id"] = json!(stream_obj.id);
+                                st.last_results.push(result_obj);
+                                if st.last_results.len() > 10 {
+                                    st.last_results.remove(0);
+                                }
+                            }
+                            Err(_) => {
+                                st.failed += 1;
+                                let result_obj = json!({
+                                    "name": stream_obj.name,
+                                    "id": stream_obj.id,
+                                    "stream_stats": { "reachable": false }
+                                });
+                                st.last_results.push(result_obj);
+                                if st.last_results.len() > 10 {
+                                    st.last_results.remove(0);
+                                }
+                            }
                         }
                     }
                 }
+                
+                // Mark worker completed
+                {
+                    let mut st = state_c.bulk_check_status.write().await;
+                    if let Some(w) = st.workers.iter_mut().find(|w| w.m3u_account_id == account_id) {
+                        w.completed = total_in_group;
+                        w.current_stream_name = "Finished".to_string();
+                    }
+                }
             }
-        }
+        }).await;
         
         let mut st = state_clone.bulk_check_status.write().await;
         st.is_running = false;
-        st.current_stream_id = None;
-        st.current_stream_name = None;
     });
 
     (StatusCode::OK, Json(json!({"success": true, "message": "Bulk check started"})))
