@@ -1,8 +1,7 @@
-use crate::entities::{channel, epg_data, epg_program, epg_source};
 use crate::AppState;
 use axum::{
-    extract::{Json, State},
-    response::IntoResponse,
+    extract::{Json, Path, State},
+    http::StatusCode,
 };
 use chrono::{Duration, Timelike, Utc};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
@@ -293,4 +292,69 @@ pub async fn get_current_programs(
     }
 
     Json(json!(current_programs))
+}
+
+pub async fn get_program_detail(
+    State(state): State<Arc<AppState>>,
+    Path(program_id): Path<i64>,
+) -> Result<Json<Value>, StatusCode> {
+    let program = crate::entities::epg_program::Entity::find_by_id(program_id)
+        .one(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    let cp = program.custom_properties.clone().unwrap_or(json!({}));
+    let credits = cp.get("credits").cloned().unwrap_or_else(|| json!({}));
+    let video = cp.get("video").cloned().unwrap_or_else(|| json!({}));
+    let audio = cp.get("audio").cloned().unwrap_or_else(|| json!({}));
+    let previously_shown = cp
+        .get("previously_shown_details")
+        .cloned()
+        .unwrap_or_else(|| json!({}));
+    let premiere_text = cp
+        .get("premiere_text")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+
+    Ok(Json(json!({
+        "id": program.id,
+        "start_time": program.start_time.to_rfc3339(),
+        "end_time": program.end_time.to_rfc3339(),
+        "title": program.title,
+        "sub_title": program.sub_title,
+        "description": program.description,
+        "tvg_id": program.tvg_id,
+        "season": cp.get("season").cloned(),
+        "episode": cp.get("episode").cloned(),
+        "is_new": cp.get("new").and_then(|v| v.as_bool()).unwrap_or(false),
+        "is_live": cp.get("live").and_then(|v| v.as_bool()).unwrap_or(false),
+        "is_premiere": cp.get("premiere").and_then(|v| v.as_bool()).unwrap_or(false),
+        "is_finale": !premiere_text.is_empty() && premiere_text.to_lowercase().contains("finale"),
+        "categories": cp.get("categories").cloned().unwrap_or_else(|| json!([])),
+        "rating": cp.get("rating").cloned(),
+        "rating_system": cp.get("rating_system").cloned(),
+        "star_ratings": cp.get("star_ratings").cloned().unwrap_or_else(|| json!([])),
+        "credits": {
+            "actors": credits.get("actor").cloned().unwrap_or_else(|| json!([])),
+            "directors": credits.get("director").cloned().unwrap_or_else(|| json!([])),
+            "writers": credits.get("writer").cloned().unwrap_or_else(|| json!([])),
+            "producers": credits.get("producer").cloned().unwrap_or_else(|| json!([])),
+            "presenters": credits.get("presenter").cloned().unwrap_or_else(|| json!([])),
+        },
+        "video_quality": video.get("quality").cloned(),
+        "aspect_ratio": video.get("aspect").cloned(),
+        "stereo": audio.get("stereo").cloned(),
+        "is_previously_shown": cp.get("previously_shown").is_some(),
+        "country": cp.get("country").cloned(),
+        "language": cp.get("language").cloned(),
+        "production_date": cp.get("date").cloned(),
+        "original_air_date": previously_shown.get("start").cloned(),
+        "imdb_id": cp.get("imdb.com_id").cloned(),
+        "tmdb_id": cp.get("themoviedb.org_id").cloned(),
+        "tvdb_id": cp.get("thetvdb.com_id").cloned(),
+        "tmdb_media_type": cp.get("tmdb_media_type").cloned(),
+        "icon": cp.get("icon").cloned(),
+        "images": cp.get("images").cloned().unwrap_or_else(|| json!([])),
+    })))
 }

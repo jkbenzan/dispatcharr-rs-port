@@ -1878,6 +1878,25 @@ pub async fn refresh_epg_source(
     State(state): State<Arc<AppState>>,
     Path(source_id): Path<i64>,
 ) -> impl IntoResponse {
+    queue_epg_refresh(&state, source_id).await
+}
+
+#[derive(serde::Deserialize)]
+pub struct RefreshEpgImportRequest {
+    id: i64,
+}
+
+pub async fn refresh_epg_import(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<RefreshEpgImportRequest>,
+) -> impl IntoResponse {
+    queue_epg_refresh(&state, payload.id).await
+}
+
+async fn queue_epg_refresh(
+    state: &Arc<AppState>,
+    source_id: i64,
+) -> (StatusCode, Json<Value>) {
     let source = match epg_source::Entity::find_by_id(source_id)
         .one(&state.db)
         .await

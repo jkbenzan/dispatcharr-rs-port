@@ -357,7 +357,21 @@ async fn main() {
         .route("/api/epg/sources/", get(api::get_epg_sources))
         .route("/api/epg/sources/:id/", get(api::get_epg_source))
         .route("/api/epg/refresh/:id/", post(api::refresh_epg_source))
+        .route("/api/epg/import", post(api::refresh_epg_import))
+        .route("/api/epg/import/", post(api::refresh_epg_import))
         .route("/api/epg/epgdata/", get(api::get_epgdata))
+        .route("/api/epg/grid", get(epg_api::get_epg_grid))
+        .route("/api/epg/grid/", get(epg_api::get_epg_grid))
+        .route("/api/epg/programs/:id", get(epg_api::get_program_detail))
+        .route("/api/epg/programs/:id/", get(epg_api::get_program_detail))
+        .route(
+            "/api/epg/current-programs",
+            post(epg_api::get_current_programs),
+        )
+        .route(
+            "/api/epg/current-programs/",
+            post(epg_api::get_current_programs),
+        )
         // --- DASHBOARD MISSING DEPENDENCIES ---
         .route("/api/channels/logos/", get(api::get_logos))
         .route("/api/channels/streams/ids/", get(api::get_stream_ids))
