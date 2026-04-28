@@ -741,6 +741,7 @@ pub async fn fetch_and_parse_xc(
     let mut final_active: m3u_account::ActiveModel = acc.into();
     final_active.status = Set("success".to_string());
     final_active.last_message = Set(Some("Groups mapped successfully".to_string()));
+    final_active.updated_at = Set(Some(Utc::now().into()));
     let _ = final_active.update(db).await;
     broadcast_progress(
         &ws_sender,
