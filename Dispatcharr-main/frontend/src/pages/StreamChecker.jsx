@@ -10,6 +10,8 @@ import {
   Paper,
   Card,
   Badge,
+  Stack,
+  Loader,
 } from '@mantine/core';
 import {
   Activity,
@@ -139,25 +141,82 @@ const StreamChecker = () => {
       </Group>
 
       {status.is_running && (
-        <Card withBorder shadow="sm" radius="md" mb="xl" p="md">
-          <Group justify="space-between" mb="xs">
-            <Text fw={500} display="flex" style={{ alignItems: 'center', gap: '8px' }}>
-              <Activity size={18} /> Active Bulk Check
-            </Text>
-            <Badge color="blue" variant="light">
-              {status.completed} / {status.total} Completed
-            </Badge>
-          </Group>
-          <Progress value={progressPercent} size="xl" radius="xl" animated mb="sm" />
-          <Group justify="space-between" mt="md">
-            <Text size="sm" c="dimmed">
-              <strong>Testing:</strong> {status.current_stream_name || 'Initializing...'}
-            </Text>
-            <Group>
-              <Badge color="green" variant="dot">Success: {status.successful}</Badge>
-              <Badge color="red" variant="dot">Failed: {status.failed}</Badge>
+        <Card withBorder shadow="md" radius="lg" mb="xl" style={{ borderLeft: '4px solid var(--mantine-color-blue-filled)' }}>
+          <Stack gap="md">
+            <Group justify="space-between" align="center">
+              <Stack gap={0}>
+                <Text fw={800} size="xl" variant="gradient" gradient={{ from: 'blue', to: 'cyan', deg: 45 }}>
+                  Bulk Stream Analysis
+                </Text>
+                <Text size="sm" c="dimmed">
+                  Analyzing and verifying stream availability and metadata
+                </Text>
+              </Stack>
+              <Group gap="xs">
+                <Badge color="blue" variant="light" size="lg">Total: {status.total}</Badge>
+                <Badge color="green" variant="light" size="lg">Success: {status.successful}</Badge>
+                <Badge color="red" variant="light" size="lg">Failed: {status.failed}</Badge>
+              </Group>
             </Group>
-          </Group>
+
+            <Box>
+              <Group justify="space-between" mb={5}>
+                <Text size="sm" fw={600}>{Math.round(progressPercent)}% Complete</Text>
+                <Text size="sm" c="dimmed">{status.completed} of {status.total} processed</Text>
+              </Group>
+              <Progress 
+                value={progressPercent} 
+                size="xl" 
+                radius="xl" 
+                animated 
+                color="blue"
+                striped
+              />
+            </Box>
+
+            {status.current_stream_name && (
+              <Paper withBorder p="md" radius="md" bg="var(--mantine-color-gray-0)">
+                <Group wrap="nowrap">
+                  <Loader size="sm" />
+                  <Stack gap={0}>
+                    <Text size="xs" c="dimmed" fw={700} tt="uppercase">Currently Testing</Text>
+                    <Text fw={600} truncate>{status.current_stream_name}</Text>
+                  </Stack>
+                </Group>
+              </Paper>
+            )}
+            
+            <Box>
+              <Text size="xs" c="dimmed" fw={700} tt="uppercase" mb="xs">Live Activity Log</Text>
+              <Paper withBorder p="xs" radius="md" bg="dark.7" style={{ 
+                maxHeight: '150px', 
+                overflowY: 'auto',
+                fontFamily: 'monospace'
+              }}>
+                {!status.last_results || status.last_results.length === 0 ? (
+                  <Text size="xs" c="dimmed" fs="italic">Waiting for results...</Text>
+                ) : (
+                  status.last_results.slice().reverse().map((s, i) => (
+                    <Group key={`${s.id}-${i}`} justify="space-between" p={4} style={{ 
+                      borderBottom: i < status.last_results.length - 1 ? '1px solid var(--mantine-color-dark-4)' : 'none'
+                    }}>
+                      <Group gap="xs">
+                        {s.stream_stats?.reachable ? (
+                          <Text color="green" size="xs">✓</Text>
+                        ) : (
+                          <Text color="red" size="xs">✗</Text>
+                        )}
+                        <Text size="xs" c="gray.3" truncate style={{ maxWidth: '300px' }}>{s.name}</Text>
+                      </Group>
+                      {s.stream_stats?.resolution && (
+                        <Text size="xs" c="dimmed">{s.stream_stats.resolution}</Text>
+                      )}
+                    </Group>
+                  ))
+                )}
+              </Paper>
+            </Box>
+          </Stack>
         </Card>
       )}
 

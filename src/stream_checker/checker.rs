@@ -168,6 +168,7 @@ pub struct BulkCheckStatus {
     pub failed: usize,
     pub current_stream_id: Option<i64>,
     pub current_stream_name: Option<String>,
+    pub last_results: Vec<Value>,
 }
 
 impl Default for BulkCheckStatus {
@@ -180,6 +181,7 @@ impl Default for BulkCheckStatus {
             failed: 0,
             current_stream_id: None,
             current_stream_name: None,
+            last_results: Vec::new(),
         }
     }
 }
@@ -466,17 +468,33 @@ pub async fn start_bulk_check(
                 st.current_stream_name = Some(stream_name.clone());
             }
             
-            match check_single_stream(&state_clone, stream_id).await {
-                Ok(_) => {
-                    let mut st = state_clone.bulk_check_status.write().await;
-                    st.successful += 1;
-                    st.completed += 1;
-                }
-                Err(e) => {
-                    error!("Bulk Check Failed for stream {}: {:?}", stream_name, e);
-                    let mut st = state_clone.bulk_check_status.write().await;
-                    st.failed += 1;
-                    st.completed += 1;
+            let res = check_single_stream(&state_clone, stream_id).await;
+            {
+                let mut st = state_clone.bulk_check_status.write().await;
+                st.completed += 1;
+                match res {
+                    Ok(stats) => {
+                        st.successful += 1;
+                        let mut result_obj = stats.clone();
+                        result_obj["name"] = json!(stream_name);
+                        result_obj["id"] = json!(stream_id);
+                        st.last_results.push(result_obj);
+                        if st.last_results.len() > 10 {
+                            st.last_results.remove(0);
+                        }
+                    }
+                    Err(_) => {
+                        st.failed += 1;
+                        let result_obj = json!({
+                            "name": stream_name,
+                            "id": stream_id,
+                            "stream_stats": { "reachable": false }
+                        });
+                        st.last_results.push(result_obj);
+                        if st.last_results.len() > 10 {
+                            st.last_results.remove(0);
+                        }
+                    }
                 }
             }
         }
