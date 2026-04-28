@@ -270,13 +270,33 @@ pub async fn check_single_stream(
     for s in &streams {
         if let Some(codec_type) = s.get("codec_type").and_then(|t| t.as_str()) {
             if codec_type == "video" && video_codec.is_none() {
-                video_codec = s.get("codec_name").and_then(|c| c.as_str()).map(String::from);
+                video_codec = s.get("codec_name").and_then(|c| c.as_str()).map(|c| c.to_uppercase());
                 width = s.get("width").and_then(|w| w.as_i64());
                 height = s.get("height").and_then(|h| h.as_i64());
-                fps = s.get("avg_frame_rate").and_then(|f| f.as_str()).map(String::from);
+                
+                // Parse FPS fraction (e.g. "60/1" or "30000/1001")
+                if let Some(f_str) = s.get("avg_frame_rate").and_then(|f| f.as_str()) {
+                    let parts: Vec<&str> = f_str.split('/').collect();
+                    if parts.len() == 2 {
+                        let num: f64 = parts[0].parse().unwrap_or(0.0);
+                        let den: f64 = parts[1].parse().unwrap_or(1.0);
+                        if den > 0.0 {
+                            fps = Some(format!("{}", num / den));
+                        }
+                    } else {
+                        fps = Some(f_str.to_string());
+                    }
+                }
             } else if codec_type == "audio" && audio_codec.is_none() {
-                audio_codec = s.get("codec_name").and_then(|c| c.as_str()).map(String::from);
-                channels = s.get("channels").and_then(|c| c.as_i64());
+                audio_codec = s.get("codec_name").and_then(|c| c.as_str()).map(|c| c.to_uppercase());
+                let channel_count = s.get("channels").and_then(|c| c.as_i64()).unwrap_or(0);
+                channels = Some(match channel_count {
+                    1 => "mono".to_string(),
+                    2 => "stereo".to_string(),
+                    6 => "5.1".to_string(),
+                    8 => "7.1".to_string(),
+                    _ => format!("{} channels", channel_count),
+                });
             }
         }
     }
@@ -318,7 +338,7 @@ pub async fn check_single_stream(
         }
     };
 
-    let mut bitrate = None;
+    let mut bitrate: Option<f64> = None;
     if ffmpeg_result.status.success() || ffmpeg_result.status.code().unwrap_or(1) != 0 {
         let stderr = String::from_utf8_lossy(&ffmpeg_result.stderr);
         for line in stderr.lines().rev() {
@@ -327,8 +347,8 @@ pub async fn check_single_stream(
                     let parts: Vec<&str> = line[idx..].split_whitespace().collect();
                     if parts.len() >= 2 {
                         let bit_str = parts[0].replace("bitrate=", "");
-                        if let Ok(b) = bit_str.replace("kbits/s", "").parse::<f64>() {
-                            bitrate = Some(b as i64);
+                        if let Ok(b) = bit_str.replace("kbits/s", "").trim().parse::<f64>() {
+                            bitrate = Some(b);
                             break;
                         }
                     }
