@@ -448,6 +448,7 @@ pub async fn start_bulk_check(
         failed: 0,
         current_stream_id: None,
         current_stream_name: None,
+        last_results: Vec::new(),
     };
 
     let state_clone = state.clone();
