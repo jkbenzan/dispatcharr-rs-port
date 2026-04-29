@@ -39,8 +39,25 @@ pub async fn refresh_all_guides(
     db: &DatabaseConnection,
     url: &str,
     source_id: i64,
+    ws_sender: Option<tokio::sync::broadcast::Sender<serde_json::Value>>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     tracing::info!("[EPG] Starting refresh for source {} from {}", source_id, url);
+    
+    let broadcast = |status: &str, message: &str| {
+        if let Some(ref sender) = ws_sender {
+            let _ = sender.send(serde_json::json!({
+                "channel": "updates",
+                "event": "update",
+                "data": {
+                    "type": "epg_status",
+                    "source_id": source_id,
+                    "status": status,
+                    "message": message
+                }
+            }));
+        }
+    };
+
     update_source_status(
         db,
         source_id,
@@ -48,6 +65,7 @@ pub async fn refresh_all_guides(
         "Downloading XMLTV guide...".to_string(),
     )
     .await;
+    broadcast("fetching", "Downloading XMLTV guide...");
 
     let temp_file = match download_to_temp_file(url).await {
         Ok(path) => path,
@@ -60,6 +78,7 @@ pub async fn refresh_all_guides(
                 format!("Download failed: {}", e),
             )
             .await;
+            broadcast("error", &format!("Download failed: {}", e));
             return Err(e);
         }
     };
@@ -68,16 +87,18 @@ pub async fn refresh_all_guides(
     let file_size = std::fs::metadata(&file_path)?.len();
     tracing::info!("[EPG] Downloaded {} bytes for source {}", file_size, source_id);
     
+    let parsing_msg = format!(
+        "Downloaded XMLTV ({:.1} MB). Parsing channels...",
+        file_size as f64 / 1_048_576.0
+    );
     update_source_status(
         db,
         source_id,
         "parsing",
-        format!(
-            "Downloaded XMLTV ({:.1} MB). Parsing channels...",
-            file_size as f64 / 1_048_576.0
-        ),
+        parsing_msg.clone(),
     )
     .await;
+    broadcast("parsing", &parsing_msg);
 
     let existing_channels = epg_data::Entity::find()
         .filter(epg_data::Column::EpgSourceId.eq(source_id))
@@ -128,6 +149,7 @@ pub async fn refresh_all_guides(
         "Parsing XMLTV programmes...".to_string(),
     )
     .await;
+    broadcast("parsing", "Parsing XMLTV programmes...");
 
     if !epg_ids.is_empty() {
         let _ = epg_program::Entity::delete_many()
@@ -148,6 +170,7 @@ pub async fn refresh_all_guides(
     })??;
 
     tracing::info!("[EPG] Found {} programs for source {}. Inserting...", parsed_programs.len(), source_id);
+    broadcast("parsing", &format!("Inserting {} programs...", parsed_programs.len()));
     insert_programs(db, parsed_programs).await?;
 
     // Cleanup temp file
@@ -161,6 +184,7 @@ pub async fn refresh_all_guides(
         let _ = active.update(db).await;
     }
 
+    broadcast("success", "Successfully synced XMLTV!");
     tracing::info!("[EPG] Refresh complete for source {}", source_id);
     Ok(())
 }

@@ -313,7 +313,7 @@ async fn main() {
         )
         // --- CHANNELS & M3U ---
         .route("/api/channels/channels/", get(api::get_channels))
-        .route("/api/channels/channels/:id/", patch(api::update_channel))
+        .route("/api/channels/channels/:id/", patch(api::update_channel).put(api::update_channel))
         .route(
             "/api/channels/channels/edit/bulk/",
             patch(api::bulk_update_channels),
@@ -332,6 +332,7 @@ async fn main() {
         .route(
             "/api/m3u/accounts/:id/",
             get(api::get_m3u_account)
+                .put(api::update_m3u_account)
                 .patch(api::update_m3u_account)
                 .delete(api::delete_m3u_account),
         )
@@ -346,7 +347,7 @@ async fn main() {
         )
         .route(
             "/api/m3u/accounts/:id/profiles/:profile_id/",
-            patch(api::update_m3u_profile).delete(api::delete_m3u_profile),
+            put(api::update_m3u_profile).patch(api::update_m3u_profile).delete(api::delete_m3u_profile),
         )
         .route(
             "/api/m3u/accounts/:id/filters/",
@@ -354,7 +355,7 @@ async fn main() {
         )
         .route(
             "/api/m3u/accounts/:id/filters/:filter_id/",
-            patch(api::update_m3u_filter).delete(api::delete_m3u_filter),
+            put(api::update_m3u_filter).patch(api::update_m3u_filter).delete(api::delete_m3u_filter),
         )
         .route(
             "/api/m3u/server-groups/",

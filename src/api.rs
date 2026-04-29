@@ -1655,6 +1655,7 @@ async fn start_epg_refresh(
     db: &sea_orm::DatabaseConnection,
     source_id: i64,
     url_or_path: String,
+    ws_sender: Option<tokio::sync::broadcast::Sender<serde_json::Value>>,
 ) -> Option<epg_source::Model> {
     let source = epg_source::Entity::find_by_id(source_id)
         .one(db)
@@ -1668,8 +1669,9 @@ async fn start_epg_refresh(
     let queued = active.update(db).await.ok();
 
     let db_clone = db.clone();
+    let ws_clone = ws_sender.clone();
     tokio::spawn(async move {
-        let message = match epg::refresh_all_guides(&db_clone, &url_or_path, source_id).await {
+        let message = match epg::refresh_all_guides(&db_clone, &url_or_path, source_id, ws_clone).await {
             Ok(_) => return,
             Err(e) => format!("Failed to parse EPG: {}", e),
         };
@@ -2034,7 +2036,7 @@ pub async fn create_epg_source(
         inserted
     } else if inserted.is_active {
         if let Some(url) = inserted.url.clone().or_else(|| inserted.file_path.clone()) {
-            start_epg_refresh(&state.db, inserted.id, url)
+            start_epg_refresh(&state.db, inserted.id, url, Some(state.ws_sender.clone()))
                 .await
                 .unwrap_or(inserted)
         } else {
@@ -2434,7 +2436,7 @@ async fn queue_epg_refresh(state: &Arc<AppState>, source_id: i64) -> (StatusCode
     }
 
     if let Some(url) = source.url.clone().or_else(|| source.file_path.clone()) {
-        let queued = start_epg_refresh(&state.db, source_id, url).await;
+        let queued = start_epg_refresh(&state.db, source_id, url, Some(state.ws_sender.clone())).await;
         let queued_json = match queued {
             Some(src) => epg_source_json(&state.db, src).await,
             None => json!(null),
