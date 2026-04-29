@@ -4,11 +4,48 @@ use axum::{
     http::StatusCode,
 };
 use chrono::{Duration, Timelike, Utc};
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Instant;
+
+fn serialize_program(program: crate::entities::epg_program::Model) -> Value {
+    let cp = program.custom_properties.clone().unwrap_or(json!({}));
+    let is_new = cp
+        .get("new")
+        .and_then(|v: &Value| v.as_bool())
+        .unwrap_or(false);
+    let is_live = cp
+        .get("live")
+        .and_then(|v: &Value| v.as_bool())
+        .unwrap_or(false);
+    let is_premiere = cp
+        .get("premiere")
+        .and_then(|v: &Value| v.as_bool())
+        .unwrap_or(false);
+    let premiere_text = cp
+        .get("premiere_text")
+        .and_then(|v: &Value| v.as_str())
+        .unwrap_or("");
+    let is_finale = premiere_text.to_lowercase().contains("finale");
+
+    json!({
+        "id": program.id,
+        "start_time": program.start_time.to_rfc3339(),
+        "end_time": program.end_time.to_rfc3339(),
+        "title": program.title,
+        "sub_title": program.sub_title,
+        "description": program.description,
+        "tvg_id": program.tvg_id,
+        "season": cp.get("season"),
+        "episode": cp.get("episode"),
+        "is_new": is_new,
+        "is_live": is_live,
+        "is_premiere": is_premiere,
+        "is_finale": is_finale,
+    })
+}
 
 pub async fn get_epg_grid(State(state): State<Arc<AppState>>) -> Json<Value> {
     let started_at = Instant::now();
@@ -25,42 +62,9 @@ pub async fn get_epg_grid(State(state): State<Arc<AppState>>) -> Json<Value> {
         .await
         .unwrap_or_default();
 
-    let mut serialized_programs = vec![];
+    let mut serialized_programs = Vec::with_capacity(programs.len());
     for p in programs {
-        let cp = p.custom_properties.unwrap_or(json!({}));
-        let is_new = cp
-            .get("new")
-            .and_then(|v: &Value| v.as_bool())
-            .unwrap_or(false);
-        let is_live = cp
-            .get("live")
-            .and_then(|v: &Value| v.as_bool())
-            .unwrap_or(false);
-        let is_premiere = cp
-            .get("premiere")
-            .and_then(|v: &Value| v.as_bool())
-            .unwrap_or(false);
-        let premiere_text = cp
-            .get("premiere_text")
-            .and_then(|v: &Value| v.as_str())
-            .unwrap_or("");
-        let is_finale = premiere_text.to_lowercase().contains("finale");
-
-        serialized_programs.push(json!({
-            "id": p.id,
-            "start_time": p.start_time.to_rfc3339(),
-            "end_time": p.end_time.to_rfc3339(),
-            "title": p.title,
-            "sub_title": p.sub_title,
-            "description": p.description,
-            "tvg_id": p.tvg_id,
-            "season": cp.get("season"),
-            "episode": cp.get("episode"),
-            "is_new": is_new,
-            "is_live": is_live,
-            "is_premiere": is_premiere,
-            "is_finale": is_finale,
-        }));
+        serialized_programs.push(serialize_program(p));
     }
 
     let channels = crate::entities::channel::Entity::find()
@@ -79,10 +83,8 @@ pub async fn get_epg_grid(State(state): State<Arc<AppState>>) -> Json<Value> {
             .await
             .unwrap_or_default()
     };
-    let epg_data_by_id: HashMap<i64, crate::entities::epg_data::Model> = epg_data_rows
-        .into_iter()
-        .map(|row| (row.id, row))
-        .collect();
+    let epg_data_by_id: HashMap<i64, crate::entities::epg_data::Model> =
+        epg_data_rows.into_iter().map(|row| (row.id, row)).collect();
 
     let source_ids: Vec<i64> = epg_data_by_id
         .values()
@@ -257,72 +259,61 @@ pub async fn get_current_programs(
 
     let channels = query.all(&state.db).await.unwrap_or_default();
     let now = Utc::now();
-    let mut current_programs = vec![];
+    let epg_ids: Vec<i64> = channels
+        .iter()
+        .filter_map(|ch| ch.epg_data_id)
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+
+    if epg_ids.is_empty() {
+        return Json(json!([]));
+    }
+
+    let epg_rows = crate::entities::epg_data::Entity::find()
+        .filter(crate::entities::epg_data::Column::Id.is_in(epg_ids.clone()))
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+    let epg_by_id: HashMap<i64, crate::entities::epg_data::Model> =
+        epg_rows.into_iter().map(|row| (row.id, row)).collect();
+
+    let programs = crate::entities::epg_program::Entity::find()
+        .filter(crate::entities::epg_program::Column::EpgId.is_in(epg_ids))
+        .filter(crate::entities::epg_program::Column::StartTime.lte(now))
+        .filter(crate::entities::epg_program::Column::EndTime.gt(now))
+        .order_by_desc(crate::entities::epg_program::Column::StartTime)
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+
+    let mut program_by_epg_id = HashMap::new();
+    for program in programs {
+        program_by_epg_id.entry(program.epg_id).or_insert(program);
+    }
+
+    let mut current_programs = Vec::new();
 
     for ch in channels {
-        if let Some(epg_id) = ch.epg_data_id {
-            if let Ok(Some(program)) = crate::entities::epg_program::Entity::find()
-                .filter(crate::entities::epg_program::Column::EpgId.eq(epg_id))
-                .filter(crate::entities::epg_program::Column::StartTime.lte(now))
-                .filter(crate::entities::epg_program::Column::EndTime.gt(now))
-                .filter(
-                    crate::entities::epg_program::Column::TvgId
-                        .eq(ch.tvg_id.clone().unwrap_or_default()),
-                )
-                .one(&state.db)
-                .await
-            {
-                let cp = program.custom_properties.clone().unwrap_or(json!({}));
-                let is_new = cp
-                    .get("new")
-                    .and_then(|v: &Value| v.as_bool())
-                    .unwrap_or(false);
-                let is_live = cp
-                    .get("live")
-                    .and_then(|v: &Value| v.as_bool())
-                    .unwrap_or(false);
-                let is_premiere = cp
-                    .get("premiere")
-                    .and_then(|v: &Value| v.as_bool())
-                    .unwrap_or(false);
-                let premiere_text = cp
-                    .get("premiere_text")
-                    .and_then(|v: &Value| v.as_str())
-                    .unwrap_or("");
-                let is_finale = premiere_text.to_lowercase().contains("finale");
+        let Some(epg_id) = ch.epg_data_id else {
+            continue;
+        };
+        let Some(program) = program_by_epg_id.get(&epg_id) else {
+            continue;
+        };
 
-                let mut prog_json = json!({
-                    "id": program.id,
-                    "start_time": program.start_time.to_rfc3339(),
-                    "end_time": program.end_time.to_rfc3339(),
-                    "title": program.title,
-                    "sub_title": program.sub_title,
-                    "description": program.description,
-                    "tvg_id": program.tvg_id,
-                    "season": cp.get("season"),
-                    "episode": cp.get("episode"),
-                    "is_new": is_new,
-                    "is_live": is_live,
-                    "is_premiere": is_premiere,
-                    "is_finale": is_finale,
-                    "channel_uuid": ch.uuid.to_string(),
-                });
+        let mut prog_json = serialize_program(program.clone());
+        prog_json["channel_uuid"] = json!(ch.uuid.to_string());
 
-                if let Ok(Some(epg_data_row)) =
-                    crate::entities::epg_data::Entity::find_by_id(epg_id)
-                        .one(&state.db)
-                        .await
-                {
-                    prog_json["epg"] = json!({
-                        "id": epg_data_row.id,
-                        "tvg_id": epg_data_row.tvg_id,
-                        "name": epg_data_row.name,
-                    });
-                }
-
-                current_programs.push(prog_json);
-            }
+        if let Some(epg_data_row) = epg_by_id.get(&epg_id) {
+            prog_json["epg"] = json!({
+                "id": epg_data_row.id,
+                "tvg_id": epg_data_row.tvg_id,
+                "name": epg_data_row.name,
+            });
         }
+
+        current_programs.push(prog_json);
     }
 
     Json(json!(current_programs))
