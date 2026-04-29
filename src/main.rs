@@ -313,11 +313,15 @@ async fn main() {
         )
         // --- CHANNELS & M3U ---
         .route("/api/channels/channels/", get(api::get_channels))
-        .route("/api/channels/channels/:id/", patch(api::update_channel).put(api::update_channel))
-        .route("/api/channels/channels/:id", patch(api::update_channel).put(api::update_channel))
+        .route("/api/channels/channels/:id/", patch(api::update_channel).put(api::update_channel).post(api::update_channel))
+        .route("/api/channels/channels/:id", patch(api::update_channel).put(api::update_channel).post(api::update_channel))
         .route(
             "/api/channels/channels/edit/bulk/",
-            patch(api::bulk_update_channels),
+            patch(api::bulk_update_channels).put(api::bulk_update_channels).post(api::bulk_update_channels),
+        )
+        .route(
+            "/api/channels/channels/edit/bulk",
+            patch(api::bulk_update_channels).put(api::bulk_update_channels).post(api::bulk_update_channels),
         )
         .route("/api/channels/groups/", get(api::get_channel_groups))
         .route("/api/channels/profiles/", get(api::get_channel_profiles))
