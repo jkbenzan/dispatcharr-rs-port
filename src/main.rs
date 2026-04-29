@@ -314,6 +314,7 @@ async fn main() {
         // --- CHANNELS & M3U ---
         .route("/api/channels/channels/", get(api::get_channels))
         .route("/api/channels/channels/:id/", patch(api::update_channel).put(api::update_channel))
+        .route("/api/channels/channels/:id", patch(api::update_channel).put(api::update_channel))
         .route(
             "/api/channels/channels/edit/bulk/",
             patch(api::bulk_update_channels),
@@ -331,6 +332,13 @@ async fn main() {
         )
         .route(
             "/api/m3u/accounts/:id/",
+            get(api::get_m3u_account)
+                .put(api::update_m3u_account)
+                .patch(api::update_m3u_account)
+                .delete(api::delete_m3u_account),
+        )
+        .route(
+            "/api/m3u/accounts/:id",
             get(api::get_m3u_account)
                 .put(api::update_m3u_account)
                 .patch(api::update_m3u_account)
@@ -378,6 +386,13 @@ async fn main() {
         )
         .route(
             "/api/epg/sources/:id/",
+            get(api::get_epg_source)
+                .put(api::update_epg_source)
+                .patch(api::update_epg_source)
+                .delete(api::delete_epg_source),
+        )
+        .route(
+            "/api/epg/sources/:id",
             get(api::get_epg_source)
                 .put(api::update_epg_source)
                 .patch(api::update_epg_source)
