@@ -21,9 +21,9 @@ mod m3u;
 mod outputs;
 mod proxy;
 mod settings;
+mod stream_checker;
 mod vod;
 mod xtream_codes;
-mod stream_checker;
 
 // Ensure ffmpeg/ffprobe are available, downloading them if needed.
 fn ensure_ffmpeg() {
@@ -31,21 +31,30 @@ fn ensure_ffmpeg() {
         download::auto_download,
         paths::{ffmpeg_path, sidecar_dir},
     };
-    
-    let cwd = std::env::current_dir().map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|_| "unknown".to_string());
+
+    let cwd = std::env::current_dir()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|_| "unknown".to_string());
     tracing::info!("📂 Current working directory: {}", cwd);
 
     // Check if ffmpeg is already on PATH (installed via Dockerfile or system)
-    if let Ok(output) = std::process::Command::new("ffmpeg").arg("-version").output() {
+    if let Ok(output) = std::process::Command::new("ffmpeg")
+        .arg("-version")
+        .output()
+    {
         if output.status.success() {
-            let version = String::from_utf8_lossy(&output.stdout).lines().next().unwrap_or("unknown").to_string();
+            let version = String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .next()
+                .unwrap_or("unknown")
+                .to_string();
             tracing::info!("✅ system ffmpeg found on PATH: {}", version);
             return;
         }
     }
 
     let sidecar = ffmpeg_path();
-    
+
     if sidecar.is_file() {
         tracing::info!("✅ sidecar ffmpeg found: {}", sidecar.display());
         return;
@@ -59,7 +68,7 @@ fn ensure_ffmpeg() {
     }
 
     tracing::warn!("⚠️  ffmpeg not found. Attempting auto-download...");
-    
+
     use ffmpeg_sidecar::download::{auto_download_with_progress, FfmpegDownloadProgressEvent};
 
     let download_result = auto_download_with_progress(|event| {
@@ -67,10 +76,19 @@ fn ensure_ffmpeg() {
             FfmpegDownloadProgressEvent::Starting => {
                 tracing::info!("⬇️ Starting ffmpeg download...");
             }
-            FfmpegDownloadProgressEvent::Downloading { total_bytes, downloaded_bytes } => {
-                if total_bytes > 0 && downloaded_bytes % (1024 * 1024 * 5) == 0 { // Log every 5MB
+            FfmpegDownloadProgressEvent::Downloading {
+                total_bytes,
+                downloaded_bytes,
+            } => {
+                if total_bytes > 0 && downloaded_bytes % (1024 * 1024 * 5) == 0 {
+                    // Log every 5MB
                     let percent = (downloaded_bytes as f64 / total_bytes as f64) * 100.0;
-                    tracing::info!("⏳ Progress: {:.1}% ({:.1}MB / {:.1}MB)", percent, downloaded_bytes as f64 / 1024.0 / 1024.0, total_bytes as f64 / 1024.0 / 1024.0);
+                    tracing::info!(
+                        "⏳ Progress: {:.1}% ({:.1}MB / {:.1}MB)",
+                        percent,
+                        downloaded_bytes as f64 / 1024.0 / 1024.0,
+                        total_bytes as f64 / 1024.0 / 1024.0
+                    );
                 }
             }
             FfmpegDownloadProgressEvent::UnpackingArchive => {
@@ -97,8 +115,10 @@ pub struct AppState {
     pub db: DatabaseConnection,
     pub http_client: reqwest::Client,
     pub ws_sender: tokio::sync::broadcast::Sender<serde_json::Value>,
-    pub active_streams: Arc<tokio::sync::RwLock<std::collections::HashMap<String, crate::proxy::ChannelStats>>>,
-    pub bulk_check_status: Arc<tokio::sync::RwLock<crate::stream_checker::checker::BulkCheckStatus>>,
+    pub active_streams:
+        Arc<tokio::sync::RwLock<std::collections::HashMap<String, crate::proxy::ChannelStats>>>,
+    pub bulk_check_status:
+        Arc<tokio::sync::RwLock<crate::stream_checker::checker::BulkCheckStatus>>,
 }
 
 async fn ws_handler(ws: WebSocketUpgrade, State(state): State<Arc<AppState>>) -> impl IntoResponse {
@@ -293,10 +313,7 @@ async fn main() {
         )
         // --- CHANNELS & M3U ---
         .route("/api/channels/channels/", get(api::get_channels))
-        .route(
-            "/api/channels/channels/:id/",
-            patch(api::update_channel),
-        )
+        .route("/api/channels/channels/:id/", patch(api::update_channel))
         .route(
             "/api/channels/channels/edit/bulk/",
             patch(api::bulk_update_channels),
@@ -354,8 +371,17 @@ async fn main() {
             post(api::refresh_m3u_account_info),
         )
         // --- EPG ---
-        .route("/api/epg/sources/", get(api::get_epg_sources))
-        .route("/api/epg/sources/:id/", get(api::get_epg_source))
+        .route(
+            "/api/epg/sources/",
+            get(api::get_epg_sources).post(api::create_epg_source),
+        )
+        .route(
+            "/api/epg/sources/:id/",
+            get(api::get_epg_source)
+                .put(api::update_epg_source)
+                .patch(api::update_epg_source)
+                .delete(api::delete_epg_source),
+        )
         .route("/api/epg/refresh/:id/", post(api::refresh_epg_source))
         .route("/api/epg/import", post(api::refresh_epg_import))
         .route("/api/epg/import/", post(api::refresh_epg_import))

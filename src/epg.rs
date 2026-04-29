@@ -24,13 +24,17 @@ pub async fn refresh_all_guides(
     }
 
     println!("Fetching XMLTV EPG from {}", url);
-    let client = reqwest::Client::builder()
-        .user_agent("Dispatcharr/1.0")
-        .timeout(std::time::Duration::from_secs(120))
-        .local_address(std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)))
-        .build()?;
+    let xml_data = if std::path::Path::new(url).exists() {
+        tokio::fs::read_to_string(url).await?
+    } else {
+        let client = reqwest::Client::builder()
+            .user_agent("Dispatcharr/1.0")
+            .timeout(std::time::Duration::from_secs(120))
+            .local_address(std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)))
+            .build()?;
 
-    let xml_data = client.get(url).send().await?.text().await?;
+        client.get(url).send().await?.text().await?
+    };
 
     let existing_channels = epg_data::Entity::find()
         .filter(epg_data::Column::EpgSourceId.eq(source_id))

@@ -164,8 +164,9 @@ pub async fn get_core_settings() -> Json<Value> {
 }
 
 use crate::entities::{
-    channel, channel_group, channel_profile, core_notificationdismissal, core_settings,
-    core_streamprofile, core_systemnotification, core_useragent, epg_source, m3u_account, stream, user, channel_stream,
+    channel, channel_group, channel_profile, channel_stream, core_notificationdismissal,
+    core_settings, core_streamprofile, core_systemnotification, core_useragent, epg_data,
+    epg_program, epg_source, m3u_account, stream, user,
 };
 use crate::{
     auth::{generate_jwt, verify_password, CurrentUser},
@@ -322,17 +323,26 @@ pub async fn get_config() -> Json<Value> {
 // --------------------------------------------------------
 
 // THESE REQUIRE DRF PAGINATED OBJECTS {"count": 0, "results": []}
-async fn get_channel_json(db: &sea_orm::DatabaseConnection, channel: crate::entities::channel::Model) -> serde_json::Value {
+async fn get_channel_json(
+    db: &sea_orm::DatabaseConnection,
+    channel: crate::entities::channel::Model,
+) -> serde_json::Value {
     let mut ch_json = serde_json::to_value(&channel).unwrap();
     let id = channel.id;
 
     // Fetch groups
-    let groups = db.query_all(sea_orm::Statement::from_sql_and_values(
-        sea_orm::DatabaseBackend::Postgres,
-        "SELECT channelgroup_id FROM dispatcharr_channels_channel_groups WHERE channel_id = $1",
-        vec![id.into()]
-    )).await.unwrap_or_default();
-    let group_ids: Vec<i64> = groups.into_iter().filter_map(|gr| gr.try_get("", "channelgroup_id").ok()).collect();
+    let groups = db
+        .query_all(sea_orm::Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            "SELECT channelgroup_id FROM dispatcharr_channels_channel_groups WHERE channel_id = $1",
+            vec![id.into()],
+        ))
+        .await
+        .unwrap_or_default();
+    let group_ids: Vec<i64> = groups
+        .into_iter()
+        .filter_map(|gr| gr.try_get("", "channelgroup_id").ok())
+        .collect();
     ch_json["channel_groups"] = serde_json::json!(group_ids);
 
     // Fetch profiles
@@ -341,7 +351,10 @@ async fn get_channel_json(db: &sea_orm::DatabaseConnection, channel: crate::enti
         "SELECT channelprofile_id FROM dispatcharr_channels_channel_channel_profiles WHERE channel_id = $1",
         vec![id.into()]
     )).await.unwrap_or_default();
-    let profile_ids: Vec<i64> = profiles.into_iter().filter_map(|pr| pr.try_get("", "channelprofile_id").ok()).collect();
+    let profile_ids: Vec<i64> = profiles
+        .into_iter()
+        .filter_map(|pr| pr.try_get("", "channelprofile_id").ok())
+        .collect();
     ch_json["channel_profiles"] = serde_json::json!(profile_ids);
 
     // Fetch EPG sources
@@ -350,7 +363,10 @@ async fn get_channel_json(db: &sea_orm::DatabaseConnection, channel: crate::enti
         "SELECT epgsource_id FROM dispatcharr_channels_channel_epg_sources WHERE channel_id = $1",
         vec![id.into()]
     )).await.unwrap_or_default();
-    let epg_ids: Vec<i64> = epg.into_iter().filter_map(|e| e.try_get("", "epgsource_id").ok()).collect();
+    let epg_ids: Vec<i64> = epg
+        .into_iter()
+        .filter_map(|e| e.try_get("", "epgsource_id").ok())
+        .collect();
     ch_json["epg_sources"] = serde_json::json!(epg_ids);
 
     // Fetch streams (flattened)
@@ -360,36 +376,40 @@ async fn get_channel_json(db: &sea_orm::DatabaseConnection, channel: crate::enti
         .all(db)
         .await
         .unwrap_or_default();
-    
+
     let mut streams_json = Vec::new();
     for cs in channel_streams {
-        if let Ok(Some(stream_model)) = crate::entities::stream::Entity::find_by_id(cs.stream_id).one(db).await {
+        if let Ok(Some(stream_model)) = crate::entities::stream::Entity::find_by_id(cs.stream_id)
+            .one(db)
+            .await
+        {
             let mut s_json = serde_json::to_value(&stream_model).unwrap();
             if let Some(obj) = s_json.as_object_mut() {
                 // Add join table info
                 obj.insert("channel_stream_id".to_string(), serde_json::json!(cs.id));
                 obj.insert("order".to_string(), serde_json::json!(cs.order));
-                
+
                 // Alias m3u_account_id to m3u_account
                 if let Some(acc_id) = obj.get("m3u_account_id") {
                     obj.insert("m3u_account".to_string(), acc_id.clone());
                 }
-                
+
                 // Flatten stats
-                let stats = obj.get("custom_properties")
+                let stats = obj
+                    .get("custom_properties")
                     .and_then(|p| p.as_object())
                     .and_then(|props| props.get("stream_stats").cloned());
-                let updated = obj.get("custom_properties")
+                let updated = obj
+                    .get("custom_properties")
                     .and_then(|p| p.as_object())
                     .and_then(|props| props.get("stream_stats_updated_at").cloned());
-                
+
                 if let Some(s) = stats {
                     obj.insert("stream_stats".to_string(), s);
                 }
                 if let Some(u) = updated {
                     obj.insert("stream_stats_updated_at".to_string(), u);
                 }
-
             }
             streams_json.push(s_json);
         }
@@ -887,7 +907,10 @@ pub async fn update_streamprofile(
     Json(payload): Json<StreamProfileReq>,
 ) -> impl IntoResponse {
     let mut profile: core_streamprofile::ActiveModel =
-        match core_streamprofile::Entity::find_by_id(id).one(&state.db).await {
+        match core_streamprofile::Entity::find_by_id(id)
+            .one(&state.db)
+            .await
+        {
             Ok(Some(p)) => p.into(),
             _ => {
                 return (
@@ -927,7 +950,10 @@ pub async fn delete_streamprofile(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
 ) -> impl IntoResponse {
-    let profile = match core_streamprofile::Entity::find_by_id(id).one(&state.db).await {
+    let profile = match core_streamprofile::Entity::find_by_id(id)
+        .one(&state.db)
+        .await
+    {
         Ok(Some(p)) => p,
         _ => {
             return (
@@ -944,7 +970,10 @@ pub async fn delete_streamprofile(
         );
     }
 
-    match core_streamprofile::Entity::delete_by_id(id).exec(&state.db).await {
+    match core_streamprofile::Entity::delete_by_id(id)
+        .exec(&state.db)
+        .await
+    {
         Ok(_) => (StatusCode::NO_CONTENT, Json(json!({}))),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -1021,7 +1050,6 @@ pub async fn get_streams(
             }
         }
     }
-
 
     if let Some(cg) = params.get("channel_group") {
         if !cg.is_empty() {
@@ -1464,6 +1492,152 @@ fn sanitize_filename(filename: &str) -> String {
     }
 }
 
+fn empty_string_as_none(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+}
+
+fn parse_i32_field(value: Option<&Value>, default: i32) -> i32 {
+    match value {
+        Some(Value::Number(n)) => n.as_i64().unwrap_or(default as i64) as i32,
+        Some(Value::String(s)) => s.parse::<i32>().unwrap_or(default),
+        _ => default,
+    }
+}
+
+fn parse_bool_field(value: Option<&Value>, default: bool) -> bool {
+    match value {
+        Some(Value::Bool(v)) => *v,
+        Some(Value::String(s)) => matches!(s.as_str(), "true" | "1" | "on" | "yes"),
+        _ => default,
+    }
+}
+
+fn dummy_tvg_id(name: &str) -> String {
+    let friendly: String = name
+        .replace([' ', '-'], "_")
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '_')
+        .collect::<String>()
+        .to_lowercase();
+
+    format!("dummy_{}", friendly)
+}
+
+async fn parse_epg_source_request(
+    state: &Arc<AppState>,
+    req: axum::extract::Request,
+) -> (Value, Option<String>) {
+    let content_type = req
+        .headers()
+        .get(axum::http::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+
+    let mut payload = json!({});
+    let mut file_path: Option<String> = None;
+
+    if content_type.starts_with("multipart/form-data") {
+        use axum::extract::FromRequest;
+        if let Ok(mut multipart) = axum::extract::Multipart::from_request(req, state).await {
+            while let Ok(Some(field)) = multipart.next_field().await {
+                let name = field.name().unwrap_or("").to_string();
+                if name == "file" || name == "files" {
+                    if let Some(file_name) = field.file_name().map(|s| s.to_string()) {
+                        if let Ok(data) = field.bytes().await {
+                            let sanitized = sanitize_filename(&file_name);
+                            let path = format!("./data/uploads/epgs/{}", sanitized);
+                            let _ = std::fs::create_dir_all("./data/uploads/epgs");
+                            let _ = std::fs::write(&path, data);
+                            file_path = Some(path);
+                        }
+                    }
+                } else if let Ok(text) = field.text().await {
+                    if name == "custom_properties" {
+                        payload[&name] =
+                            serde_json::from_str(&text).unwrap_or_else(|_| json!(text));
+                    } else if text == "true" {
+                        payload[&name] = json!(true);
+                    } else if text == "false" {
+                        payload[&name] = json!(false);
+                    } else if let Ok(num) = text.parse::<i64>() {
+                        payload[&name] = json!(num);
+                    } else {
+                        payload[&name] = json!(text);
+                    }
+                }
+            }
+        }
+    } else if let Ok(bytes) = axum::body::to_bytes(req.into_body(), usize::MAX).await {
+        payload = serde_json::from_slice(&bytes).unwrap_or(json!({}));
+    }
+
+    (payload, file_path)
+}
+
+async fn ensure_dummy_epg_data(
+    db: &sea_orm::DatabaseConnection,
+    source_id: i64,
+    source_name: &str,
+) {
+    let tvg_id = dummy_tvg_id(source_name);
+    let existing = epg_data::Entity::find()
+        .filter(epg_data::Column::EpgSourceId.eq(source_id))
+        .filter(epg_data::Column::TvgId.eq(&tvg_id))
+        .one(db)
+        .await
+        .ok()
+        .flatten();
+
+    if let Some(row) = existing {
+        if row.name != source_name {
+            let mut active: epg_data::ActiveModel = row.into();
+            active.name = Set(source_name.to_string());
+            let _ = active.update(db).await;
+        }
+    } else {
+        let active = epg_data::ActiveModel {
+            tvg_id: Set(Some(tvg_id)),
+            name: Set(source_name.to_string()),
+            epg_source_id: Set(Some(source_id)),
+            icon_url: Set(None),
+            ..Default::default()
+        };
+        let _ = active.insert(db).await;
+    }
+}
+
+async fn epg_source_json(db: &sea_orm::DatabaseConnection, source: epg_source::Model) -> Value {
+    let mut source_json = serde_json::to_value(&source).unwrap_or_else(|_| json!({}));
+    let epg_data_count = epg_data::Entity::find()
+        .filter(epg_data::Column::EpgSourceId.eq(source.id))
+        .count(db)
+        .await
+        .unwrap_or(0);
+
+    let channel_count = db
+        .query_one(Statement::from_sql_and_values(
+            sea_orm::DatabaseBackend::Postgres,
+            "SELECT COUNT(*) AS count FROM dispatcharr_channels_channel c \
+             JOIN epg_epgdata e ON c.epg_data_id = e.id \
+             WHERE e.epg_source_id = $1",
+            vec![source.id.into()],
+        ))
+        .await
+        .ok()
+        .flatten()
+        .and_then(|row| row.try_get::<i64>("", "count").ok())
+        .unwrap_or(0);
+
+    source_json["epg_data_count"] = json!(epg_data_count);
+    source_json["has_channels"] = json!(channel_count > 0);
+    source_json["cron_expression"] = json!("");
+    source_json
+}
+
 pub async fn add_m3u_account(
     State(state): State<Arc<AppState>>,
     req: axum::extract::Request,
@@ -1714,7 +1888,11 @@ pub async fn get_epg_sources(State(state): State<Arc<AppState>>) -> Json<Value> 
         Ok(s) => s,
         Err(_) => vec![],
     };
-    Json(json!(sources))
+    let mut results = Vec::with_capacity(sources.len());
+    for source in sources {
+        results.push(epg_source_json(&state.db, source).await);
+    }
+    Json(json!(results))
 }
 
 pub async fn get_epg_source(
@@ -1725,13 +1903,301 @@ pub async fn get_epg_source(
         .one(&state.db)
         .await
     {
-        Ok(Some(src)) => (StatusCode::OK, Json(json!(src))),
+        Ok(Some(src)) => (StatusCode::OK, Json(epg_source_json(&state.db, src).await)),
         _ => (StatusCode::NOT_FOUND, Json(json!({"error": "Not Found"}))),
     }
 }
 
-pub async fn get_epgdata() -> Json<Value> {
-    get_flat_array().await
+pub async fn create_epg_source(
+    State(state): State<Arc<AppState>>,
+    req: axum::extract::Request,
+) -> impl IntoResponse {
+    let (payload, uploaded_file_path) = parse_epg_source_request(&state, req).await;
+    let name = payload
+        .get("name")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or("New EPG")
+        .to_string();
+    let source_type = payload
+        .get("source_type")
+        .and_then(|v| v.as_str())
+        .unwrap_or("xmltv")
+        .to_string();
+    let is_active = parse_bool_field(payload.get("is_active"), true);
+    let status = if source_type == "dummy" {
+        "idle"
+    } else if is_active {
+        payload
+            .get("status")
+            .and_then(|v| v.as_str())
+            .unwrap_or("idle")
+    } else {
+        "disabled"
+    };
+
+    let file_path = uploaded_file_path
+        .or_else(|| empty_string_as_none(payload.get("file_path").and_then(|v| v.as_str())));
+    let custom_properties = payload
+        .get("custom_properties")
+        .filter(|v| !v.is_null())
+        .cloned();
+
+    let active = epg_source::ActiveModel {
+        name: Set(name),
+        source_type: Set(source_type.clone()),
+        url: Set(empty_string_as_none(
+            payload.get("url").and_then(|v| v.as_str()),
+        )),
+        api_key: Set(empty_string_as_none(
+            payload.get("api_key").and_then(|v| v.as_str()),
+        )),
+        is_active: Set(is_active),
+        file_path: Set(file_path),
+        refresh_interval: Set(parse_i32_field(payload.get("refresh_interval"), 0)),
+        refresh_task_id: Set(None),
+        created_at: Set(chrono::Utc::now().into()),
+        updated_at: Set(None),
+        status: Set(status.to_string()),
+        last_message: Set(if source_type == "dummy" {
+            None
+        } else {
+            empty_string_as_none(payload.get("last_message").and_then(|v| v.as_str()))
+        }),
+        extracted_file_path: Set(empty_string_as_none(
+            payload.get("extracted_file_path").and_then(|v| v.as_str()),
+        )),
+        custom_properties: Set(custom_properties),
+        priority: Set(parse_i32_field(payload.get("priority"), 0).max(0)),
+        ..Default::default()
+    };
+
+    let inserted = match epg_source::Entity::insert(active)
+        .exec_with_returning(&state.db)
+        .await
+    {
+        Ok(source) => source,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": format!("Failed to create EPG source: {}", e)})),
+            )
+        }
+    };
+
+    if inserted.source_type == "dummy" {
+        ensure_dummy_epg_data(&state.db, inserted.id, &inserted.name).await;
+    } else if inserted.is_active {
+        if let Some(url) = inserted.url.clone().or_else(|| inserted.file_path.clone()) {
+            let db_clone = state.db.clone();
+            let source_id = inserted.id;
+            tokio::spawn(async move {
+                if let Err(e) = epg::refresh_all_guides(&db_clone, &url, source_id).await {
+                    eprintln!("Failed to parse EPG Task: {}", e);
+                }
+            });
+        }
+    }
+
+    (
+        StatusCode::CREATED,
+        Json(epg_source_json(&state.db, inserted).await),
+    )
+}
+
+pub async fn update_epg_source(
+    State(state): State<Arc<AppState>>,
+    Path(source_id): Path<i64>,
+    req: axum::extract::Request,
+) -> impl IntoResponse {
+    let (payload, uploaded_file_path) = parse_epg_source_request(&state, req).await;
+    let source = match epg_source::Entity::find_by_id(source_id)
+        .one(&state.db)
+        .await
+    {
+        Ok(Some(src)) => src,
+        _ => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": "Source not found"})),
+            )
+        }
+    };
+
+    let mut active: epg_source::ActiveModel = source.clone().into();
+    let mut next_source_type = source.source_type.clone();
+    let mut next_is_active = source.is_active;
+
+    if let Some(name) = payload.get("name").and_then(|v| v.as_str()) {
+        let name = name.trim();
+        if !name.is_empty() {
+            active.name = Set(name.to_string());
+        }
+    }
+    if let Some(source_type) = payload.get("source_type").and_then(|v| v.as_str()) {
+        next_source_type = source_type.to_string();
+        active.source_type = Set(next_source_type.clone());
+    }
+    if payload.get("is_active").is_some() {
+        next_is_active = parse_bool_field(payload.get("is_active"), source.is_active);
+        active.is_active = Set(next_is_active);
+    }
+    if payload.get("url").is_some() {
+        active.url = Set(empty_string_as_none(
+            payload.get("url").and_then(|v| v.as_str()),
+        ));
+    }
+    if payload.get("api_key").is_some() {
+        active.api_key = Set(empty_string_as_none(
+            payload.get("api_key").and_then(|v| v.as_str()),
+        ));
+    }
+    if let Some(path) = uploaded_file_path {
+        active.file_path = Set(Some(path));
+    } else if payload.get("file_path").is_some() {
+        active.file_path = Set(empty_string_as_none(
+            payload.get("file_path").and_then(|v| v.as_str()),
+        ));
+    }
+    if payload.get("refresh_interval").is_some() {
+        active.refresh_interval = Set(parse_i32_field(
+            payload.get("refresh_interval"),
+            source.refresh_interval,
+        ));
+    }
+    if payload.get("priority").is_some() {
+        active.priority = Set(parse_i32_field(payload.get("priority"), source.priority).max(0));
+    }
+    if payload.get("custom_properties").is_some() {
+        active.custom_properties = Set(payload
+            .get("custom_properties")
+            .filter(|v| !v.is_null())
+            .cloned());
+    }
+    if payload.get("extracted_file_path").is_some() {
+        active.extracted_file_path = Set(empty_string_as_none(
+            payload.get("extracted_file_path").and_then(|v| v.as_str()),
+        ));
+    }
+
+    if next_source_type == "dummy" {
+        active.status = Set("idle".to_string());
+        active.last_message = Set(None);
+    } else if source.is_active != next_is_active {
+        active.status = Set(if next_is_active { "idle" } else { "disabled" }.to_string());
+    } else if let Some(status) = payload.get("status").and_then(|v| v.as_str()) {
+        active.status = Set(status.to_string());
+    }
+    if next_source_type != "dummy" && payload.get("last_message").is_some() {
+        active.last_message = Set(empty_string_as_none(
+            payload.get("last_message").and_then(|v| v.as_str()),
+        ));
+    }
+
+    match active.update(&state.db).await {
+        Ok(updated) => {
+            if updated.source_type == "dummy" {
+                ensure_dummy_epg_data(&state.db, updated.id, &updated.name).await;
+            }
+            (
+                StatusCode::OK,
+                Json(epg_source_json(&state.db, updated).await),
+            )
+        }
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": format!("Failed to update EPG source: {}", e)})),
+        ),
+    }
+}
+
+pub async fn delete_epg_source(
+    State(state): State<Arc<AppState>>,
+    Path(source_id): Path<i64>,
+) -> impl IntoResponse {
+    let source = match epg_source::Entity::find_by_id(source_id)
+        .one(&state.db)
+        .await
+    {
+        Ok(Some(src)) => src,
+        _ => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": "Source not found"})),
+            )
+        }
+    };
+
+    let epg_rows = epg_data::Entity::find()
+        .filter(epg_data::Column::EpgSourceId.eq(source_id))
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+    let epg_ids: Vec<i64> = epg_rows.iter().map(|row| row.id).collect();
+
+    if !epg_ids.is_empty() {
+        let _ = channel::Entity::update_many()
+            .col_expr(
+                channel::Column::EpgDataId,
+                sea_orm::sea_query::Expr::value(Option::<i64>::None),
+            )
+            .filter(channel::Column::EpgDataId.is_in(epg_ids.clone()))
+            .exec(&state.db)
+            .await;
+        let _ = epg_program::Entity::delete_many()
+            .filter(epg_program::Column::EpgId.is_in(epg_ids))
+            .exec(&state.db)
+            .await;
+    }
+    let _ = epg_data::Entity::delete_many()
+        .filter(epg_data::Column::EpgSourceId.eq(source_id))
+        .exec(&state.db)
+        .await;
+
+    match epg_source::Entity::delete_by_id(source_id)
+        .exec(&state.db)
+        .await
+    {
+        Ok(_) => {
+            for path in [source.file_path, source.extracted_file_path]
+                .into_iter()
+                .flatten()
+            {
+                if path.starts_with("./data/uploads/epgs/")
+                    || path.starts_with("data/uploads/epgs/")
+                {
+                    let _ = std::fs::remove_file(path);
+                }
+            }
+            (StatusCode::NO_CONTENT, Json(json!({})))
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": e.to_string()})),
+        ),
+    }
+}
+
+pub async fn get_epgdata(State(state): State<Arc<AppState>>) -> Json<Value> {
+    let rows = epg_data::Entity::find()
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+    let results: Vec<Value> = rows
+        .into_iter()
+        .map(|row| {
+            json!({
+                "id": row.id,
+                "tvg_id": row.tvg_id,
+                "name": row.name,
+                "icon_url": row.icon_url,
+                "epg_source": row.epg_source_id,
+                "epg_source_id": row.epg_source_id,
+            })
+        })
+        .collect();
+    Json(json!(results))
 }
 
 pub async fn refresh_m3u_account(
@@ -1893,10 +2359,7 @@ pub async fn refresh_epg_import(
     queue_epg_refresh(&state, payload.id).await
 }
 
-async fn queue_epg_refresh(
-    state: &Arc<AppState>,
-    source_id: i64,
-) -> (StatusCode, Json<Value>) {
+async fn queue_epg_refresh(state: &Arc<AppState>, source_id: i64) -> (StatusCode, Json<Value>) {
     let source = match epg_source::Entity::find_by_id(source_id)
         .one(&state.db)
         .await
@@ -1910,7 +2373,23 @@ async fn queue_epg_refresh(
         }
     };
 
-    if let Some(url) = source.url.clone() {
+    if source.source_type == "dummy" {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(
+                json!({"success": false, "message": "Dummy EPG sources do not require refreshing."}),
+            ),
+        );
+    }
+
+    if !source.is_active {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "Source is disabled"})),
+        );
+    }
+
+    if let Some(url) = source.url.clone().or_else(|| source.file_path.clone()) {
         let db_clone = state.db.clone();
         tokio::spawn(async move {
             if let Err(e) = epg::refresh_all_guides(&db_clone, &url, source_id).await {
@@ -1924,7 +2403,7 @@ async fn queue_epg_refresh(
     } else {
         (
             StatusCode::BAD_REQUEST,
-            Json(json!({"error": "No server URL"})),
+            Json(json!({"error": "No server URL or local file"})),
         )
     }
 }
@@ -2257,7 +2736,8 @@ pub async fn update_m3u_group_settings(
                     if was_enabled && new_enabled == Some(false) {
                         tracing::info!(
                             "[M3U] Group {} disabled - deleting streams for account {}",
-                            cg_id, account_id
+                            cg_id,
+                            account_id
                         );
                         let streams_to_delete: Vec<i64> = stream::Entity::find()
                             .filter(stream::Column::M3uAccountId.eq(account_id))
@@ -3033,7 +3513,7 @@ pub async fn bulk_update_channels(
                 if updated {
                     let _ = active.update(&state.db).await;
                 }
-                
+
                 if let Some(streams) = channel_payload.get("streams").and_then(|v| v.as_array()) {
                     let _ = crate::entities::channel_stream::Entity::delete_many()
                         .filter(crate::entities::channel_stream::Column::ChannelId.eq(id))
@@ -3062,5 +3542,7 @@ pub async fn bulk_update_channels(
             }
         }
     }
-    Ok(Json(serde_json::json!({"message": "Channels Updated Successfully"})))
+    Ok(Json(
+        serde_json::json!({"message": "Channels Updated Successfully"}),
+    ))
 }
