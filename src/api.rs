@@ -485,7 +485,7 @@ pub async fn get_channels(
     let count = q.clone().count(&state.db).await.unwrap_or(0);
 
     // Default sorting
-    let mut q = match params.get("ordering").map(|s| s.as_str()) {
+    let q = match params.get("ordering").map(|s| s.as_str()) {
         Some("name") => q.order_by_asc(channel::Column::Name),
         Some("-name") => q.order_by_desc(channel::Column::Name),
         Some("channel_number") => q.order_by_asc(channel::Column::ChannelNumber),
@@ -1103,7 +1103,7 @@ pub async fn get_streams(
 
     let count = q.clone().count(&state.db).await.unwrap_or(0);
 
-    let mut q = match params.get("ordering").map(|s| s.as_str()) {
+    let q = match params.get("ordering").map(|s| s.as_str()) {
         Some("name") => q.order_by_asc(stream::Column::Name),
         Some("-name") => q.order_by_desc(stream::Column::Name),
         Some("updated_at") => q.order_by_asc(stream::Column::UpdatedAt),
@@ -3735,7 +3735,10 @@ pub async fn set_channel_logos_from_epg(
                                         url: Set(icon_url.clone()),
                                         ..Default::default()
                                     };
-                                    new_logo.insert(&db).await.unwrap_or_default()
+                                    match new_logo.insert(&db).await {
+                                        Ok(l) => l,
+                                        Err(_) => continue,
+                                    }
                                 };
                             
                             if logo.id != 0 {

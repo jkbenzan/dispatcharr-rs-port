@@ -2,7 +2,7 @@ mod epg_api;
 use axum::{
     extract::ws::{WebSocket, WebSocketUpgrade},
     response::IntoResponse,
-    routing::{delete, get, patch, post, put},
+    routing::{get, patch, post, put},
     Router,
 };
 use sea_orm::{ConnectOptions, Database, DatabaseConnection};
@@ -28,7 +28,7 @@ mod xtream_codes;
 // Ensure ffmpeg/ffprobe are available, downloading them if needed.
 fn ensure_ffmpeg() {
     use ffmpeg_sidecar::{
-        download::auto_download,
+        
         paths::{ffmpeg_path, sidecar_dir},
     };
 
