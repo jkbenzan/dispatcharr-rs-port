@@ -257,7 +257,8 @@ pub async fn fetch_and_parse_m3u(
             .await;
         tracing::info!(
             "[M3U] Purged existing streams for {} disabled groups on account {}",
-            disabled_group_ids.len(), account_id
+            disabled_group_ids.len(),
+            account_id
         );
     }
 
@@ -579,7 +580,6 @@ pub async fn fetch_and_parse_xc(
         .filter_map(|r| r.stream_hash)
         .collect();
 
-
     let auto_sync_live = acc
         .custom_properties
         .as_ref()
@@ -622,7 +622,8 @@ pub async fn fetch_and_parse_xc(
             .await;
         tracing::info!(
             "[XC] Purged existing streams for {} disabled groups on account {}",
-            xc_disabled_group_ids.len(), account_id
+            xc_disabled_group_ids.len(),
+            account_id
         );
     }
 
