@@ -6,9 +6,14 @@ use axum::{
 use chrono::{Duration, Timelike, Utc};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde_json::{json, Value};
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use std::time::Instant;
 
 pub async fn get_epg_grid(State(state): State<Arc<AppState>>) -> Json<Value> {
+    let started_at = Instant::now();
+    tracing::info!("EPG grid request started");
+
     let now = Utc::now();
     let one_hour_ago = now - Duration::hours(1);
     let twenty_four_hours_later = now + Duration::hours(24);
@@ -62,6 +67,41 @@ pub async fn get_epg_grid(State(state): State<Arc<AppState>>) -> Json<Value> {
         .all(&state.db)
         .await
         .unwrap_or_default();
+    let channel_count = channels.len();
+
+    let epg_data_ids: Vec<i64> = channels.iter().filter_map(|ch| ch.epg_data_id).collect();
+    let epg_data_rows = if epg_data_ids.is_empty() {
+        Vec::new()
+    } else {
+        crate::entities::epg_data::Entity::find()
+            .filter(crate::entities::epg_data::Column::Id.is_in(epg_data_ids))
+            .all(&state.db)
+            .await
+            .unwrap_or_default()
+    };
+    let epg_data_by_id: HashMap<i64, crate::entities::epg_data::Model> = epg_data_rows
+        .into_iter()
+        .map(|row| (row.id, row))
+        .collect();
+
+    let source_ids: Vec<i64> = epg_data_by_id
+        .values()
+        .filter_map(|row| row.epg_source_id)
+        .collect();
+    let source_rows = if source_ids.is_empty() {
+        Vec::new()
+    } else {
+        crate::entities::epg_source::Entity::find()
+            .filter(crate::entities::epg_source::Column::Id.is_in(source_ids))
+            .all(&state.db)
+            .await
+            .unwrap_or_default()
+    };
+    let dummy_source_ids: HashSet<i64> = source_rows
+        .into_iter()
+        .filter(|row| row.source_type == "dummy")
+        .map(|row| row.id)
+        .collect();
 
     let mut dummy_programs = vec![];
 
@@ -123,28 +163,14 @@ pub async fn get_epg_grid(State(state): State<Arc<AppState>>) -> Json<Value> {
     ];
 
     for ch in channels {
-        let mut needs_dummy = false;
-
-        if ch.epg_data_id.is_none() {
-            needs_dummy = true;
-        } else if let Some(epg_id) = ch.epg_data_id {
-            if let Ok(Some(epg_data_row)) = crate::entities::epg_data::Entity::find_by_id(epg_id)
-                .one(&state.db)
-                .await
-            {
-                if let Some(source_id) = epg_data_row.epg_source_id {
-                    if let Ok(Some(source_row)) =
-                        crate::entities::epg_source::Entity::find_by_id(source_id)
-                            .one(&state.db)
-                            .await
-                    {
-                        if source_row.source_type == "dummy" {
-                            needs_dummy = true;
-                        }
-                    }
-                }
-            }
-        }
+        let needs_dummy = match ch.epg_data_id {
+            None => true,
+            Some(epg_id) => epg_data_by_id
+                .get(&epg_id)
+                .and_then(|row| row.epg_source_id)
+                .map(|source_id| dummy_source_ids.contains(&source_id))
+                .unwrap_or(false),
+        };
 
         if needs_dummy {
             let dummy_tvg_id = ch.uuid.to_string();
@@ -192,7 +218,15 @@ pub async fn get_epg_grid(State(state): State<Arc<AppState>>) -> Json<Value> {
         }
     }
 
+    let dummy_count = dummy_programs.len();
     serialized_programs.extend(dummy_programs);
+    tracing::info!(
+        program_count = serialized_programs.len(),
+        dummy_count,
+        channel_count,
+        elapsed_ms = started_at.elapsed().as_millis(),
+        "EPG grid request completed"
+    );
     Json(json!({"data": serialized_programs}))
 }
 
