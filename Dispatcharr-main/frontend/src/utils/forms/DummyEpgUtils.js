@@ -63,7 +63,7 @@ export const buildCustomProperties = (custom = {}) => ({
 });
 
 export const validateCustomTitlePattern = (value) => {
-  if (!value?.trim()) return 'Title pattern is required';
+  if (!value?.trim()) return null;
   try {
     new RegExp(value);
     return null;

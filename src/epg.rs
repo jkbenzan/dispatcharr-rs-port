@@ -1,9 +1,11 @@
 use crate::entities::{epg_data, epg_program, epg_source};
 use chrono::Utc;
+use flate2::read::GzDecoder;
 use quick_xml::events::Event;
 use quick_xml::reader::Reader;
 use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 use std::error::Error;
+use std::io::{Cursor, Read};
 
 fn parse_xmltv_datetime(value: &str) -> Option<chrono::DateTime<chrono::FixedOffset>> {
     chrono::DateTime::parse_from_str(value, "%Y%m%d%H%M%S %z")
@@ -15,7 +17,7 @@ pub async fn refresh_all_guides(
     db: &DatabaseConnection,
     url: &str,
     source_id: i64,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), Box<dyn Error + Send + Sync>> {
     if let Ok(Some(src)) = epg_source::Entity::find_by_id(source_id).one(db).await {
         let mut active: epg_source::ActiveModel = src.into();
         active.status = Set("fetching".to_string());
@@ -25,16 +27,29 @@ pub async fn refresh_all_guides(
 
     println!("Fetching XMLTV EPG from {}", url);
     let xml_data = if std::path::Path::new(url).exists() {
-        tokio::fs::read_to_string(url).await?
+        let bytes = tokio::fs::read(url).await?;
+        decode_xmltv_payload(bytes, url)?
     } else {
         let client = reqwest::Client::builder()
             .user_agent("Dispatcharr/1.0")
             .timeout(std::time::Duration::from_secs(120))
-            .local_address(std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)))
+            .connect_timeout(std::time::Duration::from_secs(20))
             .build()?;
 
-        client.get(url).send().await?.text().await?
+        let response = client.get(url).send().await?.error_for_status()?;
+        let bytes = response.bytes().await?.to_vec();
+        decode_xmltv_payload(bytes, url)?
     };
+
+    if let Ok(Some(src)) = epg_source::Entity::find_by_id(source_id).one(db).await {
+        let mut active: epg_source::ActiveModel = src.into();
+        active.status = Set("parsing".to_string());
+        active.last_message = Set(Some(format!(
+            "Downloaded XMLTV ({:.1} MB). Parsing channels...",
+            xml_data.len() as f64 / 1_048_576.0
+        )));
+        let _ = active.update(db).await;
+    }
 
     let existing_channels = epg_data::Entity::find()
         .filter(epg_data::Column::EpgSourceId.eq(source_id))
@@ -137,7 +152,13 @@ pub async fn refresh_all_guides(
                 }
             }
             Ok(Event::Eof) => break,
-            Err(e) => println!("XML Error: {:?}", e),
+            Err(e) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("Invalid XMLTV while parsing channels: {}", e),
+                )
+                .into())
+            }
             _ => (),
         }
         buf.clear();
@@ -268,7 +289,13 @@ pub async fn refresh_all_guides(
                 }
             }
             Ok(Event::Eof) => break,
-            Err(e) => println!("XML Error: {:?}", e),
+            Err(e) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("Invalid XMLTV while parsing programmes: {}", e),
+                )
+                .into())
+            }
             _ => (),
         }
         buf.clear();
@@ -291,4 +318,31 @@ pub async fn refresh_all_guides(
 
     println!("EPG Parsing Complete for Source {}", source_id);
     Ok(())
+}
+
+fn decode_xmltv_payload(
+    bytes: Vec<u8>,
+    source: &str,
+) -> Result<String, Box<dyn Error + Send + Sync>> {
+    if bytes.starts_with(&[0x1f, 0x8b]) || source.ends_with(".gz") {
+        let mut decoder = GzDecoder::new(Cursor::new(bytes));
+        let mut decoded = String::new();
+        decoder.read_to_string(&mut decoded)?;
+        return Ok(decoded);
+    }
+
+    if bytes.starts_with(b"PK") || source.ends_with(".zip") {
+        let reader = Cursor::new(bytes.clone());
+        let mut archive = zip::ZipArchive::new(reader)?;
+        for index in 0..archive.len() {
+            let mut file = archive.by_index(index)?;
+            if file.is_file() {
+                let mut decoded = String::new();
+                file.read_to_string(&mut decoded)?;
+                return Ok(decoded);
+            }
+        }
+    }
+
+    Ok(String::from_utf8(bytes)?)
 }

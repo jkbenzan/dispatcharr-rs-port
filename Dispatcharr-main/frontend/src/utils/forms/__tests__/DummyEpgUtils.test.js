@@ -308,12 +308,12 @@ describe('DummyEpgUtils', () => {
 
   // ── validateCustomTitlePattern ─────────────────────────────────────────────
   describe('validateCustomTitlePattern', () => {
-    it('returns an error message when value is empty', () => {
-      expect(validateCustomTitlePattern('')).toBeTruthy();
+    it('returns null when value is empty', () => {
+      expect(validateCustomTitlePattern('')).toBeNull();
     });
 
-    it('returns an error message when value is whitespace only', () => {
-      expect(validateCustomTitlePattern('   ')).toBeTruthy();
+    it('returns null when value is whitespace only', () => {
+      expect(validateCustomTitlePattern('   ')).toBeNull();
     });
 
     it('returns null for a valid regex pattern', () => {
@@ -324,12 +324,12 @@ describe('DummyEpgUtils', () => {
       expect(validateCustomTitlePattern('(?<invalid')).toBeTruthy();
     });
 
-    it('returns an error message when value is null', () => {
-      expect(validateCustomTitlePattern(null)).toBeTruthy();
+    it('returns null when value is null', () => {
+      expect(validateCustomTitlePattern(null)).toBeNull();
     });
 
-    it('returns an error message when value is undefined', () => {
-      expect(validateCustomTitlePattern(undefined)).toBeTruthy();
+    it('returns null when value is undefined', () => {
+      expect(validateCustomTitlePattern(undefined)).toBeNull();
     });
 
     it('returns null for a complex valid regex with named groups', () => {
