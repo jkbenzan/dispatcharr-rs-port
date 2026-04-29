@@ -1808,12 +1808,8 @@ pub async fn add_m3u_account(
                 };
 
                 let _ = state.ws_sender.send(json!({
-                    "channel": "updates",
-                    "event": "update",
-                    "data": {
-                        "type": "playlist_created",
-                        "playlist_id": account_id
-                    }
+                    "type": "playlist_created",
+                    "playlist_id": account_id
                 }));
 
                 if !url.is_empty() || file_path.is_some() {

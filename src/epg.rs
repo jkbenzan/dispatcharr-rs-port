@@ -46,14 +46,10 @@ pub async fn refresh_all_guides(
     let broadcast = |status: &str, message: &str| {
         if let Some(ref sender) = ws_sender {
             let _ = sender.send(serde_json::json!({
-                "channel": "updates",
-                "event": "update",
-                "data": {
-                    "type": "epg_status",
-                    "source_id": source_id,
-                    "status": status,
-                    "message": message
-                }
+                "type": "epg_refresh",
+                "source": source_id,
+                "status": status,
+                "message": message
             }));
         }
     };
