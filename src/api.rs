@@ -124,13 +124,17 @@ pub async fn upload_logo(
 pub async fn get_timezones() -> Json<Value> {
     Json(json!({
         "timezones": [
-            {"value": "UTC", "label": "UTC/GMT"},
-            {"value": "America/New_York", "label": "America/New_York"},
-            {"value": "America/Chicago", "label": "America/Chicago"},
-            {"value": "America/Denver", "label": "America/Denver"},
-            {"value": "America/Los_Angeles", "label": "America/Los_Angeles"},
-            {"value": "Europe/London", "label": "Europe/London"},
-            {"value": "Europe/Berlin", "label": "Europe/Berlin"}
+            "UTC",
+            "America/New_York",
+            "America/Chicago",
+            "America/Denver",
+            "America/Los_Angeles",
+            "Europe/London",
+            "Europe/Berlin",
+            "US/Eastern",
+            "US/Central",
+            "US/Mountain",
+            "US/Pacific"
         ]
     }))
 }
@@ -1638,6 +1642,45 @@ async fn epg_source_json(db: &sea_orm::DatabaseConnection, source: epg_source::M
     source_json
 }
 
+async fn mark_epg_source_error(db: &sea_orm::DatabaseConnection, source_id: i64, message: String) {
+    if let Ok(Some(src)) = epg_source::Entity::find_by_id(source_id).one(db).await {
+        let mut active: epg_source::ActiveModel = src.into();
+        active.status = Set("error".to_string());
+        active.last_message = Set(Some(message.chars().take(500).collect()));
+        let _ = active.update(db).await;
+    }
+}
+
+async fn start_epg_refresh(
+    db: &sea_orm::DatabaseConnection,
+    source_id: i64,
+    url_or_path: String,
+) -> Option<epg_source::Model> {
+    let source = epg_source::Entity::find_by_id(source_id)
+        .one(db)
+        .await
+        .ok()
+        .flatten()?;
+
+    let mut active: epg_source::ActiveModel = source.into();
+    active.status = Set("fetching".to_string());
+    active.last_message = Set(Some("EPG refresh queued...".to_string()));
+    let queued = active.update(db).await.ok();
+
+    let db_clone = db.clone();
+    tokio::spawn(async move {
+        let message = match epg::refresh_all_guides(&db_clone, &url_or_path, source_id).await {
+            Ok(_) => return,
+            Err(e) => format!("Failed to parse EPG: {}", e),
+        };
+
+        eprintln!("{}", message);
+        mark_epg_source_error(&db_clone, source_id, message).await;
+    });
+
+    queued
+}
+
 pub async fn add_m3u_account(
     State(state): State<Arc<AppState>>,
     req: axum::extract::Request,
@@ -1986,23 +2029,24 @@ pub async fn create_epg_source(
         }
     };
 
-    if inserted.source_type == "dummy" {
+    let response_source = if inserted.source_type == "dummy" {
         ensure_dummy_epg_data(&state.db, inserted.id, &inserted.name).await;
+        inserted
     } else if inserted.is_active {
         if let Some(url) = inserted.url.clone().or_else(|| inserted.file_path.clone()) {
-            let db_clone = state.db.clone();
-            let source_id = inserted.id;
-            tokio::spawn(async move {
-                if let Err(e) = epg::refresh_all_guides(&db_clone, &url, source_id).await {
-                    eprintln!("Failed to parse EPG Task: {}", e);
-                }
-            });
+            start_epg_refresh(&state.db, inserted.id, url)
+                .await
+                .unwrap_or(inserted)
+        } else {
+            inserted
         }
-    }
+    } else {
+        inserted
+    };
 
     (
         StatusCode::CREATED,
-        Json(epg_source_json(&state.db, inserted).await),
+        Json(epg_source_json(&state.db, response_source).await),
     )
 }
 
@@ -2390,15 +2434,17 @@ async fn queue_epg_refresh(state: &Arc<AppState>, source_id: i64) -> (StatusCode
     }
 
     if let Some(url) = source.url.clone().or_else(|| source.file_path.clone()) {
-        let db_clone = state.db.clone();
-        tokio::spawn(async move {
-            if let Err(e) = epg::refresh_all_guides(&db_clone, &url, source_id).await {
-                eprintln!("Failed to parse EPG Task: {}", e);
-            }
-        });
+        let queued = start_epg_refresh(&state.db, source_id, url).await;
+        let queued_json = match queued {
+            Some(src) => epg_source_json(&state.db, src).await,
+            None => json!(null),
+        };
         (
             StatusCode::ACCEPTED,
-            Json(json!({"status": "EPG refresh task started"})),
+            Json(json!({
+                "status": "EPG refresh task started",
+                "source": queued_json,
+            })),
         )
     } else {
         (

@@ -1556,6 +1556,10 @@ export default class API {
         body: { id },
       });
 
+      if (response?.source?.id) {
+        useEPGsStore.getState().updateEPG(response.source);
+      }
+
       return response;
     } catch (e) {
       errorNotification(`Failed to refresh EPG ${id}`, e);
