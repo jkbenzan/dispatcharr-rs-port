@@ -40,6 +40,7 @@ pub async fn refresh_all_guides(
     url: &str,
     source_id: i64,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
+    tracing::info!("[EPG] Starting refresh for source {} from {}", source_id, url);
     update_source_status(
         db,
         source_id,
@@ -48,11 +49,25 @@ pub async fn refresh_all_guides(
     )
     .await;
 
-    println!("Fetching XMLTV EPG from {}", url);
-    let temp_file = download_to_temp_file(url).await?;
+    let temp_file = match download_to_temp_file(url).await {
+        Ok(path) => path,
+        Err(e) => {
+            tracing::error!("[EPG] Download failed for source {}: {}", source_id, e);
+            update_source_status(
+                db,
+                source_id,
+                "error",
+                format!("Download failed: {}", e),
+            )
+            .await;
+            return Err(e);
+        }
+    };
     let file_path = temp_file.clone();
 
     let file_size = std::fs::metadata(&file_path)?.len();
+    tracing::info!("[EPG] Downloaded {} bytes for source {}", file_size, source_id);
+    
     update_source_status(
         db,
         source_id,
@@ -75,14 +90,19 @@ pub async fn refresh_all_guides(
         .filter_map(|channel| channel.tvg_id.clone())
         .collect();
 
+    tracing::info!("[EPG] Parsing channels for source {}...", source_id);
     let path_for_channels = file_path.clone();
     let parsed_channels = tokio::task::spawn_blocking(move || {
         let reader = create_xml_reader(&path_for_channels)?;
         parse_xmltv_channels(reader)
     })
     .await
-    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))??;
+    .map_err(|e| {
+        tracing::error!("[EPG] Channel parsing task failed: {}", e);
+        std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+    })??;
 
+    tracing::info!("[EPG] Found {} channels in XML for source {}", parsed_channels.len(), source_id);
     insert_missing_channels(db, source_id, parsed_channels, &existing_tvg_ids).await?;
 
     let source_channels = epg_data::Entity::find()
@@ -100,6 +120,7 @@ pub async fn refresh_all_guides(
         }
     }
 
+    tracing::info!("[EPG] Syncing programs for source {} (mapped to {} channels)...", source_id, epg_channel_map.len());
     update_source_status(
         db,
         source_id,
@@ -121,8 +142,12 @@ pub async fn refresh_all_guides(
         parse_xmltv_programs(reader, epg_channel_map)
     })
     .await
-    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))??;
+    .map_err(|e| {
+        tracing::error!("[EPG] Program parsing task failed: {}", e);
+        std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+    })??;
 
+    tracing::info!("[EPG] Found {} programs for source {}. Inserting...", parsed_programs.len(), source_id);
     insert_programs(db, parsed_programs).await?;
 
     // Cleanup temp file
@@ -136,7 +161,7 @@ pub async fn refresh_all_guides(
         let _ = active.update(db).await;
     }
 
-    println!("EPG Parsing Complete for Source {}", source_id);
+    tracing::info!("[EPG] Refresh complete for source {}", source_id);
     Ok(())
 }
 
@@ -156,10 +181,11 @@ async fn download_to_temp_file(url: &str) -> Result<PathBuf, Box<dyn Error + Sen
         .build()?;
 
     let mut response = client.get(url).send().await?.error_for_status()?;
-    let mut file = std::fs::File::create(&file_path)?;
+    let mut file = tokio::fs::File::create(&file_path).await?;
 
+    use tokio::io::AsyncWriteExt;
     while let Some(chunk) = response.chunk().await? {
-        file.write_all(&chunk)?;
+        file.write_all(&chunk).await?;
     }
 
     Ok(file_path)
@@ -227,6 +253,7 @@ async fn insert_missing_channels(
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let mut seen = existing_tvg_ids.clone();
     let mut batch = Vec::new();
+    let mut total_inserted = 0;
 
     for channel in channels {
         if let Some(tvg_id) = &channel.tvg_id {
@@ -245,16 +272,24 @@ async fn insert_missing_channels(
 
         if batch.len() >= XMLTV_INSERT_BATCH_SIZE {
             let chunk = std::mem::take(&mut batch);
-            let _ = epg_data::Entity::insert_many(chunk).exec(db).await;
+            total_inserted += chunk.len();
+            if let Err(e) = epg_data::Entity::insert_many(chunk).exec(db).await {
+                tracing::error!("[EPG] Failed to insert channels batch: {}", e);
+                return Err(Box::new(e));
+            }
             tokio::task::yield_now().await;
         }
     }
 
     if !batch.is_empty() {
-        let _ = epg_data::Entity::insert_many(batch).exec(db).await;
-        tokio::task::yield_now().await;
+        total_inserted += batch.len();
+        if let Err(e) = epg_data::Entity::insert_many(batch).exec(db).await {
+            tracing::error!("[EPG] Failed to insert final channels batch: {}", e);
+            return Err(Box::new(e));
+        }
     }
 
+    tracing::info!("[EPG] Inserted {} new channels for source {}", total_inserted, source_id);
     Ok(())
 }
 
@@ -263,6 +298,7 @@ async fn insert_programs(
     programs: Vec<ParsedProgram>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let mut batch = Vec::new();
+    let mut total_inserted = 0;
 
     for program in programs {
         batch.push(epg_program::ActiveModel {
@@ -278,16 +314,24 @@ async fn insert_programs(
 
         if batch.len() >= XMLTV_INSERT_BATCH_SIZE {
             let chunk = std::mem::take(&mut batch);
-            let _ = epg_program::Entity::insert_many(chunk).exec(db).await;
+            total_inserted += chunk.len();
+            if let Err(e) = epg_program::Entity::insert_many(chunk).exec(db).await {
+                tracing::error!("[EPG] Failed to insert programs batch: {}", e);
+                return Err(Box::new(e));
+            }
             tokio::task::yield_now().await;
         }
     }
 
     if !batch.is_empty() {
-        let _ = epg_program::Entity::insert_many(batch).exec(db).await;
-        tokio::task::yield_now().await;
+        total_inserted += batch.len();
+        if let Err(e) = epg_program::Entity::insert_many(batch).exec(db).await {
+            tracing::error!("[EPG] Failed to insert final programs batch: {}", e);
+            return Err(Box::new(e));
+        }
     }
 
+    tracing::info!("[EPG] Inserted {} programs total", total_inserted);
     Ok(())
 }
 
