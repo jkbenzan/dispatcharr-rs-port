@@ -3590,3 +3590,180 @@ pub async fn bulk_update_channels(
         serde_json::json!({"message": "Channels Updated Successfully"}),
     ))
 }
+
+#[derive(serde::Deserialize)]
+pub struct SetEpgRequest {
+    pub epg_data_id: Option<i64>,
+}
+
+pub async fn set_channel_epg(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
+    Json(payload): Json<SetEpgRequest>,
+) -> Result<Json<Value>, StatusCode> {
+    let channel = channel::Entity::find_by_id(id)
+        .one(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    let mut active: channel::ActiveModel = channel.into();
+    active.epg_data_id = Set(payload.epg_data_id);
+    let updated = active
+        .update(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(json!({
+        "success": true,
+        "channel": get_channel_json(&state.db, updated).await
+    })))
+}
+
+#[derive(serde::Deserialize)]
+pub struct BatchSetEpgRequest {
+    pub associations: Vec<EpgAssociation>,
+}
+
+#[derive(serde::Deserialize)]
+pub struct EpgAssociation {
+    pub channel_id: i64,
+    pub epg_data_id: Option<i64>,
+}
+
+pub async fn batch_set_epg(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<BatchSetEpgRequest>,
+) -> Result<Json<Value>, StatusCode> {
+    let mut updated_count = 0;
+    for assoc in payload.associations {
+        if let Ok(Some(ch)) = channel::Entity::find_by_id(assoc.channel_id)
+            .one(&state.db)
+            .await
+        {
+            let mut active: channel::ActiveModel = ch.into();
+            active.epg_data_id = Set(assoc.epg_data_id);
+            if active.update(&state.db).await.is_ok() {
+                updated_count += 1;
+            }
+        }
+    }
+
+    Ok(Json(json!({
+        "success": true,
+        "channels_updated": updated_count,
+        "programs_refreshed": 0
+    })))
+}
+
+#[derive(serde::Deserialize)]
+pub struct ChannelIdsRequest {
+    pub channel_ids: Vec<i64>,
+}
+
+pub async fn set_channel_names_from_epg(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<ChannelIdsRequest>,
+) -> Json<Value> {
+    let db = state.db.clone();
+    let channel_ids = payload.channel_ids;
+    let ws_sender = state.ws_sender.clone();
+
+    tokio::spawn(async move {
+        let total = channel_ids.len();
+        let mut updated_count = 0;
+
+        for (idx, id) in channel_ids.into_iter().enumerate() {
+            if let Ok(Some(ch)) = channel::Entity::find_by_id(id).one(&db).await {
+                if let Some(epg_id) = ch.epg_data_id {
+                    if let Ok(Some(epg)) = epg_data::Entity::find_by_id(epg_id).one(&db).await {
+                        let mut active: channel::ActiveModel = ch.into();
+                        active.name = Set(epg.name);
+                        if active.update(&db).await.is_ok() {
+                            updated_count += 1;
+                        }
+                    }
+                }
+            }
+
+            if idx % 10 == 0 || idx == total - 1 {
+                let _ = ws_sender.send(json!({
+                    "type": "epg_name_setting_progress",
+                    "data": {
+                        "current": idx + 1,
+                        "total": total,
+                        "updated_count": updated_count
+                    }
+                }));
+            }
+        }
+    });
+
+    Json(json!({
+        "success": true,
+        "message": "EPG name setting task started"
+    }))
+}
+
+pub async fn set_channel_logos_from_epg(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<ChannelIdsRequest>,
+) -> Json<Value> {
+    let db = state.db.clone();
+    let channel_ids = payload.channel_ids;
+    let ws_sender = state.ws_sender.clone();
+
+    tokio::spawn(async move {
+        let total = channel_ids.len();
+        let mut updated_count = 0;
+
+        for (idx, id) in channel_ids.into_iter().enumerate() {
+            if let Ok(Some(ch)) = channel::Entity::find_by_id(id).one(&db).await {
+                if let Some(epg_id) = ch.epg_data_id {
+                    if let Ok(Some(epg)) = epg_data::Entity::find_by_id(epg_id).one(&db).await {
+                        if let Some(icon_url) = epg.icon_url {
+                            let mut active: channel::ActiveModel = ch.into();
+                            
+                            let logo = if let Ok(Some(l)) = crate::entities::logo::Entity::find()
+                                .filter(crate::entities::logo::Column::Url.eq(&icon_url))
+                                .one(&db)
+                                .await {
+                                    l
+                                } else {
+                                    let new_logo = crate::entities::logo::ActiveModel {
+                                        name: Set(epg.name.clone()),
+                                        url: Set(icon_url.clone()),
+                                        ..Default::default()
+                                    };
+                                    new_logo.insert(&db).await.unwrap_or_default()
+                                };
+                            
+                            if logo.id != 0 {
+                                active.logo_id = Set(Some(logo.id));
+                                if active.update(&db).await.is_ok() {
+                                    updated_count += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if idx % 10 == 0 || idx == total - 1 {
+                let _ = ws_sender.send(json!({
+                    "type": "epg_logo_setting_progress",
+                    "data": {
+                        "current": idx + 1,
+                        "total": total,
+                        "updated_count": updated_count
+                    }
+                }));
+            }
+        }
+    });
+
+    Json(json!({
+        "success": true,
+        "message": "EPG logo setting task started"
+    }))
+}
