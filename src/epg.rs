@@ -7,6 +7,9 @@ use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, Qu
 use std::error::Error;
 use std::io::{Cursor, Read};
 
+const XMLTV_PARSE_YIELD_EVERY: usize = 10_000;
+const XMLTV_INSERT_BATCH_SIZE: usize = 1_000;
+
 fn parse_xmltv_datetime(value: &str) -> Option<chrono::DateTime<chrono::FixedOffset>> {
     chrono::DateTime::parse_from_str(value, "%Y%m%d%H%M%S %z")
         .or_else(|_| chrono::DateTime::parse_from_str(value, "%Y%m%d%H%M%S%z"))
@@ -71,9 +74,15 @@ pub async fn refresh_all_guides(
     let mut channels_batch = vec![];
     let mut in_channel = false;
     let mut current_tag = String::new();
+    let mut event_count = 0usize;
 
     // First pass: make EPGData rows exist before programmes reference them.
     loop {
+        event_count += 1;
+        if event_count % XMLTV_PARSE_YIELD_EVERY == 0 {
+            tokio::task::yield_now().await;
+        }
+
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => {
                 let qname = e.name();
@@ -122,6 +131,7 @@ pub async fn refresh_all_guides(
                 let txt = e.unescape().unwrap_or_default().into_owned();
                 let txt = txt.trim();
                 if txt.is_empty() {
+                    buf.clear();
                     continue;
                 }
 
@@ -147,6 +157,12 @@ pub async fn refresh_all_guides(
                             }
                         } else {
                             channels_batch.push(ch);
+                        }
+
+                        if channels_batch.len() >= XMLTV_INSERT_BATCH_SIZE {
+                            let chunk = std::mem::take(&mut channels_batch);
+                            let _ = epg_data::Entity::insert_many(chunk).exec(db).await;
+                            tokio::task::yield_now().await;
                         }
                     }
                 }
@@ -204,8 +220,14 @@ pub async fn refresh_all_guides(
     let mut programs_batch = vec![];
     let mut in_programme = false;
     let mut current_tag = String::new();
+    let mut event_count = 0usize;
 
     loop {
+        event_count += 1;
+        if event_count % XMLTV_PARSE_YIELD_EVERY == 0 {
+            tokio::task::yield_now().await;
+        }
+
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(ref e)) => {
                 let qname = e.name();
@@ -280,7 +302,7 @@ pub async fn refresh_all_guides(
                     in_programme = false;
                     if let Some(prog) = current_program.take() {
                         programs_batch.push(prog);
-                        if programs_batch.len() >= 1000 {
+                        if programs_batch.len() >= XMLTV_INSERT_BATCH_SIZE {
                             let chunk = std::mem::take(&mut programs_batch);
                             let _ = epg_program::Entity::insert_many(chunk).exec(db).await;
                             tokio::task::yield_now().await;
