@@ -12,6 +12,9 @@ use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use tokio::sync::broadcast::Sender;
 use uuid::Uuid;
+use std::io::{BufRead, BufReader, Cursor, Read, Write};
+use std::path::PathBuf;
+use flate2::read::GzDecoder;
 
 async fn get_or_create_channel_group_id(
     db: &DatabaseConnection,
@@ -157,51 +160,51 @@ pub async fn fetch_and_parse_m3u(
         );
     }
 
-    let body = if url.starts_with("http://") || url.starts_with("https://") {
-        println!("Fetching M3U from URL: {}", url);
-        let client = reqwest::Client::builder()
-            .user_agent(get_user_agent_string(db, ua_id).await)
-            .timeout(std::time::Duration::from_secs(60))
-            .build()?;
-        client
-            .get(url)
-            .send()
-            .await?
-            .error_for_status()?
-            .text()
-            .await?
-    } else {
-        println!("Reading M3U from local file: {}", url);
-        let path = std::path::Path::new(url);
-        if url.ends_with(".gz") {
-            use std::io::Read;
-            let file = std::fs::File::open(path)?;
-            let mut decoder = flate2::read::GzDecoder::new(file);
-            let mut s = String::new();
-            decoder.read_to_string(&mut s)?;
-            s
-        } else if url.ends_with(".zip") {
-            use std::io::Read;
-            let file = std::fs::File::open(path)?;
-            let mut archive = zip::ZipArchive::new(file)?;
-            let mut s = String::new();
-            let mut found = false;
-            for i in 0..archive.len() {
-                let mut inner_file = archive.by_index(i)?;
-                if inner_file.name().ends_with(".m3u") {
-                    inner_file.read_to_string(&mut s)?;
-                    found = true;
-                    break;
-                }
-            }
-            if !found {
-                return Err("No .m3u file found in ZIP archive".into());
-            }
-            s
-        } else {
-            tokio::fs::read_to_string(path).await?
-        }
-    };
+    let user_agent = get_user_agent_string(db, ua_id).await;
+    let temp_file = download_m3u_to_temp_file(url, &user_agent).await?;
+    let file_path = temp_file.clone();
+
+    // Use a scope or separate function to ensure the file is closed before removal
+    let result = parse_m3u_from_file(db, &file_path, account_id, is_initial, &ws_sender).await;
+    
+    // Cleanup
+    let _ = std::fs::remove_file(&file_path);
+    
+    result
+}
+
+async fn download_m3u_to_temp_file(url: &str, user_agent: &str) -> Result<PathBuf, Box<dyn Error>> {
+    let temp_dir = std::env::temp_dir();
+    let file_name = format!("playlist_{}.m3u", rand::random::<u64>());
+    let file_path = temp_dir.join(file_name);
+
+    if std::path::Path::new(url).exists() {
+        std::fs::copy(url, &file_path)?;
+        return Ok(file_path);
+    }
+
+    let client = reqwest::Client::builder()
+        .user_agent(user_agent)
+        .timeout(std::time::Duration::from_secs(300))
+        .build()?;
+
+    let mut response = client.get(url).send().await?.error_for_status()?;
+    let mut file = std::fs::File::create(&file_path)?;
+
+    while let Some(chunk) = response.chunk().await? {
+        file.write_all(&chunk)?;
+    }
+
+    Ok(file_path)
+}
+
+async fn parse_m3u_from_file(
+    db: &DatabaseConnection,
+    file_path: &std::path::Path,
+    account_id: i64,
+    is_initial: bool,
+    ws_sender: &Option<Sender<Value>>,
+) -> Result<(), Box<dyn Error>> {
 
     let filters = m3u_filter::Entity::find()
         .filter(m3u_filter::Column::M3uAccountId.eq(account_id))
@@ -268,7 +271,33 @@ pub async fn fetch_and_parse_m3u(
     let mut group_id_map: HashMap<String, i64> = HashMap::new();
     let mut current_hashes = Vec::new();
 
-    for line in body.lines() {
+    let file = std::fs::File::open(file_path)?;
+    let reader: Box<dyn Read + Send> = if file_path.to_string_lossy().ends_with(".gz") {
+        Box::new(GzDecoder::new(file))
+    } else if file_path.to_string_lossy().ends_with(".zip") {
+        let mut archive = zip::ZipArchive::new(file)?;
+        let mut found = false;
+        let mut inner_reader: Option<Box<dyn Read + Send>> = None;
+        for i in 0..archive.len() {
+            let file = archive.by_index(i)?;
+            if file.name().ends_with(".m3u") {
+                inner_reader = Some(Box::new(Cursor::new(file.bytes().collect::<Result<Vec<u8>, _>>()?)));
+                found = true;
+                break;
+            }
+        }
+        if !found {
+            return Err("No .m3u file found in ZIP".into());
+        }
+        inner_reader.unwrap()
+    } else {
+        Box::new(file)
+    };
+
+    let buf_reader = BufReader::new(reader);
+
+    for line_res in buf_reader.lines() {
+        let line = line_res?;
         let line = line.trim();
         if line.is_empty() {
             continue;

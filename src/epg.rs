@@ -6,7 +6,8 @@ use quick_xml::reader::Reader;
 use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
-use std::io::{Cursor, Read};
+use std::io::{BufRead, BufReader, Cursor, Read, Write};
+use std::path::PathBuf;
 
 const XMLTV_INSERT_BATCH_SIZE: usize = 1_000;
 
@@ -48,15 +49,17 @@ pub async fn refresh_all_guides(
     .await;
 
     println!("Fetching XMLTV EPG from {}", url);
-    let xml_data = fetch_xmltv_payload(url).await?;
+    let temp_file = download_to_temp_file(url).await?;
+    let file_path = temp_file.clone();
 
+    let file_size = std::fs::metadata(&file_path)?.len();
     update_source_status(
         db,
         source_id,
         "parsing",
         format!(
             "Downloaded XMLTV ({:.1} MB). Parsing channels...",
-            xml_data.len() as f64 / 1_048_576.0
+            file_size as f64 / 1_048_576.0
         ),
     )
     .await;
@@ -72,10 +75,13 @@ pub async fn refresh_all_guides(
         .filter_map(|channel| channel.tvg_id.clone())
         .collect();
 
-    let channels_xml = xml_data.clone();
-    let parsed_channels = tokio::task::spawn_blocking(move || parse_xmltv_channels(&channels_xml))
-        .await
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))??;
+    let path_for_channels = file_path.clone();
+    let parsed_channels = tokio::task::spawn_blocking(move || {
+        let reader = create_xml_reader(&path_for_channels)?;
+        parse_xmltv_channels(reader)
+    })
+    .await
+    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))??;
 
     insert_missing_channels(db, source_id, parsed_channels, &existing_tvg_ids).await?;
 
@@ -109,13 +115,18 @@ pub async fn refresh_all_guides(
             .await;
     }
 
-    let programs_xml = xml_data;
-    let parsed_programs =
-        tokio::task::spawn_blocking(move || parse_xmltv_programs(&programs_xml, epg_channel_map))
-            .await
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))??;
+    let path_for_programs = file_path.clone();
+    let parsed_programs = tokio::task::spawn_blocking(move || {
+        let reader = create_xml_reader(&path_for_programs)?;
+        parse_xmltv_programs(reader, epg_channel_map)
+    })
+    .await
+    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))??;
 
     insert_programs(db, parsed_programs).await?;
+
+    // Cleanup temp file
+    let _ = std::fs::remove_file(&file_path);
 
     if let Ok(Some(src)) = epg_source::Entity::find_by_id(source_id).one(db).await {
         let mut active: epg_source::ActiveModel = src.into();
@@ -127,6 +138,71 @@ pub async fn refresh_all_guides(
 
     println!("EPG Parsing Complete for Source {}", source_id);
     Ok(())
+}
+
+async fn download_to_temp_file(url: &str) -> Result<PathBuf, Box<dyn Error + Send + Sync>> {
+    let temp_dir = std::env::temp_dir();
+    let file_name = format!("epg_{}.xml", rand::random::<u64>());
+    let file_path = temp_dir.join(file_name);
+
+    if std::path::Path::new(url).exists() {
+        std::fs::copy(url, &file_path)?;
+        return Ok(file_path);
+    }
+
+    let client = reqwest::Client::builder()
+        .user_agent("Dispatcharr/1.0")
+        .timeout(std::time::Duration::from_secs(300))
+        .build()?;
+
+    let mut response = client.get(url).send().await?.error_for_status()?;
+    let mut file = std::fs::File::create(&file_path)?;
+
+    while let Some(chunk) = response.chunk().await? {
+        file.write_all(&chunk)?;
+    }
+
+    Ok(file_path)
+}
+
+fn create_xml_reader(
+    path: &std::path::Path,
+) -> Result<Reader<BufReader<Box<dyn Read + Send>>>, Box<dyn Error + Send + Sync>> {
+    let file = std::fs::File::open(path)?;
+    let reader: Box<dyn Read + Send> = if path.to_string_lossy().ends_with(".gz")
+        || is_gzipped(path)?
+    {
+        Box::new(GzDecoder::new(file))
+    } else if path.to_string_lossy().ends_with(".zip") {
+        let mut archive = zip::ZipArchive::new(file)?;
+        let mut found = false;
+        let mut inner_reader: Option<Box<dyn Read + Send>> = None;
+        for i in 0..archive.len() {
+            let file = archive.by_index(i)?;
+            if file.is_file() {
+                inner_reader = Some(Box::new(Cursor::new(file.bytes().collect::<Result<Vec<u8>, _>>()?)));
+                found = true;
+                break;
+            }
+        }
+        if !found {
+            return Err("No file found in ZIP".into());
+        }
+        inner_reader.unwrap()
+    } else {
+        Box::new(file)
+    };
+
+    let mut xml_reader = Reader::from_reader(BufReader::new(reader));
+    xml_reader.trim_text(true);
+    Ok(xml_reader)
+}
+
+fn is_gzipped(path: &std::path::Path) -> Result<bool, std::io::Error> {
+    let mut file = std::fs::File::open(path)?;
+    let mut buf = [0u8; 2];
+    let _ = file.read(&mut buf);
+    Ok(buf == [0x1f, 0x8b])
 }
 
 async fn update_source_status(
@@ -141,23 +217,6 @@ async fn update_source_status(
         active.last_message = Set(Some(message));
         let _ = active.update(db).await;
     }
-}
-
-async fn fetch_xmltv_payload(url: &str) -> Result<String, Box<dyn Error + Send + Sync>> {
-    if std::path::Path::new(url).exists() {
-        let bytes = tokio::fs::read(url).await?;
-        return decode_xmltv_payload(bytes, url);
-    }
-
-    let client = reqwest::Client::builder()
-        .user_agent("Dispatcharr/1.0")
-        .timeout(std::time::Duration::from_secs(120))
-        .connect_timeout(std::time::Duration::from_secs(20))
-        .build()?;
-
-    let response = client.get(url).send().await?.error_for_status()?;
-    let bytes = response.bytes().await?.to_vec();
-    decode_xmltv_payload(bytes, url)
 }
 
 async fn insert_missing_channels(
@@ -232,10 +291,9 @@ async fn insert_programs(
     Ok(())
 }
 
-fn parse_xmltv_channels(
-    xml_data: &str,
+fn parse_xmltv_channels<R: BufRead>(
+    mut reader: Reader<R>,
 ) -> Result<Vec<ParsedChannel>, Box<dyn Error + Send + Sync>> {
-    let mut reader = Reader::from_str(xml_data);
     let mut buf = Vec::new();
     let mut current_channel: Option<ParsedChannel> = None;
     let mut channels = Vec::new();
@@ -318,11 +376,10 @@ fn parse_xmltv_channels(
     Ok(channels)
 }
 
-fn parse_xmltv_programs(
-    xml_data: &str,
+fn parse_xmltv_programs<R: BufRead>(
+    mut reader: Reader<R>,
     epg_channel_map: HashMap<String, i64>,
 ) -> Result<Vec<ParsedProgram>, Box<dyn Error + Send + Sync>> {
-    let mut reader = Reader::from_str(xml_data);
     let mut buf = Vec::new();
     let mut current_program: Option<ParsedProgram> = None;
     let mut programs = Vec::new();
@@ -419,31 +476,4 @@ fn parse_xmltv_programs(
     }
 
     Ok(programs)
-}
-
-fn decode_xmltv_payload(
-    bytes: Vec<u8>,
-    source: &str,
-) -> Result<String, Box<dyn Error + Send + Sync>> {
-    if bytes.starts_with(&[0x1f, 0x8b]) || source.ends_with(".gz") {
-        let mut decoder = GzDecoder::new(Cursor::new(bytes));
-        let mut decoded = String::new();
-        decoder.read_to_string(&mut decoded)?;
-        return Ok(decoded);
-    }
-
-    if bytes.starts_with(b"PK") || source.ends_with(".zip") {
-        let reader = Cursor::new(bytes.clone());
-        let mut archive = zip::ZipArchive::new(reader)?;
-        for index in 0..archive.len() {
-            let mut file = archive.by_index(index)?;
-            if file.is_file() {
-                let mut decoded = String::new();
-                file.read_to_string(&mut decoded)?;
-                return Ok(decoded);
-            }
-        }
-    }
-
-    Ok(String::from_utf8(bytes)?)
 }
