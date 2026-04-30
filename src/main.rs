@@ -312,6 +312,7 @@ async fn main() {
             "/api/core/streamprofiles/:id/",
             put(api::update_streamprofile).delete(api::delete_streamprofile),
         )
+        .route("/api/core/rehash-streams/", post(api::rehash_streams))
         // --- CHANNELS & M3U ---
         .route("/api/channels/channels/", get(api::get_channels))
         .route("/api/channels/channels/summary/", get(api::get_channels_summary))

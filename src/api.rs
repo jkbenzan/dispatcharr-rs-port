@@ -964,6 +964,23 @@ pub struct StreamProfileReq {
     pub user_agent_id: Option<i64>,
 }
 
+pub async fn rehash_streams(
+    axum::extract::State(state): axum::extract::State<std::sync::Arc<crate::AppState>>,
+) -> impl axum::response::IntoResponse {
+    let db = state.db.clone();
+    tokio::spawn(async move {
+        let _ = crate::m3u::rehash_all_streams(&db).await;
+    });
+
+    (
+        axum::http::StatusCode::ACCEPTED,
+        axum::Json(serde_json::json!({
+            "status": "success",
+            "message": "Stream rehashing started in the background."
+        })),
+    )
+}
+
 pub async fn get_streamprofiles(State(state): State<Arc<AppState>>) -> Json<Value> {
     let profiles = core_streamprofile::Entity::find()
         .all(&state.db)

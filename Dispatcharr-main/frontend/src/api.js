@@ -3733,4 +3733,15 @@ export default class API {
       throw e;
     }
   }
+
+  static async rehashStreams() {
+    try {
+      return await request(`${host}/api/core/rehash-streams/`, {
+        method: 'POST',
+      });
+    } catch (e) {
+      errorNotification('Failed to rehash streams', e);
+      throw e;
+    }
+  }
 }
