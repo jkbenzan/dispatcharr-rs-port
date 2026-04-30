@@ -3718,6 +3718,9 @@ export default class API {
       return await request(`${host}/api/core/settings/${targetId}/`, {
         method: 'PUT',
         body: targetValues,
+        headers: {
+          'Content-Type': 'application/json',
+        },
       });
     } catch (e) {
       errorNotification('Failed to update setting', e);
