@@ -522,6 +522,7 @@ async fn main() {
         .fallback_service(spa_service)
         .layer(CorsLayer::permissive())
         .layer(tower_http::trace::TraceLayer::new_for_http())
+        .layer(tower_http::compression::CompressionLayer::new())
         .with_state(state.clone());
 
     let addr = "0.0.0.0:8080";

@@ -115,12 +115,12 @@ export function computeRowHeights(
   return filteredChannels.map(() => defaultHeight);
 }
 
-export const fetchPrograms = async () => {
+export const fetchPrograms = async (params = new URLSearchParams()) => {
   console.log('Fetching program grid...');
-  const fetched = await API.getGrid(); // GETs your EPG grid
+  const fetched = await API.getGrid(params); // GETs your EPG grid
   console.log(`Received ${fetched.length} programs`);
 
-  return fetched.map((program) => {
+  return (fetched || []).map((program) => {
     return {
       ...program,
       startMs: convertToMs(program.start_time),

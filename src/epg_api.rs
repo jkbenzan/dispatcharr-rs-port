@@ -47,17 +47,31 @@ fn serialize_program(program: crate::entities::epg_program::Model) -> Value {
     })
 }
 
-pub async fn get_epg_grid(State(state): State<Arc<AppState>>) -> Json<Value> {
+pub async fn get_epg_grid(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Query(params): axum::extract::Query<HashMap<String, String>>,
+) -> Json<Value> {
     let started_at = Instant::now();
-    tracing::info!("EPG grid request started");
+    tracing::info!("EPG grid request started with params: {:?}", params);
 
     let now = Utc::now();
-    let one_hour_ago = now - Duration::hours(1);
-    let twenty_four_hours_later = now + Duration::hours(24);
+    
+    // Parse start/end from query or default to [Now - 1h, Now + 4h]
+    let start_time = params.get("start")
+        .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+        .map(|dt| dt.with_timezone(&Utc))
+        .unwrap_or_else(|| now - Duration::hours(1));
+        
+    let end_time = params.get("end")
+        .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+        .map(|dt| dt.with_timezone(&Utc))
+        .unwrap_or_else(|| start_time + Duration::hours(5));
+
+    tracing::info!("EPG grid range: {} to {}", start_time, end_time);
 
     let programs = crate::entities::epg_program::Entity::find()
-        .filter(crate::entities::epg_program::Column::EndTime.gt(one_hour_ago))
-        .filter(crate::entities::epg_program::Column::StartTime.lt(twenty_four_hours_later))
+        .filter(crate::entities::epg_program::Column::EndTime.gt(start_time))
+        .filter(crate::entities::epg_program::Column::StartTime.lt(end_time))
         .all(&state.db)
         .await
         .unwrap_or_default();
@@ -74,95 +88,50 @@ pub async fn get_epg_grid(State(state): State<Arc<AppState>>) -> Json<Value> {
     let channel_count = channels.len();
 
     let epg_data_ids: Vec<i64> = channels.iter().filter_map(|ch| ch.epg_data_id).collect();
-    let epg_data_rows = if epg_data_ids.is_empty() {
-        Vec::new()
+    let epg_data_by_id: HashMap<i64, crate::entities::epg_data::Model> = if epg_data_ids.is_empty() {
+        HashMap::new()
     } else {
         crate::entities::epg_data::Entity::find()
             .filter(crate::entities::epg_data::Column::Id.is_in(epg_data_ids))
             .all(&state.db)
             .await
             .unwrap_or_default()
+            .into_iter()
+            .map(|row| (row.id, row))
+            .collect()
     };
-    let epg_data_by_id: HashMap<i64, crate::entities::epg_data::Model> =
-        epg_data_rows.into_iter().map(|row| (row.id, row)).collect();
 
     let source_ids: Vec<i64> = epg_data_by_id
         .values()
         .filter_map(|row| row.epg_source_id)
         .collect();
-    let source_rows = if source_ids.is_empty() {
-        Vec::new()
+    let dummy_source_ids: HashSet<i64> = if source_ids.is_empty() {
+        HashSet::new()
     } else {
         crate::entities::epg_source::Entity::find()
             .filter(crate::entities::epg_source::Column::Id.is_in(source_ids))
             .all(&state.db)
             .await
             .unwrap_or_default()
+            .into_iter()
+            .filter(|row| row.source_type == "dummy")
+            .map(|row| row.id)
+            .collect()
     };
-    let dummy_source_ids: HashSet<i64> = source_rows
-        .into_iter()
-        .filter(|row| row.source_type == "dummy")
-        .map(|row| row.id)
-        .collect();
 
     let mut dummy_programs = vec![];
 
     let time_descriptions: Vec<(u32, u32, Vec<&str>)> = vec![
-        (
-            0,
-            4,
-            vec![
-                "Late Night with {channel} - Where insomniacs unite!",
-                "The 'Why Am I Still Awake?' Show on {channel}",
-                "Counting Sheep - A {channel} production for the sleepless",
-            ],
-        ),
-        (
-            4,
-            8,
-            vec![
-                "Dawn Patrol - Rise and shine with {channel}!",
-                "Early Bird Special - Coffee not included",
-                "Morning Zombies - Before coffee viewing on {channel}",
-            ],
-        ),
-        (
-            8,
-            12,
-            vec![
-                "Mid-Morning Meetings - Pretend you're paying attention while watching {channel}",
-                "The 'I Should Be Working' Hour on {channel}",
-                "Productivity Killer - {channel}'s daytime programming",
-            ],
-        ),
-        (
-            12,
-            16,
-            vec![
-                "Lunchtime Laziness with {channel}",
-                "The Afternoon Slump - Brought to you by {channel}",
-                "Post-Lunch Food Coma Theater on {channel}",
-            ],
-        ),
-        (
-            16,
-            20,
-            vec![
-                "Rush Hour - {channel}'s alternative to traffic",
-                "The 'What\\'s For Dinner?' Debate on {channel}",
-                "Evening Escapism - {channel}'s remedy for reality",
-            ],
-        ),
-        (
-            20,
-            24,
-            vec![
-                "Prime Time Pajamas on {channel}",
-                "The 'Just One More Episode' Marathon on {channel}",
-                "Nightly News of Nothing Much on {channel}",
-            ],
-        ),
+        (0, 4, vec!["Late Night with {channel}", "The 'Why Am I Still Awake?' Show on {channel}"]),
+        (4, 8, vec!["Dawn Patrol - Rise and shine with {channel}!", "Early Bird Special"]),
+        (8, 12, vec!["Mid-Morning Meetings on {channel}", "The 'I Should Be Working' Hour"]),
+        (12, 16, vec!["Lunchtime Laziness with {channel}", "The Afternoon Slump"]),
+        (16, 20, vec!["Rush Hour on {channel}", "Evening Escapism"]),
+        (20, 24, vec!["Prime Time Pajamas on {channel}", "Just One More Episode"]),
     ];
+
+    // Determine how many hours we need dummy data for
+    let duration_hours = (end_time - start_time).num_hours().max(1);
 
     for ch in channels {
         let needs_dummy = match ch.epg_data_id {
@@ -176,56 +145,40 @@ pub async fn get_epg_grid(State(state): State<Arc<AppState>>) -> Json<Value> {
 
         if needs_dummy {
             let dummy_tvg_id = ch.uuid.to_string();
-            for hour_offset in (0..24).step_by(4) {
-                let start_time = (now + Duration::hours(hour_offset as i64))
-                    .with_minute(0)
-                    .unwrap()
-                    .with_second(0)
-                    .unwrap()
-                    .with_nanosecond(0)
-                    .unwrap();
-                let end_time = start_time + Duration::hours(4);
-                let hour = start_time.hour();
+            // Generate dummy blocks within the requested range
+            let mut current_block_start = start_time;
+            while current_block_start < end_time {
+                let block_start = current_block_start;
+                let block_end = (block_start + Duration::hours(4)).min(end_time);
+                let hour = block_start.hour();
 
-                let mut description = format!(
-                    "Placeholder program for {} - EPG data went on vacation",
-                    ch.name
-                );
+                let mut description = format!("Placeholder program for {}", ch.name);
                 for (start_range, end_range, descs) in &time_descriptions {
                     if hour >= *start_range && hour < *end_range {
-                        let desc_idx = ((hour) as usize) % descs.len();
-                        description = descs[desc_idx].replace("{channel}", &ch.name);
+                        description = descs[hour as usize % descs.len()].replace("{channel}", &ch.name);
                         break;
                     }
                 }
 
                 dummy_programs.push(json!({
-                    "id": format!("dummy-standard-{}-{}", ch.id, hour_offset),
+                    "id": format!("dummy-{}-{}-{}", ch.id, block_start.timestamp(), block_end.timestamp()),
                     "epg": {"tvg_id": dummy_tvg_id, "name": ch.name},
-                    "start_time": start_time.to_rfc3339(),
-                    "end_time": end_time.to_rfc3339(),
+                    "start_time": block_start.to_rfc3339(),
+                    "end_time": block_end.to_rfc3339(),
                     "title": ch.name,
                     "description": description,
                     "tvg_id": dummy_tvg_id,
                     "sub_title": None::<String>,
-                    "custom_properties": None::<Value>,
-                    "season": None::<Value>,
-                    "episode": None::<Value>,
-                    "is_new": false,
-                    "is_live": false,
-                    "is_premiere": false,
-                    "is_finale": false,
+                    "is_new": false, "is_live": false, "is_premiere": false, "is_finale": false,
                 }));
+                current_block_start = block_end;
             }
         }
     }
 
-    let dummy_count = dummy_programs.len();
     serialized_programs.extend(dummy_programs);
     tracing::info!(
         program_count = serialized_programs.len(),
-        dummy_count,
-        channel_count,
         elapsed_ms = started_at.elapsed().as_millis(),
         "EPG grid request completed"
     );

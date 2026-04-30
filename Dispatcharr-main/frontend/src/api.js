@@ -1641,9 +1641,9 @@ export default class API {
     }
   }
 
-  static async getGrid() {
+  static async getGrid(params = new URLSearchParams()) {
     try {
-      const response = await request(`${host}/api/epg/grid/`);
+      const response = await request(`${host}/api/epg/grid/?${params.toString()}`);
 
       return response.data;
     } catch (e) {
