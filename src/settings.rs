@@ -23,9 +23,8 @@ pub async fn list_settings(
     State(state): State<Arc<AppState>>,
     current_user: CurrentUser,
 ) -> Result<Json<Value>, StatusCode> {
-    if !current_user.0.is_superuser && !current_user.0.is_staff {
-        return Err(StatusCode::FORBIDDEN);
-    }
+    let is_admin = current_user.0.is_superuser || current_user.0.is_staff;
+
     let settings = core_settings::Entity::find()
         .all(&state.db)
         .await
@@ -33,6 +32,11 @@ pub async fn list_settings(
 
     let mut result = Vec::new();
     for s in settings {
+        // Hide sensitive settings from non-admin users
+        if !is_admin && (s.key == "network_access" || s.key == "proxy_settings" || s.key == "user_limit_settings") {
+            continue;
+        }
+
         result.push(json!({
             "id": s.id,
             "key": s.key,
@@ -130,4 +134,140 @@ pub async fn update_setting(
         "name": updated.name,
         "value": updated.value,
     })))
+}
+
+use sea_orm::QueryFilter;
+use sea_orm::ColumnTrait;
+
+pub async fn initialize_core_settings(db: &sea_orm::DatabaseConnection) {
+    let defaults = vec![
+        (
+            "ui_settings",
+            "UI Settings",
+            serde_json::json!({
+                "time_format": "12h",
+                "date_format": "mdy",
+                "table_size": "default",
+                "time_zone": "UTC"
+            }),
+        ),
+        (
+            "dvr_settings",
+            "DVR Settings",
+            serde_json::json!({
+                "comskip_enabled": false,
+                "comskip_custom_path": "",
+                "pre_offset_minutes": 0,
+                "post_offset_minutes": 0,
+                "tv_template": "TV_Shows/{show}/S{season:02d}E{episode:02d}.mkv",
+                "tv_fallback_template": "TV_Shows/{show}/{start}.mkv",
+                "movie_template": "Movies/{title} ({year}).mkv",
+                "movie_fallback_template": "Movies/{start}.mkv"
+            }),
+        ),
+        (
+            "stream_settings",
+            "Stream Settings",
+            serde_json::json!({
+                "buffer_size": 1024,
+                "retry_count": 3,
+                "stream_checker_parallel_providers": 1
+            }),
+        ),
+        (
+            "system_settings",
+            "System Settings",
+            serde_json::json!({
+                "time_zone": "UTC",
+                "max_system_events": 100
+            }),
+        ),
+        (
+            "network_access",
+            "Network Access",
+            serde_json::json!({
+                "M3U_EPG": "127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,::1/128,fc00::/7,fe80::/10",
+                "STREAMS": "0.0.0.0/0,::/0",
+                "XC_API": "0.0.0.0/0,::/0",
+                "UI": "0.0.0.0/0,::/0"
+            }),
+        ),
+        (
+            "proxy_settings",
+            "Proxy Settings",
+            serde_json::json!({
+                "buffering_timeout": 15,
+                "buffering_speed": 1.0,
+                "redis_chunk_ttl": 60,
+                "channel_shutdown_delay": 0,
+                "channel_init_grace_period": 5,
+                "new_client_behind_seconds": 5,
+                "http_proxy_enabled": false,
+                "http_proxy_url": ""
+            }),
+        ),
+        (
+            "user_limit_settings",
+            "User Limits",
+            serde_json::json!({
+                "terminate_on_limit_exceeded": true,
+                "prioritize_single_client_channels": true,
+                "ignore_same_channel_connections": false,
+                "terminate_oldest": true,
+                "max_streams": 1
+            }),
+        ),
+    ];
+
+    tracing::info!("🔍 Checking core settings defaults...");
+
+    for (key, name, value) in defaults {
+        let existing = crate::entities::core_settings::Entity::find()
+            .filter(crate::entities::core_settings::Column::Key.eq(key))
+            .one(db)
+            .await
+            .unwrap_or_default();
+
+        if existing.is_none() {
+            let _ = crate::entities::core_settings::ActiveModel {
+                key: sea_orm::Set(key.to_string()),
+                name: sea_orm::Set(name.to_string()),
+                value: sea_orm::Set(value),
+                ..Default::default()
+            }
+            .insert(db)
+            .await;
+            tracing::info!("✨ Created default setting: {}", key);
+        }
+    }
+    tracing::info!("✅ Core settings check complete.");
+}
+
+pub async fn get_http_client(db: &sea_orm::DatabaseConnection) -> reqwest::Client {
+    let mut builder = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+        .timeout(std::time::Duration::from_secs(30));
+
+    let setting = crate::entities::core_settings::Entity::find()
+        .filter(crate::entities::core_settings::Column::Key.eq("proxy_settings"))
+        .one(db)
+        .await
+        .unwrap_or_default();
+
+    if let Some(s) = setting {
+        if let Some(enabled) = s.value.get("http_proxy_enabled").and_then(|v| v.as_bool()) {
+            if enabled {
+                if let Some(url) = s.value.get("http_proxy_url").and_then(|v| v.as_str()) {
+                    if !url.trim().is_empty() {
+                        if let Ok(proxy) = reqwest::Proxy::all(url) {
+                            builder = builder.proxy(proxy);
+                            tracing::info!("HTTP Client configured with proxy: {}", url);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    builder.build().expect("Failed to build reqwest client")
 }

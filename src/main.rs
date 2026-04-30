@@ -21,6 +21,7 @@ mod m3u;
 mod outputs;
 mod proxy;
 mod settings;
+mod middleware;
 mod stream_checker;
 mod vod;
 mod xtream_codes;
@@ -191,14 +192,13 @@ async fn main() {
     let db = Database::connect(opt).await.expect("DB Failure");
     println!("✅ DB CONNECTED");
 
+    // Initialize core settings defaults
+    crate::settings::initialize_core_settings(&db).await;
+
     // Create a broadcast channel for websockets with a capacity of 100
     let (ws_sender, _) = tokio::sync::broadcast::channel(100);
 
-    let http_client = reqwest::Client::builder()
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
-        .timeout(std::time::Duration::from_secs(30))
-        .build()
-        .unwrap();
+    let http_client = crate::settings::get_http_client(&db).await;
 
     let state = Arc::new(AppState {
         db,
@@ -526,6 +526,7 @@ async fn main() {
         .layer(CorsLayer::permissive())
         .layer(tower_http::trace::TraceLayer::new_for_http())
         .layer(tower_http::compression::CompressionLayer::new())
+        .layer(axum::middleware::from_fn_with_state(state.clone(), middleware::network_access_middleware))
         .with_state(state.clone());
 
     let addr = "0.0.0.0:8080";
@@ -587,12 +588,14 @@ async fn main() {
     // Spawn a secondary listener on port 8001 specifically for WebSockets
     // This provides backward compatibility with the old Django/Daphne Nginx configuration.
     let state_clone = state.clone();
+    let ws_state = state.clone();
     tokio::spawn(async move {
         let ws_app = Router::new()
             .route("/ws", get(ws_handler))
             .route("/ws/", get(ws_handler))
-            .with_state(state_clone)
-            .layer(CorsLayer::permissive());
+            .with_state(ws_state)
+            .layer(CorsLayer::permissive())
+            .layer(axum::middleware::from_fn_with_state(state_clone.clone(), middleware::network_access_middleware));
 
         if let Ok(ws_listener) = tokio::net::TcpListener::bind("0.0.0.0:8001").await {
             println!(
@@ -603,5 +606,5 @@ async fn main() {
         }
     });
 
-    axum::serve(listener, app).await.unwrap();
+    axum::serve(listener, app.into_make_service_with_connect_info::<std::net::SocketAddr>()).await.unwrap();
 }

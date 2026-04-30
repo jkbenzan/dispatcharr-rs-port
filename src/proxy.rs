@@ -1,24 +1,28 @@
 use crate::{
-    entities::{channel, channel_stream, stream},
+    entities::{channel, channel_stream, stream, user, core_settings},
     AppState,
+    auth::verify_password,
 };
 use axum::{
     body::Body,
-    extract::{Path, State},
+    extract::{Path, State, Query, ConnectInfo},
     http::StatusCode,
     response::Response,
 };
 use futures_util::StreamExt;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
+use std::collections::HashMap;
+use std::net::SocketAddr;
 
 #[derive(Serialize, Clone, Debug)]
 pub struct ClientStat {
     pub client_id: String,
+    pub user_id: Option<i64>,
     pub ip: String,
     pub connected_at: u64,
 }
@@ -55,6 +59,13 @@ impl Drop for ClientDropGuard {
             }
         });
     }
+}
+
+#[derive(Deserialize)]
+pub struct ProxyQuery {
+    pub u: Option<String>,
+    pub p: Option<String>,
+    pub token: Option<String>,
 }
 
 async fn get_stream_fallback(
@@ -110,7 +121,83 @@ pub async fn handle_vod_stats() -> axum::Json<serde_json::Value> {
 pub async fn handle_proxy(
     Path(channel_id): Path<String>,
     State(state): State<Arc<AppState>>,
+    Query(query): Query<ProxyQuery>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
 ) -> Result<Response<Body>, StatusCode> {
+    // 1. Identify User
+    let mut authenticated_user: Option<user::Model> = None;
+    if let (Some(u), Some(p)) = (query.u, query.p) {
+        let user_opt = user::Entity::find()
+            .filter(user::Column::Username.eq(u))
+            .one(&state.db)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        
+        if let Some(user) = user_opt {
+            if verify_password(&user.password, &p) {
+                authenticated_user = Some(user);
+            }
+        }
+    } else if let Some(token) = query.token {
+        // Simple token auth if implemented, for now skip
+    }
+
+    // If no auth provided, for now we might allow it but ideally we should require it
+    // Original Django app might have a default user or based on setting.
+    // For now, if no auth, we'll assign to "None" and skip limits if so configured.
+
+    // 2. Enforce User Limits
+    if let Some(user) = &authenticated_user {
+        let limit = user.stream_limit;
+        if limit > 0 {
+            // Count active streams for this user
+            let mut user_clients = Vec::new(); // (channel_id, client_id, connected_at)
+            {
+                let active = state.active_streams.read().await;
+                for (ch_id, stats) in active.iter() {
+                    for client in &stats.clients {
+                        if client.user_id == Some(user.id) {
+                            user_clients.push((ch_id.clone(), client.client_id.clone(), client.connected_at));
+                        }
+                    }
+                }
+            }
+
+            if user_clients.len() >= limit as usize {
+                // Fetch limit policy
+                let settings = core_settings::Entity::find()
+                    .filter(core_settings::Column::Key.eq("user_limit_settings"))
+                    .one(&state.db)
+                    .await
+                    .unwrap_or_default();
+                
+                let mut terminate_oldest = true;
+                if let Some(s) = settings {
+                    terminate_oldest = s.value.get("terminate_oldest").and_then(|v| v.as_bool()).unwrap_or(true);
+                }
+
+                if terminate_oldest {
+                    // Find oldest stream
+                    user_clients.sort_by_key(|k| k.2);
+                    if let Some((ch_id, cl_id, _)) = user_clients.first() {
+                        tracing::info!("Terminating oldest stream {} for user {} to stay within limit {}", cl_id, user.username, limit);
+                        let mut active = state.active_streams.write().await;
+                        if let Some(stats) = active.get_mut(ch_id) {
+                            stats.clients.retain(|c| c.client_id != *cl_id);
+                            // The actual connection will drop when the stream finishes reading the next chunk or if we had a way to signal it.
+                            // In this simple proxy, we don't have a direct handle to the task, 
+                            // but when the client is removed from the stats, we could potentially drop the body stream.
+                            // However, the Body::from_stream is already running.
+                        }
+                    }
+                } else {
+                    tracing::warn!("Blocking new stream for user {} (limit {} reached)", user.username, limit);
+                    return Err(StatusCode::FORBIDDEN);
+                }
+            }
+        }
+    }
+
     // Determine if identifier is a UUID (channel) or Hash (stream)
     let parsed_uuid = Uuid::parse_str(&channel_id).ok();
 
@@ -139,12 +226,9 @@ pub async fn handle_proxy(
                     StatusCode::INTERNAL_SERVER_ERROR
                 })?
         } else {
-            // It parsed as a UUID, but no channel was found.
-            // MD5 hashes can falsely parse as UUIDs, so fallback to Stream lookup.
             get_stream_fallback(&channel_id, &state.db).await?
         }
     } else {
-        // It's not a UUID, so it must be a stream hash
         get_stream_fallback(&channel_id, &state.db).await?
     };
 
@@ -213,7 +297,8 @@ pub async fn handle_proxy(
             });
         stats.clients.push(ClientStat {
             client_id: client_id.clone(),
-            ip: "127.0.0.1".to_string(), // In production, we'd extract IP from request ConnectInfo
+            user_id: authenticated_user.as_ref().map(|u| u.id),
+            ip: addr.ip().to_string(),
             connected_at: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
@@ -222,23 +307,64 @@ pub async fn handle_proxy(
         bytes_counter = stats.total_bytes.clone();
     }
 
-    let guard = Arc::new(ClientDropGuard {
-        channel_id,
-        client_id,
-        state,
-    });
+    let state_clone = state.clone();
+    let channel_id_clone = channel_id.clone();
+    let client_id_clone = client_id.clone();
 
     let stream = resp.bytes_stream().map(move |result| {
-        let _guard = guard.clone();
+        // Periodically check if this client is still in the active list (for termination)
+        // This is a bit expensive but allows us to terminate streams remotely.
+        // We'll check every chunk, or maybe we should only check if we had a "dirty" flag.
+        // For now, let's just use the guard to increment bytes.
         if let Ok(bytes) = &result {
             bytes_counter.fetch_add(bytes.len() as u64, Ordering::Relaxed);
         }
         result.map_err(std::io::Error::other)
     });
 
+    // Wrap the stream in a way that checks for termination
+    let state_for_stream = state.clone();
+    let channel_id_for_stream = channel_id.clone();
+    let client_id_for_stream = client_id.clone();
+
+    let monitored_stream = futures_util::stream::unfold(
+        (stream, state_for_stream, channel_id_for_stream, client_id_for_stream),
+        move |(mut s, st, ch, cl)| async move {
+            // Check if client is still active
+            {
+                let active = st.active_streams.read().await;
+                if let Some(stats) = active.get(&ch) {
+                    if !stats.clients.iter().any(|c| c.client_id == cl) {
+                        tracing::info!("Stopping stream {} for {} because it was removed from active list", cl, ch);
+                        return None;
+                    }
+                } else {
+                    return None;
+                }
+            }
+
+            match s.next().await {
+                Some(res) => Some((res, (s, st, ch, cl))),
+                None => None,
+            }
+        },
+    );
+
+    let guard = Arc::new(ClientDropGuard {
+        channel_id: channel_id_clone,
+        client_id: client_id_clone,
+        state: state_clone,
+    });
+
+    // Use a wrapper body that holds the guard
+    let final_stream = monitored_stream.map(move |res| {
+        let _g = &guard;
+        res
+    });
+
     Ok(Response::builder()
         .status(StatusCode::OK)
         .header("Content-Type", "video/mp2t")
-        .body(Body::from_stream(stream))
+        .body(Body::from_stream(final_stream))
         .unwrap())
 }
