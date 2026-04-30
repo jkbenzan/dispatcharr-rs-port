@@ -3709,9 +3709,15 @@ export default class API {
     let targetId = id;
     let targetValues = values;
 
-    if (typeof id === 'object' && id !== null && id.id) {
+    // Handle single-object signature: updateSetting({id: 1, ...})
+    if (values === undefined && typeof id === 'object' && id !== null && id.id) {
       targetId = id.id;
       targetValues = id;
+    }
+
+    if (!targetValues) {
+      errorNotification('Update failed', new Error('No values provided for updateSetting'));
+      return;
     }
 
     try {
