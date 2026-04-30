@@ -22,6 +22,60 @@ pub async fn get_logos(
     Json(json!(logos))
 }
 
+pub async fn upload_logo(
+    axum::extract::State(state): axum::extract::State<std::sync::Arc<crate::AppState>>,
+    mut multipart: axum::extract::Multipart,
+) -> Result<axum::Json<Value>, axum::http::StatusCode> {
+    use sea_orm::{ActiveModelTrait, Set};
+    let mut name = None;
+    let mut file_data = None;
+    let mut filename = None;
+
+    while let Ok(Some(field)) = multipart.next_field().await {
+        let field_name = field.name().unwrap_or_default().to_string();
+        if field_name == "name" {
+            name = Some(field.text().await.unwrap_or_default());
+        } else if field_name == "file" {
+            filename = Some(field.file_name().unwrap_or_default().to_string());
+            file_data = Some(field.bytes().await.map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?);
+        }
+    }
+
+    let Some(data) = file_data else {
+        return Err(axum::http::StatusCode::BAD_REQUEST);
+    };
+
+    let final_filename = filename.unwrap_or_else(|| "uploaded_logo.png".to_string());
+    let final_name = name.unwrap_or_else(|| final_filename.clone());
+
+    // Ensure the logos directory exists
+    let logos_dir = "/data/logos";
+    if !std::path::Path::new(logos_dir).exists() {
+        std::fs::create_dir_all(logos_dir).map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
+    }
+
+    let save_path = format!("{}/{}", logos_dir, final_filename);
+    std::fs::write(&save_path, data).map_err(|e| {
+        tracing::error!("Failed to write logo to {}: {}", save_path, e);
+        axum::http::StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    let url = format!("/logos/{}", final_filename);
+
+    let logo = crate::entities::logo::ActiveModel {
+        name: Set(final_name),
+        url: Set(url),
+        ..Default::default()
+    };
+
+    let inserted = logo.insert(&state.db).await.map_err(|e| {
+        tracing::error!("Failed to insert logo record: {}", e);
+        axum::http::StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    Ok(axum::Json(json!(inserted)))
+}
+
 pub async fn get_logo(
     axum::extract::State(state): axum::extract::State<std::sync::Arc<crate::AppState>>,
     axum::extract::Path(id): axum::extract::Path<i64>,

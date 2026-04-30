@@ -210,7 +210,7 @@ async fn main() {
 
     // SPA Routing: Serve index.html if the user hits a route like /channels directly
     let spa_service = ServeDir::new("dist").fallback(ServeFile::new("dist/index.html"));
-    let logos_service = ServeDir::new("logos");
+    let logos_service = ServeDir::new("/data/logos");
 
     let accounts_routes = Router::new()
         .route(
@@ -449,6 +449,7 @@ async fn main() {
         )
         // --- DASHBOARD MISSING DEPENDENCIES ---
         .route("/api/channels/logos/", get(api::get_logos))
+        .route("/api/channels/logos/upload/", post(api::upload_logo))
         .route("/api/channels/streams/ids/", get(api::get_stream_ids))
         .route(
             "/api/channels/streams/by-ids/",
