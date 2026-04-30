@@ -241,6 +241,53 @@ pub async fn initialize_core_settings(db: &sea_orm::DatabaseConnection) {
         }
     }
     tracing::info!("✅ Core settings check complete.");
+
+    // Initialize default stream profiles
+    initialize_stream_profiles(db).await;
+}
+
+pub async fn initialize_stream_profiles(db: &sea_orm::DatabaseConnection) {
+    use crate::entities::core_streamprofile;
+
+    let defaults = vec![
+        (
+            "Direct (Proxy)",
+            "",
+            "",
+            true,
+        ),
+        (
+            "FFmpeg (Remux)",
+            "ffmpeg",
+            "-re -i {input} -vcodec copy -acodec copy -f mpegts pipe:1",
+            true,
+        ),
+    ];
+
+    tracing::info!("🔍 Checking default stream profiles...");
+
+    for (name, command, parameters, locked) in defaults {
+        let existing = core_streamprofile::Entity::find()
+            .filter(core_streamprofile::Column::Name.eq(name))
+            .one(db)
+            .await
+            .unwrap_or_default();
+
+        if existing.is_none() {
+            let _ = core_streamprofile::ActiveModel {
+                name: sea_orm::Set(name.to_string()),
+                command: sea_orm::Set(command.to_string()),
+                parameters: sea_orm::Set(parameters.to_string()),
+                is_active: sea_orm::Set(true),
+                locked: sea_orm::Set(locked),
+                ..Default::default()
+            }
+                .insert(db)
+                .await;
+            tracing::info!("✨ Created default stream profile: {}", name);
+        }
+    }
+    tracing::info!("✅ Stream profiles check complete.");
 }
 
 pub async fn get_http_client(db: &sea_orm::DatabaseConnection) -> reqwest::Client {
