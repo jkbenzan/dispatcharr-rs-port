@@ -3706,10 +3706,18 @@ export default class API {
   }
 
   static async updateSetting(id, values) {
+    let targetId = id;
+    let targetValues = values;
+
+    if (typeof id === 'object' && id !== null && id.id) {
+      targetId = id.id;
+      targetValues = id;
+    }
+
     try {
-      return await request(`${host}/api/core/settings/${id}/`, {
+      return await request(`${host}/api/core/settings/${targetId}/`, {
         method: 'PUT',
-        body: values,
+        body: targetValues,
       });
     } catch (e) {
       errorNotification('Failed to update setting', e);

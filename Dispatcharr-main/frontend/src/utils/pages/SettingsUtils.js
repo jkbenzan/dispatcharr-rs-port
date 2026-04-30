@@ -69,7 +69,7 @@ export const saveChangedSettings = async (settings, changedSettings) => {
     if (formKey === 'proxy_settings') {
       const existing = settings['proxy_settings'];
       if (existing?.id) {
-        await updateSetting({ ...existing, value });
+        await updateSetting(existing.id, { ...existing, value });
       } else {
         await createSetting({
           key: 'proxy_settings',
@@ -83,7 +83,7 @@ export const saveChangedSettings = async (settings, changedSettings) => {
     if (formKey === 'network_access') {
       const existing = settings['network_access'];
       if (existing?.id) {
-        await updateSetting({ ...existing, value });
+        await updateSetting(existing.id, { ...existing, value });
       } else {
         await createSetting({
           key: 'network_access',
@@ -150,7 +150,7 @@ export const saveChangedSettings = async (settings, changedSettings) => {
     const newValue = { ...currentValue, ...changes };
 
     if (existing?.id) {
-      const result = await updateSetting({ ...existing, value: newValue });
+      const result = await updateSetting(existing.id, { ...existing, value: newValue });
       if (!result) {
         throw new Error(`Failed to update ${groupKey}`);
       }
