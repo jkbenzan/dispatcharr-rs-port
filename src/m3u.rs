@@ -1325,3 +1325,36 @@ pub async fn fetch_and_parse_xc_categories(
 
     Ok(())
 }
+
+pub async fn rehash_all_streams(db: &DatabaseConnection) -> Result<usize, Box<dyn Error>> {
+    use crate::entities::stream;
+    use sha2::Digest;
+
+    tracing::info!("🔄 Starting global stream rehash...");
+    
+    let streams = stream::Entity::find().all(db).await?;
+    let total = streams.len();
+    let mut updated = 0;
+
+    for s in streams {
+        let mut hasher = sha2::Sha256::new();
+        hasher.update(s.name.as_bytes());
+        if let Some(url) = &s.url {
+            hasher.update(url.as_bytes());
+        }
+        if let Some(acc_id) = s.m3u_account_id {
+            hasher.update(&acc_id.to_be_bytes());
+        }
+        let new_hash = hex::encode(hasher.finalize());
+
+        if s.stream_hash.as_deref() != Some(&new_hash) {
+            let mut active: stream::ActiveModel = s.into();
+            active.stream_hash = Set(Some(new_hash));
+            let _ = active.update(db).await;
+            updated += 1;
+        }
+    }
+
+    tracing::info!("✅ Global rehash complete. Updated {}/{} streams.", updated, total);
+    Ok(updated)
+}
