@@ -3,8 +3,8 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait, ModelTrait, Set};
-use serde::{Deserialize, Serialize};
+use sea_orm::{ActiveModelTrait, EntityTrait, Set};
+use serde::Deserialize;
 use serde_json::{json, Value};
 use std::sync::Arc;
 

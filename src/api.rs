@@ -14,7 +14,7 @@ pub async fn get_flat_array() -> Json<Value> {
 pub async fn get_logos(
     axum::extract::State(state): axum::extract::State<std::sync::Arc<crate::AppState>>,
 ) -> Json<Value> {
-    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+    use sea_orm::EntityTrait;
     let logos = crate::entities::logo::Entity::find()
         .all(&state.db)
         .await
@@ -156,24 +156,6 @@ pub async fn cleanup_unused_logos(
         .await;
     Json(json!({"success": true}))
 }
-#[derive(serde::Deserialize)]
-pub struct CreateLogoRequest {
-    name: String,
-    url: String,
-}
-pub async fn upload_logo(
-    axum::extract::State(state): axum::extract::State<std::sync::Arc<crate::AppState>>,
-    axum::Json(payload): axum::Json<CreateLogoRequest>,
-) -> Json<Value> {
-    use sea_orm::{ActiveModelTrait, Set};
-    let new_logo = crate::entities::logo::ActiveModel {
-        name: Set(payload.name),
-        url: Set(payload.url),
-        ..Default::default()
-    };
-    let _ = new_logo.insert(&state.db).await;
-    Json(json!({"success": true}))
-}
 
 pub async fn get_timezones() -> Json<Value> {
     Json(json!({
@@ -222,7 +204,7 @@ pub async fn get_core_settings() -> Json<Value> {
 }
 
 use crate::entities::{
-    channel, channel_group, channel_profile, channel_stream, core_notificationdismissal,
+    channel, channel_group, channel_profile, core_notificationdismissal,
     core_settings, core_streamprofile, core_systemnotification, core_useragent, epg_data,
     epg_program, epg_source, m3u_account, stream, user,
 };
@@ -3280,7 +3262,7 @@ pub async fn delete_server_group(
 
 // --- Refresh Endpoints ---
 pub async fn refresh_m3u_all(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    use sea_orm::sea_query::extension::postgres::PgExpr;
+    
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     let accounts = match m3u_account::Entity::find()
         .filter(m3u_account::Column::IsActive.eq(true))

@@ -2,7 +2,6 @@ use crate::{
     entities::{channel, channel_stream, stream},
     AppState,
 };
-use axum::extract::ConnectInfo;
 use axum::{
     body::Body,
     extract::{Path, State},
@@ -11,8 +10,7 @@ use axum::{
 };
 use futures_util::StreamExt;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
-use serde::{Deserialize, Serialize};
-use std::net::SocketAddr;
+use serde::Serialize;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
