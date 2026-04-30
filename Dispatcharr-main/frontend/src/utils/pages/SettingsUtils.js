@@ -4,8 +4,8 @@ export const checkSetting = async (values) => {
   return await API.checkSetting(values);
 };
 
-export const updateSetting = async (values) => {
-  return await API.updateSetting(values);
+export const updateSetting = async (...args) => {
+  return await API.updateSetting(...args);
 };
 
 export const createSetting = async (values) => {
