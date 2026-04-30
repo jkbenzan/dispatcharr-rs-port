@@ -1556,6 +1556,10 @@ export default class API {
         body: { id },
       });
 
+      if (response?.source?.id) {
+        useEPGsStore.getState().updateEPG(response.source);
+      }
+
       return response;
     } catch (e) {
       errorNotification(`Failed to refresh EPG ${id}`, e);
@@ -1637,9 +1641,9 @@ export default class API {
     }
   }
 
-  static async getGrid() {
+  static async getGrid(params = new URLSearchParams()) {
     try {
-      const response = await request(`${host}/api/epg/grid/`);
+      const response = await request(`${host}/api/epg/grid/?${params.toString()}`);
 
       return response.data;
     } catch (e) {

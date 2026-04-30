@@ -208,11 +208,18 @@ export default function TVChannelGuide({ startDate, endDate }) {
           params.set('search', searchQuery.trim());
         }
 
-        // Fetch channels and programs in parallel — programs don't depend
-        // on channels so there's no reason to wait for one before the other.
+        // Fetch channels and programs in parallel
+        const programParams = new URLSearchParams();
+        const nowStart = new Date();
+        nowStart.setMinutes(0, 0, 0);
+        const nowEnd = new Date(nowStart.getTime() + 4 * 60 * 60 * 1000); // 4 hours from now
+        
+        programParams.set('start', nowStart.toISOString());
+        programParams.set('end', nowEnd.toISOString());
+
         const [channels, programData] = await Promise.all([
-          API.getChannelsSummary(params),
-          fetchPrograms(),
+            API.getChannelsSummary(params),
+            fetchPrograms(programParams),
         ]);
 
         if (cancelled) return;

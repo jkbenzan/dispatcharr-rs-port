@@ -1,5 +1,4 @@
 use reqwest::Client;
-use serde::{Deserialize, Serialize};
 use std::error::Error;
 
 // Helper functions to handle XC API type inconsistencies (strings vs numbers)

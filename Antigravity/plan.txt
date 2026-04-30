@@ -51,3 +51,4 @@
 4. **Phase 3: Auto-Assignment Routing Rules (Low Priority)**: Create rules to automatically route newly imported M3U streams into existing channels based on predefined conditions.
 5. **Database Initialization Script**: Add a DB creation script so that new installs can automatically initialize the schema without manual SQL execution. This script should also include a permissions section to automatically configure required access rights for the API users.
 6. **UI Polish**: Change the Stream Checker icon to `ticket-check` in the navigation configuration.
+7. **EPG Dashboard Improvements**: Improve responsiveness and visualization of progress on the EPG dashboard.

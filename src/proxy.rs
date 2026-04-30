@@ -10,13 +10,11 @@ use axum::{
 };
 use futures_util::StreamExt;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
-use std::sync::Arc;
-use uuid::Uuid;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
-use axum::extract::ConnectInfo;
-use std::net::SocketAddr;
+use uuid::Uuid;
 
 #[derive(Serialize, Clone, Debug)]
 pub struct ClientStat {
@@ -83,7 +81,10 @@ async fn get_stream_fallback(
 
 pub async fn handle_ts_status(State(state): State<Arc<AppState>>) -> axum::Json<serde_json::Value> {
     let active = state.active_streams.read().await;
-    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
 
     let mut channels = Vec::new();
     for (_, stat) in active.iter() {
@@ -196,19 +197,27 @@ pub async fn handle_proxy(
     let bytes_counter;
     {
         let mut active = state.active_streams.write().await;
-        let stats = active.entry(channel_id.clone()).or_insert_with(|| ChannelStats {
-            channel_id: channel_id.clone(),
-            stream_id: channel_streams[0].0.stream_id.to_string(),
-            stream_profile: "1".to_string(),
-            uptime: 0,
-            total_bytes: Arc::new(AtomicU64::new(0)),
-            clients: Vec::new(),
-            start_time: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
-        });
+        let stats = active
+            .entry(channel_id.clone())
+            .or_insert_with(|| ChannelStats {
+                channel_id: channel_id.clone(),
+                stream_id: channel_streams[0].0.stream_id.to_string(),
+                stream_profile: "1".to_string(),
+                uptime: 0,
+                total_bytes: Arc::new(AtomicU64::new(0)),
+                clients: Vec::new(),
+                start_time: SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs(),
+            });
         stats.clients.push(ClientStat {
             client_id: client_id.clone(),
             ip: "127.0.0.1".to_string(), // In production, we'd extract IP from request ConnectInfo
-            connected_at: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
+            connected_at: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
         });
         bytes_counter = stats.total_bytes.clone();
     }

@@ -4,22 +4,22 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use serde::{Deserialize, Serialize};
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::process::Command;
 use tracing::{error, info};
-use std::time::Duration;
 
-use crate::AppState;
+use crate::entities::channel_stream;
 use crate::entities::stream;
 use crate::entities::stream_sorting_rule;
-use crate::entities::channel_stream;
-use sea_orm::{ActiveValue, QueryOrder};
-use std::process::Command as StdCommand;
+use crate::AppState;
 use futures_util::stream::{self as future_stream, StreamExt};
+use sea_orm::{ActiveValue, QueryOrder};
 use std::collections::HashMap;
+use std::process::Command as StdCommand;
 
 /// Resolve the path to `ffprobe`. Checks the FFPROBE_PATH env var first,
 /// then the ffmpeg-sidecar managed path, then common install locations,
@@ -41,18 +41,29 @@ fn resolve_ffprobe() -> String {
 
     // Check sidecar first
     if let Ok(dir) = ffmpeg_sidecar::paths::sidecar_dir() {
-        let fname = if cfg!(windows) { "ffprobe.exe" } else { "ffprobe" };
+        let fname = if cfg!(windows) {
+            "ffprobe.exe"
+        } else {
+            "ffprobe"
+        };
         let sidecar_path = dir.join(fname);
         if sidecar_path.is_file() {
             let p = sidecar_path.to_string_lossy().to_string();
             // Smoke test: must start AND return success
             if let Ok(output) = StdCommand::new(&p).arg("-version").output() {
                 if output.status.success() {
-                    let version = String::from_utf8_lossy(&output.stdout).lines().next().unwrap_or("unknown").to_string();
+                    let version = String::from_utf8_lossy(&output.stdout)
+                        .lines()
+                        .next()
+                        .unwrap_or("unknown")
+                        .to_string();
                     info!("✅ Using sidecar ffprobe: {} (Version: {})", p, version);
                     return p;
                 } else {
-                    info!("⚠️  Sidecar ffprobe found but returned error status on -version: {}", p);
+                    info!(
+                        "⚠️  Sidecar ffprobe found but returned error status on -version: {}",
+                        p
+                    );
                 }
             } else {
                 info!("⚠️  Sidecar ffprobe found but failed to execute: {}", p);
@@ -77,11 +88,18 @@ fn resolve_ffprobe() -> String {
         if path.is_file() {
             if let Ok(output) = StdCommand::new(c).arg("-version").output() {
                 if output.status.success() {
-                    let version = String::from_utf8_lossy(&output.stdout).lines().next().unwrap_or("unknown").to_string();
+                    let version = String::from_utf8_lossy(&output.stdout)
+                        .lines()
+                        .next()
+                        .unwrap_or("unknown")
+                        .to_string();
                     info!("✅ Using system ffprobe: {} (Version: {})", c, version);
                     return c.to_string();
                 } else {
-                    info!("⚠️  Candidate {} found but returned error status on -version", c);
+                    info!(
+                        "⚠️  Candidate {} found but returned error status on -version",
+                        c
+                    );
                 }
             } else {
                 info!("⚠️  Candidate {} found but failed to execute", c);
@@ -117,11 +135,18 @@ fn resolve_ffmpeg() -> String {
         let p = sidecar_path.to_string_lossy().to_string();
         if let Ok(output) = StdCommand::new(&p).arg("-version").output() {
             if output.status.success() {
-                let version = String::from_utf8_lossy(&output.stdout).lines().next().unwrap_or("unknown").to_string();
+                let version = String::from_utf8_lossy(&output.stdout)
+                    .lines()
+                    .next()
+                    .unwrap_or("unknown")
+                    .to_string();
                 info!("✅ Using sidecar ffmpeg: {} (Version: {})", p, version);
                 return p;
             } else {
-                info!("⚠️  Sidecar ffmpeg found but returned error status on -version: {}", p);
+                info!(
+                    "⚠️  Sidecar ffmpeg found but returned error status on -version: {}",
+                    p
+                );
             }
         } else {
             info!("⚠️  Sidecar ffmpeg found but failed to execute: {}", p);
@@ -145,11 +170,18 @@ fn resolve_ffmpeg() -> String {
         if path.is_file() {
             if let Ok(output) = StdCommand::new(c).arg("-version").output() {
                 if output.status.success() {
-                    let version = String::from_utf8_lossy(&output.stdout).lines().next().unwrap_or("unknown").to_string();
+                    let version = String::from_utf8_lossy(&output.stdout)
+                        .lines()
+                        .next()
+                        .unwrap_or("unknown")
+                        .to_string();
                     info!("✅ Using system ffmpeg: {} (Version: {})", c, version);
                     return c.to_string();
                 } else {
-                    info!("⚠️  Candidate {} found but returned error status on -version", c);
+                    info!(
+                        "⚠️  Candidate {} found but returned error status on -version",
+                        c
+                    );
                 }
             } else {
                 info!("⚠️  Candidate {} found but failed to execute", c);
@@ -213,7 +245,10 @@ pub async fn check_single_stream(
         None => return Err((StatusCode::BAD_REQUEST, "Stream has no URL".to_string())),
     };
 
-    info!("🔍 Testing Stream: {} (URL: {})", stream_obj.name, stream_url);
+    info!(
+        "🔍 Testing Stream: {} (URL: {})",
+        stream_obj.name, stream_url
+    );
 
     // 1. Run ffprobe
     let ffprobe_bin = resolve_ffprobe();
@@ -225,55 +260,75 @@ pub async fn check_single_stream(
     ];
     let mut ffprobe_cmd = Command::new(&ffprobe_bin);
     ffprobe_cmd.args(&args);
-    
+
     info!("🚀 Executing ffprobe: {} {}", ffprobe_bin, args.join(" "));
 
-    let ffprobe_result = match tokio::time::timeout(Duration::from_secs(40), ffprobe_cmd.output()).await {
-        Ok(Ok(output)) => output,
-        Ok(Err(e)) => {
-            error!("ffprobe failed to start: {}", e);
-            return Err((StatusCode::INTERNAL_SERVER_ERROR, format!("ffprobe failed to start: {}", e)));
-        }
-        Err(_) => {
-            error!("ffprobe timed out after 40s");
-            return Err((StatusCode::GATEWAY_TIMEOUT, "ffprobe timed out".to_string()));
-        }
-    };
+    let ffprobe_result =
+        match tokio::time::timeout(Duration::from_secs(40), ffprobe_cmd.output()).await {
+            Ok(Ok(output)) => output,
+            Ok(Err(e)) => {
+                error!("ffprobe failed to start: {}", e);
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("ffprobe failed to start: {}", e),
+                ));
+            }
+            Err(_) => {
+                error!("ffprobe timed out after 40s");
+                return Err((StatusCode::GATEWAY_TIMEOUT, "ffprobe timed out".to_string()));
+            }
+        };
 
     if !ffprobe_result.status.success() {
         let stderr = String::from_utf8_lossy(&ffprobe_result.stderr);
         let stdout = String::from_utf8_lossy(&ffprobe_result.stdout);
         let status = ffprobe_result.status;
-        error!("❌ ffprobe failed. Status: {:?}\nstderr: {}\nstdout: {}", status, stderr, stdout);
+        error!(
+            "❌ ffprobe failed. Status: {:?}\nstderr: {}\nstdout: {}",
+            status, stderr, stdout
+        );
 
-        let err_msg = if !stderr.is_empty() { 
-            stderr.to_string() 
-        } else if !stdout.is_empty() { 
-            stdout.to_string() 
+        let err_msg = if !stderr.is_empty() {
+            stderr.to_string()
+        } else if !stdout.is_empty() {
+            stdout.to_string()
         } else {
             format!("Process exited with status {:?}", status)
         };
 
         let mut active_stream: stream::ActiveModel = stream_obj.into();
-        let mut props = active_stream.custom_properties.unwrap().unwrap_or_else(|| json!({}));
+        let mut props = active_stream
+            .custom_properties
+            .unwrap()
+            .unwrap_or_else(|| json!({}));
         props["stream_stats"] = json!({"reachable": false, "status": "offline"});
         props["stream_stats_updated_at"] = json!(chrono::Utc::now().to_rfc3339());
         active_stream.custom_properties = Set(Some(props));
         let _ = active_stream.update(&state.db).await;
 
-        return Err((StatusCode::BAD_REQUEST, format!("ffprobe failed: {}", err_msg)));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!("ffprobe failed: {}", err_msg),
+        ));
     }
 
     let probe_output = String::from_utf8_lossy(&ffprobe_result.stdout);
     let probe_data: Value = match serde_json::from_str(&probe_output) {
         Ok(d) => d,
         Err(e) => {
-             error!("ffprobe output JSON parsing failed: {}", e);
-             return Err((StatusCode::INTERNAL_SERVER_ERROR, "Failed to parse ffprobe output".to_string()));
+            error!("ffprobe output JSON parsing failed: {}", e);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to parse ffprobe output".to_string(),
+            ));
         }
     };
 
-    let streams = probe_data.get("streams").and_then(|s| s.as_array()).unwrap_or(&vec![]).clone();
+    let streams = probe_data
+        .get("streams")
+        .and_then(|s| s.as_array())
+        .unwrap_or(&vec![])
+        .clone();
 
     let mut video_codec = None;
     let mut width = None;
@@ -285,10 +340,13 @@ pub async fn check_single_stream(
     for s in &streams {
         if let Some(codec_type) = s.get("codec_type").and_then(|t| t.as_str()) {
             if codec_type == "video" && video_codec.is_none() {
-                video_codec = s.get("codec_name").and_then(|c| c.as_str()).map(|c| c.to_uppercase());
+                video_codec = s
+                    .get("codec_name")
+                    .and_then(|c| c.as_str())
+                    .map(|c| c.to_uppercase());
                 width = s.get("width").and_then(|w| w.as_i64());
                 height = s.get("height").and_then(|h| h.as_i64());
-                
+
                 // Parse FPS fraction (e.g. "60/1" or "30000/1001")
                 if let Some(f_str) = s.get("avg_frame_rate").and_then(|f| f.as_str()) {
                     let parts: Vec<&str> = f_str.split('/').collect();
@@ -303,7 +361,10 @@ pub async fn check_single_stream(
                     }
                 }
             } else if codec_type == "audio" && audio_codec.is_none() {
-                audio_codec = s.get("codec_name").and_then(|c| c.as_str()).map(|c| c.to_uppercase());
+                audio_codec = s
+                    .get("codec_name")
+                    .and_then(|c| c.as_str())
+                    .map(|c| c.to_uppercase());
                 let channel_count = s.get("channels").and_then(|c| c.as_i64()).unwrap_or(0);
                 channels = Some(match channel_count {
                     1 => "mono".to_string(),
@@ -318,13 +379,19 @@ pub async fn check_single_stream(
 
     if streams.is_empty() {
         let mut active_stream: stream::ActiveModel = stream_obj.into();
-        let mut props = active_stream.custom_properties.unwrap().unwrap_or_else(|| json!({}));
+        let mut props = active_stream
+            .custom_properties
+            .unwrap()
+            .unwrap_or_else(|| json!({}));
         props["stream_stats"] = json!({"reachable": false, "status": "offline"});
         props["stream_stats_updated_at"] = json!(chrono::Utc::now().to_rfc3339());
         active_stream.custom_properties = Set(Some(props));
         let _ = active_stream.update(&state.db).await;
 
-        return Err((StatusCode::BAD_REQUEST, "No streams found in ffprobe output".to_string()));
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "No streams found in ffprobe output".to_string(),
+        ));
     }
 
     // 2. Run ffmpeg for bitrate
@@ -340,18 +407,27 @@ pub async fn check_single_stream(
         "-",
     ]);
 
-    let ffmpeg_result = match tokio::time::timeout(Duration::from_secs(40), ffmpeg_cmd.output()).await {
-        Ok(Ok(output)) => output,
-        Ok(Err(e)) => {
-            error!("ffmpeg failed to start: {}", e);
-            // We can still save ffprobe data
-            tokio::process::Command::new("echo").arg("dummy").output().await.unwrap()
-        }
-        Err(_) => {
-            error!("ffmpeg timed out");
-             tokio::process::Command::new("echo").arg("dummy").output().await.unwrap()
-        }
-    };
+    let ffmpeg_result =
+        match tokio::time::timeout(Duration::from_secs(40), ffmpeg_cmd.output()).await {
+            Ok(Ok(output)) => output,
+            Ok(Err(e)) => {
+                error!("ffmpeg failed to start: {}", e);
+                // We can still save ffprobe data
+                tokio::process::Command::new("echo")
+                    .arg("dummy")
+                    .output()
+                    .await
+                    .unwrap()
+            }
+            Err(_) => {
+                error!("ffmpeg timed out");
+                tokio::process::Command::new("echo")
+                    .arg("dummy")
+                    .output()
+                    .await
+                    .unwrap()
+            }
+        };
 
     let mut bitrate: Option<f64> = None;
     if ffmpeg_result.status.success() || ffmpeg_result.status.code().unwrap_or(1) != 0 {
@@ -386,27 +462,39 @@ pub async fn check_single_stream(
     });
 
     let mut active_stream: stream::ActiveModel = stream_obj.clone().into();
-    let mut props = active_stream.custom_properties.unwrap().unwrap_or_else(|| json!({}));
+    let mut props = active_stream
+        .custom_properties
+        .unwrap()
+        .unwrap_or_else(|| json!({}));
     props["stream_stats"] = stats.clone();
     props["stream_stats_updated_at"] = json!(chrono::Utc::now().to_rfc3339());
     active_stream.custom_properties = Set(Some(props));
 
     if let Err(e) = active_stream.update(&state.db).await {
-         error!("Failed to update stream stats in DB: {}", e);
-         return Err((StatusCode::INTERNAL_SERVER_ERROR, "Failed to save stats to DB".to_string()));
+        error!("Failed to update stream stats in DB: {}", e);
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to save stats to DB".to_string(),
+        ));
     }
 
     // Prepare API response mirroring the DB stream model with updated stats
     let mut response_json = serde_json::to_value(&stream_obj).unwrap();
     if let Some(obj) = response_json.as_object_mut() {
-        let mut new_props = stream_obj.custom_properties.clone().unwrap_or_else(|| json!({}));
+        let mut new_props = stream_obj
+            .custom_properties
+            .clone()
+            .unwrap_or_else(|| json!({}));
         new_props["stream_stats"] = stats.clone();
         new_props["stream_stats_updated_at"] = json!(chrono::Utc::now().to_rfc3339());
         obj.insert("custom_properties".to_string(), new_props);
-        
+
         // Flatten for frontend
         obj.insert("stream_stats".to_string(), stats);
-        obj.insert("stream_stats_updated_at".to_string(), json!(chrono::Utc::now().to_rfc3339()));
+        obj.insert(
+            "stream_stats_updated_at".to_string(),
+            json!(chrono::Utc::now().to_rfc3339()),
+        );
     }
 
     Ok(response_json)
@@ -444,7 +532,7 @@ pub async fn start_bulk_check(
             Json(json!({"success": false, "message": "A bulk check is already running"})),
         );
     }
-    
+
     let streams = stream::Entity::find()
         .filter(stream::Column::Id.is_in(payload.stream_ids))
         .all(&state.db)
@@ -456,7 +544,10 @@ pub async fn start_bulk_check(
 
     for s in streams {
         if let Some(account_id) = s.m3u_account_id {
-            m3u_groups.entry(account_id).or_insert_with(Vec::new).push(s);
+            m3u_groups
+                .entry(account_id)
+                .or_insert_with(Vec::new)
+                .push(s);
             total_streams += 1;
         }
     }
@@ -464,7 +555,9 @@ pub async fn start_bulk_check(
     if total_streams == 0 {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({"success": false, "message": "No valid M3U streams provided for checking"})),
+            Json(
+                json!({"success": false, "message": "No valid M3U streams provided for checking"}),
+            ),
         );
     }
 
@@ -473,7 +566,7 @@ pub async fn start_bulk_check(
         .all(&state.db)
         .await
         .unwrap_or_default();
-    
+
     let mut max_concurrent = 1;
     for s in settings {
         if s.key == "stream_settings" {
@@ -484,11 +577,16 @@ pub async fn start_bulk_check(
             }
         }
     }
-    if max_concurrent < 1 { max_concurrent = 1; }
+    if max_concurrent < 1 {
+        max_concurrent = 1;
+    }
 
     // Fetch account names
     let mut account_names = HashMap::new();
-    let accounts = crate::entities::m3u_account::Entity::find().all(&state.db).await.unwrap_or_default();
+    let accounts = crate::entities::m3u_account::Entity::find()
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
     for acc in accounts {
         account_names.insert(acc.id, acc.name);
     }
@@ -507,100 +605,112 @@ pub async fn start_bulk_check(
     drop(status);
 
     let state_clone = state.clone();
-    
+
     tokio::spawn(async move {
         // Build the stream of provider groups
         let groups_stream = future_stream::iter(m3u_groups.into_iter());
-        
-        groups_stream.for_each_concurrent(max_concurrent, |(account_id, streams)| {
-            let state_c = state_clone.clone();
-            let acc_name = account_names.get(&account_id).cloned().unwrap_or_else(|| "Unknown Provider".to_string());
-            let total_in_group = streams.len();
-            
-            async move {
-                // Register this worker
-                {
-                    let mut st = state_c.bulk_check_status.write().await;
-                    st.workers.push(WorkerStatus {
-                        m3u_account_id: account_id,
-                        m3u_account_name: acc_name.clone(),
-                        current_stream_name: String::new(),
-                        completed: 0,
-                        total: total_in_group,
-                    });
-                }
 
-                for (idx, stream_obj) in streams.into_iter().enumerate() {
+        groups_stream
+            .for_each_concurrent(max_concurrent, |(account_id, streams)| {
+                let state_c = state_clone.clone();
+                let acc_name = account_names
+                    .get(&account_id)
+                    .cloned()
+                    .unwrap_or_else(|| "Unknown Provider".to_string());
+                let total_in_group = streams.len();
+
+                async move {
+                    // Register this worker
                     {
                         let mut st = state_c.bulk_check_status.write().await;
-                        if let Some(w) = st.workers.iter_mut().find(|w| w.m3u_account_id == account_id) {
-                            w.current_stream_name = stream_obj.name.clone();
-                            w.completed = idx;
+                        st.workers.push(WorkerStatus {
+                            m3u_account_id: account_id,
+                            m3u_account_name: acc_name.clone(),
+                            current_stream_name: String::new(),
+                            completed: 0,
+                            total: total_in_group,
+                        });
+                    }
+
+                    for (idx, stream_obj) in streams.into_iter().enumerate() {
+                        {
+                            let mut st = state_c.bulk_check_status.write().await;
+                            if let Some(w) = st
+                                .workers
+                                .iter_mut()
+                                .find(|w| w.m3u_account_id == account_id)
+                            {
+                                w.current_stream_name = stream_obj.name.clone();
+                                w.completed = idx;
+                            }
+                        }
+
+                        let res = check_single_stream(&state_c, stream_obj.id).await;
+
+                        {
+                            let mut st = state_c.bulk_check_status.write().await;
+                            st.completed += 1;
+                            match res {
+                                Ok(stats) => {
+                                    st.successful += 1;
+                                    let mut result_obj = stats.clone();
+                                    result_obj["name"] = json!(stream_obj.name);
+                                    result_obj["id"] = json!(stream_obj.id);
+                                    st.last_results.push(result_obj);
+                                    if st.last_results.len() > 10 {
+                                        st.last_results.remove(0);
+                                    }
+                                }
+                                Err(_) => {
+                                    st.failed += 1;
+                                    let result_obj = json!({
+                                        "name": stream_obj.name,
+                                        "id": stream_obj.id,
+                                        "stream_stats": { "reachable": false }
+                                    });
+                                    st.last_results.push(result_obj);
+                                    if st.last_results.len() > 10 {
+                                        st.last_results.remove(0);
+                                    }
+                                }
+                            }
                         }
                     }
-                    
-                    let res = check_single_stream(&state_c, stream_obj.id).await;
-                    
+
+                    // Mark worker completed
                     {
                         let mut st = state_c.bulk_check_status.write().await;
-                        st.completed += 1;
-                        match res {
-                            Ok(stats) => {
-                                st.successful += 1;
-                                let mut result_obj = stats.clone();
-                                result_obj["name"] = json!(stream_obj.name);
-                                result_obj["id"] = json!(stream_obj.id);
-                                st.last_results.push(result_obj);
-                                if st.last_results.len() > 10 {
-                                    st.last_results.remove(0);
-                                }
-                            }
-                            Err(_) => {
-                                st.failed += 1;
-                                let result_obj = json!({
-                                    "name": stream_obj.name,
-                                    "id": stream_obj.id,
-                                    "stream_stats": { "reachable": false }
-                                });
-                                st.last_results.push(result_obj);
-                                if st.last_results.len() > 10 {
-                                    st.last_results.remove(0);
-                                }
-                            }
+                        if let Some(w) = st
+                            .workers
+                            .iter_mut()
+                            .find(|w| w.m3u_account_id == account_id)
+                        {
+                            w.completed = total_in_group;
+                            w.current_stream_name = "Finished".to_string();
                         }
                     }
                 }
-                
-                // Mark worker completed
-                {
-                    let mut st = state_c.bulk_check_status.write().await;
-                    if let Some(w) = st.workers.iter_mut().find(|w| w.m3u_account_id == account_id) {
-                        w.completed = total_in_group;
-                        w.current_stream_name = "Finished".to_string();
-                    }
-                }
-            }
-        }).await;
-        
+            })
+            .await;
+
         let mut st = state_clone.bulk_check_status.write().await;
         st.is_running = false;
     });
 
-    (StatusCode::OK, Json(json!({"success": true, "message": "Bulk check started"})))
+    (
+        StatusCode::OK,
+        Json(json!({"success": true, "message": "Bulk check started"})),
+    )
 }
 
-pub async fn get_bulk_check_status(
-    State(state): State<Arc<AppState>>,
-) -> impl IntoResponse {
+pub async fn get_bulk_check_status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let status = state.bulk_check_status.read().await;
     (StatusCode::OK, Json(status.clone()))
 }
 
 // ================= SORTING RULES =================
 
-pub async fn list_sorting_rules(
-    State(state): State<Arc<AppState>>,
-) -> impl IntoResponse {
+pub async fn list_sorting_rules(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     match stream_sorting_rule::Entity::find().all(&state.db).await {
         Ok(rules) => (StatusCode::OK, Json(rules)),
         Err(e) => {
@@ -635,10 +745,16 @@ pub async fn create_sorting_rule(
     };
 
     match rule.insert(&state.db).await {
-        Ok(inserted) => (StatusCode::CREATED, Json(json!({"success": true, "rule": inserted}))),
+        Ok(inserted) => (
+            StatusCode::CREATED,
+            Json(json!({"success": true, "rule": inserted})),
+        ),
         Err(e) => {
             error!("Failed to create rule: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"success": false, "message": "Failed to create rule"})))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"success": false, "message": "Failed to create rule"})),
+            )
         }
     }
 }
@@ -648,10 +764,19 @@ pub async fn update_sorting_rule(
     Path(id): Path<i64>,
     Json(payload): Json<CreateRulePayload>,
 ) -> impl IntoResponse {
-    let mut rule: stream_sorting_rule::ActiveModel = match stream_sorting_rule::Entity::find_by_id(id).one(&state.db).await {
-        Ok(Some(r)) => r.into(),
-        _ => return (StatusCode::NOT_FOUND, Json(json!({"success": false, "message": "Rule not found"}))),
-    };
+    let mut rule: stream_sorting_rule::ActiveModel =
+        match stream_sorting_rule::Entity::find_by_id(id)
+            .one(&state.db)
+            .await
+        {
+            Ok(Some(r)) => r.into(),
+            _ => {
+                return (
+                    StatusCode::NOT_FOUND,
+                    Json(json!({"success": false, "message": "Rule not found"})),
+                )
+            }
+        };
 
     rule.name = ActiveValue::Set(payload.name);
     rule.priority = ActiveValue::Set(payload.priority);
@@ -661,10 +786,16 @@ pub async fn update_sorting_rule(
     rule.score_modifier = ActiveValue::Set(payload.score_modifier);
 
     match rule.update(&state.db).await {
-        Ok(updated) => (StatusCode::OK, Json(json!({"success": true, "rule": updated}))),
+        Ok(updated) => (
+            StatusCode::OK,
+            Json(json!({"success": true, "rule": updated})),
+        ),
         Err(e) => {
             error!("Failed to update rule: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"success": false, "message": "Failed to update rule"})))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"success": false, "message": "Failed to update rule"})),
+            )
         }
     }
 }
@@ -673,11 +804,17 @@ pub async fn delete_sorting_rule(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
 ) -> impl IntoResponse {
-    match stream_sorting_rule::Entity::delete_by_id(id).exec(&state.db).await {
+    match stream_sorting_rule::Entity::delete_by_id(id)
+        .exec(&state.db)
+        .await
+    {
         Ok(_) => (StatusCode::OK, Json(json!({"success": true}))),
         Err(e) => {
             error!("Failed to delete rule: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"success": false, "message": "Failed to delete rule"})))
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"success": false, "message": "Failed to delete rule"})),
+            )
         }
     }
 }
@@ -692,40 +829,54 @@ pub struct BulkSortRequest {
 fn evaluate_rule(rule: &stream_sorting_rule::Model, stream_stats: &Value) -> bool {
     let val = stream_stats.get(&rule.property);
     let target = &rule.value;
-    
+
     match rule.operator.as_str() {
         "==" => {
             if let Some(v) = val {
-                if let Some(s) = v.as_str() { return s == target; }
-                if let Some(i) = v.as_i64() { return i.to_string() == *target; }
+                if let Some(s) = v.as_str() {
+                    return s == target;
+                }
+                if let Some(i) = v.as_i64() {
+                    return i.to_string() == *target;
+                }
             }
             false
-        },
+        }
         "!=" => {
             if let Some(v) = val {
-                if let Some(s) = v.as_str() { return s != target; }
-                if let Some(i) = v.as_i64() { return i.to_string() != *target; }
+                if let Some(s) = v.as_str() {
+                    return s != target;
+                }
+                if let Some(i) = v.as_i64() {
+                    return i.to_string() != *target;
+                }
             }
             true
-        },
+        }
         ">=" => {
             if let Some(v) = val {
-                if let (Some(i), Ok(t)) = (v.as_i64(), target.parse::<i64>()) { return i >= t; }
+                if let (Some(i), Ok(t)) = (v.as_i64(), target.parse::<i64>()) {
+                    return i >= t;
+                }
             }
             false
-        },
+        }
         "<=" => {
             if let Some(v) = val {
-                if let (Some(i), Ok(t)) = (v.as_i64(), target.parse::<i64>()) { return i <= t; }
+                if let (Some(i), Ok(t)) = (v.as_i64(), target.parse::<i64>()) {
+                    return i <= t;
+                }
             }
             false
-        },
+        }
         "contains" => {
             if let Some(v) = val {
-                if let Some(s) = v.as_str() { return s.contains(target); }
+                if let Some(s) = v.as_str() {
+                    return s.contains(target);
+                }
             }
             false
-        },
+        }
         _ => false,
     }
 }
@@ -734,9 +885,18 @@ pub async fn bulk_sort_streams(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<BulkSortRequest>,
 ) -> impl IntoResponse {
-    let rules = match stream_sorting_rule::Entity::find().order_by_asc(stream_sorting_rule::Column::Priority).all(&state.db).await {
+    let rules = match stream_sorting_rule::Entity::find()
+        .order_by_asc(stream_sorting_rule::Column::Priority)
+        .all(&state.db)
+        .await
+    {
         Ok(r) => r,
-        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"success": false, "message": "Failed to load rules"}))),
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"success": false, "message": "Failed to load rules"})),
+            )
+        }
     };
 
     let mut sorted_channels = 0;
@@ -745,17 +905,22 @@ pub async fn bulk_sort_streams(
         // Find all channel streams
         let channel_streams = match channel_stream::Entity::find()
             .filter(channel_stream::Column::ChannelId.eq(channel_id))
-            .all(&state.db).await {
-                Ok(cs) => cs,
-                Err(_) => continue,
-            };
+            .all(&state.db)
+            .await
+        {
+            Ok(cs) => cs,
+            Err(_) => continue,
+        };
 
         let mut scored_streams: Vec<(channel_stream::Model, i32)> = Vec::new();
 
         for cs in channel_streams {
             let mut score = 0;
             // Load the stream
-            if let Ok(Some(stream)) = stream::Entity::find_by_id(cs.stream_id).one(&state.db).await {
+            if let Ok(Some(stream)) = stream::Entity::find_by_id(cs.stream_id)
+                .one(&state.db)
+                .await
+            {
                 if let Some(props) = stream.custom_properties {
                     if let Some(stats) = props.get("stream_stats") {
                         for rule in &rules {
@@ -782,8 +947,11 @@ pub async fn bulk_sort_streams(
         sorted_channels += 1;
     }
 
-    (StatusCode::OK, Json(json!({
-        "success": true, 
-        "message": format!("Successfully sorted {} channels.", sorted_channels)
-    })))
+    (
+        StatusCode::OK,
+        Json(json!({
+            "success": true,
+            "message": format!("Successfully sorted {} channels.", sorted_channels)
+        })),
+    )
 }

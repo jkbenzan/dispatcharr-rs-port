@@ -410,11 +410,9 @@ const DummyEPGForm = ({ epg, isOpen, onClose }) => {
                       <LabelWithInfo
                         label="Title Pattern"
                         info="Regex pattern to extract title information (e.g., team names, league). Example: (?<league>\w+) \d+: (?<team1>.*) VS (?<team2>.*)"
-                        required
                       />
                     }
                     placeholder="(?<league>\w+) \d+: (?<team1>.*) VS (?<team2>.*)"
-                    required
                     withAsterisk={false}
                     value={titlePattern}
                     onChange={(e) => {

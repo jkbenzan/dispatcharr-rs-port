@@ -2,7 +2,7 @@ mod epg_api;
 use axum::{
     extract::ws::{WebSocket, WebSocketUpgrade},
     response::IntoResponse,
-    routing::{delete, get, patch, post, put},
+    routing::{get, patch, post, put},
     Router,
 };
 use sea_orm::{ConnectOptions, Database, DatabaseConnection};
@@ -21,31 +21,40 @@ mod m3u;
 mod outputs;
 mod proxy;
 mod settings;
+mod stream_checker;
 mod vod;
 mod xtream_codes;
-mod stream_checker;
 
 // Ensure ffmpeg/ffprobe are available, downloading them if needed.
 fn ensure_ffmpeg() {
     use ffmpeg_sidecar::{
-        download::auto_download,
+        
         paths::{ffmpeg_path, sidecar_dir},
     };
-    
-    let cwd = std::env::current_dir().map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|_| "unknown".to_string());
+
+    let cwd = std::env::current_dir()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|_| "unknown".to_string());
     tracing::info!("📂 Current working directory: {}", cwd);
 
     // Check if ffmpeg is already on PATH (installed via Dockerfile or system)
-    if let Ok(output) = std::process::Command::new("ffmpeg").arg("-version").output() {
+    if let Ok(output) = std::process::Command::new("ffmpeg")
+        .arg("-version")
+        .output()
+    {
         if output.status.success() {
-            let version = String::from_utf8_lossy(&output.stdout).lines().next().unwrap_or("unknown").to_string();
+            let version = String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .next()
+                .unwrap_or("unknown")
+                .to_string();
             tracing::info!("✅ system ffmpeg found on PATH: {}", version);
             return;
         }
     }
 
     let sidecar = ffmpeg_path();
-    
+
     if sidecar.is_file() {
         tracing::info!("✅ sidecar ffmpeg found: {}", sidecar.display());
         return;
@@ -59,7 +68,7 @@ fn ensure_ffmpeg() {
     }
 
     tracing::warn!("⚠️  ffmpeg not found. Attempting auto-download...");
-    
+
     use ffmpeg_sidecar::download::{auto_download_with_progress, FfmpegDownloadProgressEvent};
 
     let download_result = auto_download_with_progress(|event| {
@@ -67,10 +76,19 @@ fn ensure_ffmpeg() {
             FfmpegDownloadProgressEvent::Starting => {
                 tracing::info!("⬇️ Starting ffmpeg download...");
             }
-            FfmpegDownloadProgressEvent::Downloading { total_bytes, downloaded_bytes } => {
-                if total_bytes > 0 && downloaded_bytes % (1024 * 1024 * 5) == 0 { // Log every 5MB
+            FfmpegDownloadProgressEvent::Downloading {
+                total_bytes,
+                downloaded_bytes,
+            } => {
+                if total_bytes > 0 && downloaded_bytes % (1024 * 1024 * 5) == 0 {
+                    // Log every 5MB
                     let percent = (downloaded_bytes as f64 / total_bytes as f64) * 100.0;
-                    tracing::info!("⏳ Progress: {:.1}% ({:.1}MB / {:.1}MB)", percent, downloaded_bytes as f64 / 1024.0 / 1024.0, total_bytes as f64 / 1024.0 / 1024.0);
+                    tracing::info!(
+                        "⏳ Progress: {:.1}% ({:.1}MB / {:.1}MB)",
+                        percent,
+                        downloaded_bytes as f64 / 1024.0 / 1024.0,
+                        total_bytes as f64 / 1024.0 / 1024.0
+                    );
                 }
             }
             FfmpegDownloadProgressEvent::UnpackingArchive => {
@@ -97,8 +115,10 @@ pub struct AppState {
     pub db: DatabaseConnection,
     pub http_client: reqwest::Client,
     pub ws_sender: tokio::sync::broadcast::Sender<serde_json::Value>,
-    pub active_streams: Arc<tokio::sync::RwLock<std::collections::HashMap<String, crate::proxy::ChannelStats>>>,
-    pub bulk_check_status: Arc<tokio::sync::RwLock<crate::stream_checker::checker::BulkCheckStatus>>,
+    pub active_streams:
+        Arc<tokio::sync::RwLock<std::collections::HashMap<String, crate::proxy::ChannelStats>>>,
+    pub bulk_check_status:
+        Arc<tokio::sync::RwLock<crate::stream_checker::checker::BulkCheckStatus>>,
 }
 
 async fn ws_handler(ws: WebSocketUpgrade, State(state): State<Arc<AppState>>) -> impl IntoResponse {
@@ -190,6 +210,7 @@ async fn main() {
 
     // SPA Routing: Serve index.html if the user hits a route like /channels directly
     let spa_service = ServeDir::new("dist").fallback(ServeFile::new("dist/index.html"));
+    let logos_service = ServeDir::new("/data/logos");
 
     let accounts_routes = Router::new()
         .route(
@@ -293,13 +314,43 @@ async fn main() {
         )
         // --- CHANNELS & M3U ---
         .route("/api/channels/channels/", get(api::get_channels))
-        .route(
-            "/api/channels/channels/:id/",
-            patch(api::update_channel),
-        )
+        .route("/api/channels/channels/summary/", get(api::get_channels_summary))
+        .route("/api/channels/channels/summary", get(api::get_channels_summary))
+        .route("/api/channels/channels/:id/", patch(api::update_channel).put(api::update_channel).post(api::update_channel))
+        .route("/api/channels/channels/:id", patch(api::update_channel).put(api::update_channel).post(api::update_channel))
+        .route("/api/channels/channels/:id/set-epg/", post(api::set_channel_epg))
+        .route("/api/channels/channels/:id/set-epg", post(api::set_channel_epg))
         .route(
             "/api/channels/channels/edit/bulk/",
-            patch(api::bulk_update_channels),
+            patch(api::bulk_update_channels).put(api::bulk_update_channels).post(api::bulk_update_channels),
+        )
+        .route(
+            "/api/channels/channels/edit/bulk",
+            patch(api::bulk_update_channels).put(api::bulk_update_channels).post(api::bulk_update_channels),
+        )
+        .route(
+            "/api/channels/channels/batch-set-epg/",
+            post(api::batch_set_epg),
+        )
+        .route(
+            "/api/channels/channels/batch-set-epg",
+            post(api::batch_set_epg),
+        )
+        .route(
+            "/api/channels/channels/set-names-from-epg/",
+            post(api::set_channel_names_from_epg),
+        )
+        .route(
+            "/api/channels/channels/set-names-from-epg",
+            post(api::set_channel_names_from_epg),
+        )
+        .route(
+            "/api/channels/channels/set-logos-from-epg/",
+            post(api::set_channel_logos_from_epg),
+        )
+        .route(
+            "/api/channels/channels/set-logos-from-epg",
+            post(api::set_channel_logos_from_epg),
         )
         .route("/api/channels/groups/", get(api::get_channel_groups))
         .route("/api/channels/profiles/", get(api::get_channel_profiles))
@@ -315,6 +366,14 @@ async fn main() {
         .route(
             "/api/m3u/accounts/:id/",
             get(api::get_m3u_account)
+                .put(api::update_m3u_account)
+                .patch(api::update_m3u_account)
+                .delete(api::delete_m3u_account),
+        )
+        .route(
+            "/api/m3u/accounts/:id",
+            get(api::get_m3u_account)
+                .put(api::update_m3u_account)
                 .patch(api::update_m3u_account)
                 .delete(api::delete_m3u_account),
         )
@@ -329,7 +388,7 @@ async fn main() {
         )
         .route(
             "/api/m3u/accounts/:id/profiles/:profile_id/",
-            patch(api::update_m3u_profile).delete(api::delete_m3u_profile),
+            put(api::update_m3u_profile).patch(api::update_m3u_profile).delete(api::delete_m3u_profile),
         )
         .route(
             "/api/m3u/accounts/:id/filters/",
@@ -337,7 +396,7 @@ async fn main() {
         )
         .route(
             "/api/m3u/accounts/:id/filters/:filter_id/",
-            patch(api::update_m3u_filter).delete(api::delete_m3u_filter),
+            put(api::update_m3u_filter).patch(api::update_m3u_filter).delete(api::delete_m3u_filter),
         )
         .route(
             "/api/m3u/server-groups/",
@@ -354,8 +413,24 @@ async fn main() {
             post(api::refresh_m3u_account_info),
         )
         // --- EPG ---
-        .route("/api/epg/sources/", get(api::get_epg_sources))
-        .route("/api/epg/sources/:id/", get(api::get_epg_source))
+        .route(
+            "/api/epg/sources/",
+            get(api::get_epg_sources).post(api::create_epg_source),
+        )
+        .route(
+            "/api/epg/sources/:id/",
+            get(api::get_epg_source)
+                .put(api::update_epg_source)
+                .patch(api::update_epg_source)
+                .delete(api::delete_epg_source),
+        )
+        .route(
+            "/api/epg/sources/:id",
+            get(api::get_epg_source)
+                .put(api::update_epg_source)
+                .patch(api::update_epg_source)
+                .delete(api::delete_epg_source),
+        )
         .route("/api/epg/refresh/:id/", post(api::refresh_epg_source))
         .route("/api/epg/import", post(api::refresh_epg_import))
         .route("/api/epg/import/", post(api::refresh_epg_import))
@@ -374,6 +449,7 @@ async fn main() {
         )
         // --- DASHBOARD MISSING DEPENDENCIES ---
         .route("/api/channels/logos/", get(api::get_logos))
+        .route("/api/channels/logos/upload/", post(api::upload_logo))
         .route("/api/channels/streams/ids/", get(api::get_stream_ids))
         .route(
             "/api/channels/streams/by-ids/",
@@ -445,9 +521,11 @@ async fn main() {
         // Serve the compiled React frontend for non-API routes
         .nest("/api/accounts", accounts_routes)
         .nest("/api/vod", vod_routes)
+        .nest_service("/logos", logos_service)
         .fallback_service(spa_service)
         .layer(CorsLayer::permissive())
         .layer(tower_http::trace::TraceLayer::new_for_http())
+        .layer(tower_http::compression::CompressionLayer::new())
         .with_state(state.clone());
 
     let addr = "0.0.0.0:8080";

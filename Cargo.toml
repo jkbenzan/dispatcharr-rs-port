@@ -8,7 +8,7 @@ edition = "2021"
 axum = { version = "0.7.9", features = ["ws", "macros", "multipart"] }
 tokio = { version = "1.0", features = ["full"] }
 tower = "0.4"
-tower-http = { version = "0.5", features = ["cors", "fs", "trace"] }
+tower-http = { version = "0.5", features = ["cors", "fs", "trace", "compression-full"] }
 
 # Database (PostgreSQL via SeaORM)
 sea-orm = { version = "0.12", features = ["sqlx-sqlite",
