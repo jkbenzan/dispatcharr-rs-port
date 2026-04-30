@@ -11,22 +11,44 @@ pub async fn get_flat_array() -> Json<Value> {
     Json(json!([]))
 }
 
+fn parse_id(val: &serde_json::Value) -> Option<i64> {
+    if val.is_null() {
+        None
+    } else if let Some(n) = val.as_i64() {
+        Some(n)
+    } else if let Some(s) = val.as_str() {
+        if s.is_empty() { None } else { s.parse::<i64>().ok() }
+    } else {
+        None
+    }
+}
+
+fn logo_to_json(logo: crate::entities::logo::Model) -> serde_json::Value {
+    let mut v = serde_json::to_value(&logo).unwrap();
+    v["cache_url"] = serde_json::json!(logo.url);
+    v
+}
+
 pub async fn get_logos(
     axum::extract::State(state): axum::extract::State<std::sync::Arc<crate::AppState>>,
 ) -> Json<Value> {
     use sea_orm::EntityTrait;
-    let logos = crate::entities::logo::Entity::find()
+        let logos = crate::entities::logo::Entity::find()
         .all(&state.db)
         .await
         .unwrap_or_default();
-    Json(json!(logos))
+    let mut mapped = Vec::with_capacity(logos.len());
+    for l in logos {
+        mapped.push(logo_to_json(l));
+    }
+    Json(json!(mapped))
 }
 
 pub async fn upload_logo(
     axum::extract::State(state): axum::extract::State<std::sync::Arc<crate::AppState>>,
     mut multipart: axum::extract::Multipart,
 ) -> Result<axum::Json<Value>, axum::http::StatusCode> {
-    use sea_orm::{ActiveModelTrait, Set};
+    use sea_orm::{ActiveModelTrait, Set, TryIntoModel};
     let mut name = None;
     let mut file_data = None;
     let mut filename = None;
@@ -73,7 +95,7 @@ pub async fn upload_logo(
         axum::http::StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    Ok(axum::Json(json!(inserted)))
+    Ok(axum::Json(logo_to_json(inserted.try_into_model().unwrap())))
 }
 
 pub async fn get_logo(
@@ -105,7 +127,7 @@ pub async fn update_logo(
     axum::extract::Path(id): axum::extract::Path<i64>,
     axum::Json(payload): axum::Json<UpdateLogoRequest>,
 ) -> Json<Value> {
-    use sea_orm::{ActiveModelTrait, Set};
+    use sea_orm::{ActiveModelTrait, Set, TryIntoModel};
     if let Ok(Some(model)) = crate::entities::logo::Entity::find_by_id(id)
         .one(&state.db)
         .await
@@ -3541,19 +3563,20 @@ pub async fn update_channel(
             updated = true;
         }
     }
-    if let Some(cg) = payload.get("channel_group_id") {
-        let cg_id = if cg.is_null() { None } else { cg.as_i64() };
-        active.channel_group_id = sea_orm::Set(cg_id);
+        if let Some(cg) = payload.get("channel_group_id") {
+        active.channel_group_id = sea_orm::Set(parse_id(cg));
         updated = true;
     }
     if let Some(sp) = payload.get("stream_profile_id") {
-        let sp_id = if sp.is_null() { None } else { sp.as_i64() };
-        active.stream_profile_id = sea_orm::Set(sp_id);
+        active.stream_profile_id = sea_orm::Set(parse_id(sp));
         updated = true;
     }
     if let Some(epg) = payload.get("epg_data_id") {
-        let epg_id = if epg.is_null() { None } else { epg.as_i64() };
-        active.epg_data_id = sea_orm::Set(epg_id);
+        active.epg_data_id = sea_orm::Set(parse_id(epg));
+        updated = true;
+    }
+    if let Some(logo) = payload.get("logo_id") {
+        active.logo_id = sea_orm::Set(parse_id(logo));
         updated = true;
     }
 
@@ -3630,19 +3653,20 @@ pub async fn bulk_update_channels(
                         updated = true;
                     }
                 }
-                if let Some(cg) = channel_payload.get("channel_group_id") {
-                    let cg_id = if cg.is_null() { None } else { cg.as_i64() };
-                    active.channel_group_id = sea_orm::Set(cg_id);
+                                if let Some(cg) = channel_payload.get("channel_group_id") {
+                    active.channel_group_id = sea_orm::Set(parse_id(cg));
                     updated = true;
                 }
                 if let Some(sp) = channel_payload.get("stream_profile_id") {
-                    let sp_id = if sp.is_null() { None } else { sp.as_i64() };
-                    active.stream_profile_id = sea_orm::Set(sp_id);
+                    active.stream_profile_id = sea_orm::Set(parse_id(sp));
                     updated = true;
                 }
                 if let Some(epg) = channel_payload.get("epg_data_id") {
-                    let epg_id = if epg.is_null() { None } else { epg.as_i64() };
-                    active.epg_data_id = sea_orm::Set(epg_id);
+                    active.epg_data_id = sea_orm::Set(parse_id(epg));
+                    updated = true;
+                }
+                if let Some(logo) = channel_payload.get("logo_id") {
+                    active.logo_id = sea_orm::Set(parse_id(logo));
                     updated = true;
                 }
 
@@ -3862,3 +3886,5 @@ pub async fn set_channel_logos_from_epg(
         "message": "EPG logo setting task started"
     }))
 }
+
+
