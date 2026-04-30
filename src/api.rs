@@ -528,6 +528,62 @@ pub async fn get_channels(
     }))
 }
 
+pub async fn get_channels_summary(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Json<Value> {
+    let mut q = channel::Entity::find();
+
+    if let Some(name) = params.get("name") {
+        q = q.filter(
+            sea_orm::sea_query::Expr::col(channel::Column::Name).ilike(format!("%{}%", name)),
+        );
+    }
+    if let Some(search) = params.get("search") {
+        q = q.filter(
+            sea_orm::sea_query::Expr::col(channel::Column::Name).ilike(format!("%{}%", search)),
+        );
+    }
+    if let Some(cg) = params.get("channel_group") {
+        if !cg.is_empty() {
+            let group_ids: Vec<i64> = cg.split("::").filter_map(|s| s.parse().ok()).collect();
+            if !group_ids.is_empty() {
+                q = q.filter(channel::Column::ChannelGroupId.is_in(group_ids));
+            }
+        }
+    }
+    if let Some(epg) = params.get("epg") {
+        if !epg.is_empty() {
+            let epg_ids: Vec<i64> = epg.split("::").filter_map(|s| s.parse().ok()).collect();
+            if !epg_ids.is_empty() {
+                q = q.filter(channel::Column::EpgDataId.is_in(epg_ids));
+            }
+        }
+    }
+
+    // Default sorting by channel number
+    let q = q.order_by_asc(channel::Column::ChannelNumber);
+
+    // Efficiently select only the needed columns and convert directly to JSON
+    let results = q
+        .select_only()
+        .columns([
+            channel::Column::Id,
+            channel::Column::Name,
+            channel::Column::LogoId,
+            channel::Column::ChannelNumber,
+            channel::Column::Uuid,
+            channel::Column::EpgDataId,
+            channel::Column::ChannelGroupId,
+        ])
+        .into_json()
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+
+    Json(json!(results))
+}
+
 pub async fn get_notifications(
     State(state): State<Arc<AppState>>,
     current_user: CurrentUser,
