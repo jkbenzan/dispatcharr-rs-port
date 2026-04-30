@@ -85,7 +85,7 @@ pub async fn get_epg_grid(
         .all(&state.db)
         .await
         .unwrap_or_default();
-    let channel_count = channels.len();
+    let _channel_count = channels.len();
 
     let epg_data_ids: Vec<i64> = channels.iter().filter_map(|ch| ch.epg_data_id).collect();
     let epg_data_by_id: HashMap<i64, crate::entities::epg_data::Model> = if epg_data_ids.is_empty() {
@@ -131,7 +131,7 @@ pub async fn get_epg_grid(
     ];
 
     // Determine how many hours we need dummy data for
-    let duration_hours = (end_time - start_time).num_hours().max(1);
+    let _duration_hours = (end_time - start_time).num_hours().max(1);
 
     for ch in channels {
         let needs_dummy = match ch.epg_data_id {
