@@ -210,6 +210,7 @@ async fn main() {
 
     // SPA Routing: Serve index.html if the user hits a route like /channels directly
     let spa_service = ServeDir::new("dist").fallback(ServeFile::new("dist/index.html"));
+    let logos_service = ServeDir::new("logos");
 
     let accounts_routes = Router::new()
         .route(
@@ -519,6 +520,7 @@ async fn main() {
         // Serve the compiled React frontend for non-API routes
         .nest("/api/accounts", accounts_routes)
         .nest("/api/vod", vod_routes)
+        .nest_service("/logos", logos_service)
         .fallback_service(spa_service)
         .layer(CorsLayer::permissive())
         .layer(tower_http::trace::TraceLayer::new_for_http())
