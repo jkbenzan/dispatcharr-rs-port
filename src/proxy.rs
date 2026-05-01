@@ -256,6 +256,7 @@ pub async fn handle_proxy(
     }
 
     let mut successful_resp = None;
+    let mut ua_log = "Default".to_string();
 
     for (_cs, stream_opt) in &channel_streams {
         if let Some(stream) = stream_opt {
@@ -271,7 +272,6 @@ pub async fn handle_proxy(
 
                 // Apply Default User Agent if configured
                 let stream_settings = crate::settings::get_setting_by_key(&state.db, "stream_settings").await;
-                let mut ua_log = "Default".to_string();
                 if let Some(ss) = stream_settings {
                     if let Some(ua) = ss.get("default_user_agent").and_then(|v| v.as_str()) {
                         provider_request = provider_request.header(axum::http::header::USER_AGENT, ua);
