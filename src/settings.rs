@@ -313,7 +313,7 @@ pub async fn initialize_stream_profiles(db: &sea_orm::DatabaseConnection) {
 pub async fn get_http_client(db: &sea_orm::DatabaseConnection) -> reqwest::Client {
     let mut builder = reqwest::Client::builder()
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
-        .timeout(std::time::Duration::from_secs(30));
+        .connect_timeout(std::time::Duration::from_secs(10)); // connection timeout is fine, but not body timeout
 
     let setting = crate::entities::core_settings::Entity::find()
         .filter(crate::entities::core_settings::Column::Key.eq("proxy_settings"))

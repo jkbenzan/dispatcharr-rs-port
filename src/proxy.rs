@@ -23,12 +23,14 @@ use std::net::SocketAddr;
 pub struct ClientStat {
     pub client_id: String,
     pub user_id: Option<i64>,
-    pub ip: String,
+    pub ip_address: String, // Renamed to match frontend
     pub user_agent: String,
     pub connected_at: u64,
+    pub connection_duration: f64, // Added for frontend
+    pub connected_since: f64,    // Added for frontend
 }
 
-#[derive(Clone, Debug)]
+#[derive(Serialize, Clone, Debug)] // Added Serialize
 pub struct ChannelStats {
     pub channel_id: String,
     pub stream_id: String,
@@ -38,6 +40,7 @@ pub struct ChannelStats {
     pub total_bytes: Arc<AtomicU64>,
     pub clients: Vec<ClientStat>,
     pub start_time: u64,
+    pub m3u_profile: Option<serde_json::Value>, // Added for frontend
 }
 
 struct ClientDropGuard {
@@ -101,6 +104,20 @@ pub async fn handle_ts_status(State(state): State<Arc<AppState>>) -> axum::Json<
 
     let mut channels = Vec::new();
     for (_, stat) in active.iter() {
+        let mut clients = Vec::new();
+        for client in &stat.clients {
+            let duration = now.saturating_sub(client.connected_at) as f64;
+            clients.push(serde_json::json!({
+                "client_id": client.client_id,
+                "user_id": client.user_id,
+                "ip_address": client.ip_address,
+                "user_agent": client.user_agent,
+                "connected_at": client.connected_at,
+                "connection_duration": duration,
+                "connected_since": duration,
+            }));
+        }
+
         channels.push(serde_json::json!({
             "channel_id": stat.channel_id,
             "stream_id": stat.stream_id,
@@ -108,7 +125,8 @@ pub async fn handle_ts_status(State(state): State<Arc<AppState>>) -> axum::Json<
             "provider_user_agent": stat.provider_user_agent,
             "uptime": now.saturating_sub(stat.start_time),
             "total_bytes": stat.total_bytes.load(Ordering::Relaxed),
-            "clients": stat.clients,
+            "clients": clients,
+            "m3u_profile": stat.m3u_profile,
         }));
     }
 
@@ -218,9 +236,9 @@ pub async fn handle_proxy(
 
     // Determine if identifier is a UUID (channel) or Hash (stream)
     let parsed_uuid = Uuid::parse_str(&channel_id).ok();
+    let mut current_channel_model = None;
 
     let channel_streams = if let Some(uuid) = parsed_uuid {
-        // Fetch the channel gracefully from Postgres
         let channel_opt = channel::Entity::find()
             .filter(channel::Column::Uuid.eq(uuid))
             .one(&state.db)
@@ -231,6 +249,7 @@ pub async fn handle_proxy(
             })?;
 
         if let Some(_channel) = channel_opt {
+            current_channel_model = Some(_channel.clone());
             let parsed_id = _channel.id;
 
             channel_stream::Entity::find()
@@ -267,8 +286,7 @@ pub async fn handle_proxy(
                 );
 
                 // Get the User-Agent from settings or fallback
-                let mut provider_request = state.http_client.get(target_url)
-                    .timeout(std::time::Duration::from_secs(30));
+                let mut provider_request = state.http_client.get(target_url); // No request-level timeout to allow streaming
 
                 // Apply Default User Agent if configured
                 let stream_settings = crate::settings::get_setting_by_key(&state.db, "stream_settings").await;
@@ -308,15 +326,33 @@ pub async fn handle_proxy(
     // 5. Zero-Copy Byte Streaming
     let client_id = Uuid::new_v4().to_string();
     let bytes_counter;
+    
+    // Fetch M3U Account info for the profile name
+    let mut m3u_profile_data = None;
+    if let Some(acc_id) = channel_streams[0].1.as_ref().and_then(|s| s.m3u_account_id) {
+        if let Ok(Some(acc)) = crate::entities::m3u_account::Entity::find_by_id(acc_id).one(&state.db).await {
+            m3u_profile_data = Some(serde_json::json!({
+                "account_name": acc.name,
+                "profile_name": acc.name, // For now use account name
+            }));
+        }
+    }
+
     {
         let mut active = state.active_streams.write().await;
         let stats = active
             .entry(channel_id.clone())
-            .or_insert_with(|| ChannelStats {
-                channel_id: channel_id.clone(),
-                stream_id: channel_streams[0].0.stream_id.to_string(),
-                stream_profile: "1".to_string(),
-                provider_user_agent: ua_log.clone(),
+            .or_insert_with(|| {
+                let profile_id = current_channel_model
+                    .and_then(|ch| ch.stream_profile_id)
+                    .map(|id| id.to_string())
+                    .unwrap_or_else(|| "Proxy".to_string());
+
+                ChannelStats {
+                    channel_id: channel_id.clone(),
+                    stream_id: channel_streams[0].0.stream_id.to_string(),
+                    stream_profile: profile_id,
+                    provider_user_agent: ua_log.clone(),
                 uptime: 0,
                 total_bytes: Arc::new(AtomicU64::new(0)),
                 clients: Vec::new(),
@@ -324,16 +360,23 @@ pub async fn handle_proxy(
                     .duration_since(UNIX_EPOCH)
                     .unwrap()
                     .as_secs(),
+                m3u_profile: m3u_profile_data,
+                }
             });
+            
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+            
         stats.clients.push(ClientStat {
             client_id: client_id.clone(),
             user_id: authenticated_user.as_ref().map(|u| u.id),
-            ip: client_ip,
+            ip_address: client_ip,
             user_agent: client_user_agent.clone(),
-            connected_at: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
+            connected_at: now,
+            connection_duration: 0.0,
+            connected_since: 0.0,
         });
         bytes_counter = stats.total_bytes.clone();
     }

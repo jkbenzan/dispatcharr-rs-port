@@ -563,8 +563,8 @@ async fn main() {
                     let threshold = last_updated.with_timezone(&Utc)
                         + chrono::Duration::hours(refresh_interval);
 
-                    println!("[Background Worker] Account {} ({}): Last Updated: {:?}, Interval: {}h, Threshold: {:?}, Now: {:?}", 
-                        acc.id, acc.name, last_updated, refresh_interval, threshold, Utc::now());
+                    // tracing::debug!("[Background Worker] Account {} ({}): Last Updated: {:?}, Interval: {}h, Threshold: {:?}, Now: {:?}", 
+                    //    acc.id, acc.name, last_updated, refresh_interval, threshold, Utc::now());
 
                     if Utc::now() >= threshold {
                         println!(
