@@ -9,7 +9,7 @@ use sea_orm::EntityTrait;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-const JWT_SECRET: &[u8] = b"dispatcharr_super_secret_temporary_key"; // In prod, load from env
+pub const JWT_SECRET: &[u8] = b"dispatcharr_super_secret_temporary_key"; // In prod, load from env
 const JWT_EXPIRATION_SECS: usize = 3600 * 24; // 1 day
 
 #[derive(Debug, Serialize, Deserialize)]

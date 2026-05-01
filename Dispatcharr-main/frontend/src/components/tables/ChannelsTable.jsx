@@ -73,6 +73,7 @@ import ChannelTableStreams from './ChannelTableStreams';
 import LazyLogo from '../LazyLogo';
 import useLocalStorage from '../../hooks/useLocalStorage';
 import useEPGsStore from '../../store/epgs';
+import useAuthStore from '../../store/auth';
 import { useChannelLogoSelection } from '../../hooks/useSmartLogos';
 import { CustomTable, useTable } from './CustomTable';
 import ChannelsTableOnboarding from './ChannelsTable/ChannelsTableOnboarding';
@@ -687,7 +688,8 @@ const ChannelsTable = ({ onReady, hideLinks = false, streamCheckerMode = false }
       return '';
     }
 
-    const uri = `/proxy/ts/stream/${channel.uuid}`;
+    const token = useAuthStore.getState().accessToken;
+    const uri = `/proxy/ts/stream/${channel.uuid}${token ? `?token=${token}` : ''}`;
     let channelUrl = `${window.location.protocol}//${window.location.host}${uri}`;
     if (env_mode == 'dev') {
       channelUrl = `${window.location.protocol}//${window.location.hostname}:5656${uri}`;

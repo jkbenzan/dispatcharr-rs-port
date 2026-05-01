@@ -61,7 +61,8 @@ import { useNavigate } from 'react-router-dom';
 import useSettingsStore from '../../store/settings';
 import useVideoStore from '../../store/useVideoStore';
 import useChannelsTableStore from '../../store/channelsTable';
-import useWarningsStore from '../../store/warnings';
+import useStreamProfilesStore from '../../store/streamProfiles.jsx';
+import useAuthStore from '../../store/auth.jsx';
 import { CustomTable, useTable } from './CustomTable';
 import useLocalStorage from '../../hooks/useLocalStorage';
 import ConfirmationDialog from '../ConfirmationDialog';
@@ -1069,7 +1070,8 @@ const StreamsTable = ({ onReady }) => {
   };
 
   function handleWatchStream(streamHash, streamName) {
-    let vidUrl = `/proxy/ts/stream/${streamHash}`;
+    const token = useAuthStore.getState().accessToken;
+    let vidUrl = `/proxy/ts/stream/${streamHash}${token ? `?token=${token}` : ''}`;
     if (env_mode == 'dev') {
       vidUrl = `${window.location.protocol}//${window.location.hostname}:5656${vidUrl}`;
     }

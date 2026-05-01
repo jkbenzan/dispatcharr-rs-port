@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import usePlaylistsStore from '../../store/playlists.jsx';
 import useSettingsStore from '../../store/settings.jsx';
 import useUsersStore from '../../store/users.jsx';
+import useAuthStore from '../../store/auth.jsx';
 import {
   ActionIcon,
   Badge,
@@ -509,7 +510,8 @@ const StreamConnectionCard = ({
     const actualChannel = channels[channelDbId];
     if (!actualChannel?.uuid) return;
 
-    const uri = `/proxy/ts/stream/${actualChannel.uuid}`;
+    const token = useAuthStore.getState().accessToken;
+    const uri = `/proxy/ts/stream/${actualChannel.uuid}${token ? `?token=${token}` : ''}`;
     let url = `${window.location.protocol}//${window.location.host}${uri}`;
     if (env_mode === 'dev') {
       url = `${window.location.protocol}//${window.location.hostname}:5656${uri}`;

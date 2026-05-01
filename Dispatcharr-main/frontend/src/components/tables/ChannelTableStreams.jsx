@@ -51,8 +51,9 @@ import {
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { shallow } from 'zustand/shallow';
-import useAuthStore from '../../store/auth';
-import { USER_LEVELS } from '../../constants';
+import useStreamsStore from '../../store/streams.jsx';
+import useAuthStore from '../../store/auth.jsx';
+import { useTable } from './CustomTable';
 
 const RowDragHandleCell = ({ rowId }) => {
   const { attributes, listeners, setNodeRef } = useDraggable({
@@ -141,7 +142,8 @@ const ChannelStreams = ({ channel, isExpanded }) => {
   const showVideo = useVideoStore((s) => s.showVideo);
   const env_mode = useSettingsStore((s) => s.environment.env_mode);
   function handleWatchStream(streamHash, streamName) {
-    let vidUrl = `/proxy/ts/stream/${streamHash}`;
+    const token = useAuthStore.getState().accessToken;
+    let vidUrl = `/proxy/ts/stream/${streamHash}${token ? `?token=${token}` : ''}`;
     if (env_mode === 'dev') {
       vidUrl = `${window.location.protocol}//${window.location.hostname}:5656${vidUrl}`;
     }

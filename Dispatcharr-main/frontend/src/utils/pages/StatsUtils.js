@@ -102,9 +102,14 @@ const getChannelWithMetadata = (
       : null;
 
   // Find stream profile
-  const streamProfile = streamProfiles.find(
+  let streamProfile = streamProfiles.find(
     (profile) => profile.id == parseInt(ch.stream_profile)
   );
+
+  // If not found by ID but we have a string name, use it directly
+  if (!streamProfile && ch.stream_profile && typeof ch.stream_profile === 'string') {
+    streamProfile = { name: ch.stream_profile };
+  }
 
   return {
     ...ch,

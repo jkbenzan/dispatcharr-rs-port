@@ -175,7 +175,18 @@ pub async fn handle_proxy(
             }
         }
     } else if let Some(token) = query.token {
-        // Simple token auth if implemented, for now skip
+        use jsonwebtoken::{decode, DecodingKey, Validation};
+        use crate::auth::{Claims, JWT_SECRET};
+        
+        if let Ok(token_data) = decode::<Claims>(
+            &token,
+            &DecodingKey::from_secret(JWT_SECRET),
+            &Validation::default(),
+        ) {
+            if let Ok(Some(user)) = user::Entity::find_by_id(token_data.claims.user_id).one(&state.db).await {
+                authenticated_user = Some(user);
+            }
+        }
     }
 
     // If no auth provided, for now we might allow it but ideally we should require it
@@ -333,7 +344,7 @@ pub async fn handle_proxy(
         if let Ok(Some(acc)) = crate::entities::m3u_account::Entity::find_by_id(acc_id).one(&state.db).await {
             m3u_profile_data = Some(serde_json::json!({
                 "account_name": acc.name,
-                "profile_name": acc.name, // For now use account name
+                "name": acc.name, // Renamed from profile_name to match frontend
             }));
         }
     }
