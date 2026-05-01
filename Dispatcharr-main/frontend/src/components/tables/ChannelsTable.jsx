@@ -88,7 +88,6 @@ import {
 import { DraggableRow } from './ChannelsTable/DraggableRow';
 import useWarningsStore from '../../store/warnings';
 import ConfirmationDialog from '../ConfirmationDialog';
-import useAuthStore from '../../store/auth';
 import { USER_LEVELS } from '../../constants';
 
 const m3uUrlBase = `${window.location.protocol}//${window.location.host}/output/m3u`;

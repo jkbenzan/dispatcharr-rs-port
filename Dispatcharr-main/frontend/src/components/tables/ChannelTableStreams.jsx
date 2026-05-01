@@ -54,6 +54,7 @@ import { shallow } from 'zustand/shallow';
 import useStreamsStore from '../../store/streams.jsx';
 import useAuthStore from '../../store/auth.jsx';
 import { useTable } from './CustomTable';
+import { USER_LEVELS } from '../../constants';
 
 const RowDragHandleCell = ({ rowId }) => {
   const { attributes, listeners, setNodeRef } = useDraggable({

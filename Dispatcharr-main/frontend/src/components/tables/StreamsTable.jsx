@@ -64,6 +64,7 @@ import useChannelsTableStore from '../../store/channelsTable';
 import useStreamProfilesStore from '../../store/streamProfiles.jsx';
 import useAuthStore from '../../store/auth.jsx';
 import { CustomTable, useTable } from './CustomTable';
+import { USER_LEVELS } from '../../constants';
 import useLocalStorage from '../../hooks/useLocalStorage';
 import ConfirmationDialog from '../ConfirmationDialog';
 import CreateChannelModal from '../modals/CreateChannelModal';
