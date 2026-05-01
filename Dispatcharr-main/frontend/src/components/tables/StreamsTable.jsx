@@ -63,6 +63,7 @@ import useVideoStore from '../../store/useVideoStore';
 import useChannelsTableStore from '../../store/channelsTable';
 import useStreamProfilesStore from '../../store/streamProfiles.jsx';
 import useAuthStore from '../../store/auth.jsx';
+import useWarningsStore from '../../store/warnings';
 import { CustomTable, useTable } from './CustomTable';
 import { USER_LEVELS } from '../../constants';
 import useLocalStorage from '../../hooks/useLocalStorage';
