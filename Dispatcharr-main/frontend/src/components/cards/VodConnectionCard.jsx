@@ -179,9 +179,11 @@ const VodConnectionCard = ({ vodContent, stopVODClient }) => {
   const users = useUsersStore((s) => s.users);
   const usersMap = useMemo(() => {
     const map = {};
-    users.forEach((u) => {
-      map[String(u.id)] = u.username;
-    });
+    if (Array.isArray(users)) {
+      users.forEach((u) => {
+        map[String(u.id)] = u.username;
+      });
+    }
     return map;
   }, [users]);
   const [, setUpdateTrigger] = useState(0); // Force re-renders for progress updates

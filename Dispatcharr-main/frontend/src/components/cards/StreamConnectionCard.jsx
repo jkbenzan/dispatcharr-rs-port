@@ -143,9 +143,11 @@ const StreamConnectionCard = ({
   // Create a map of user IDs to usernames for quick lookup
   const usersMap = useMemo(() => {
     const map = {};
-    users.forEach((u) => {
-      map[String(u.id)] = u.username;
-    });
+    if (Array.isArray(users)) {
+      users.forEach((u) => {
+        map[String(u.id)] = u.username;
+      });
+    }
     return map;
   }, [users]);
 
@@ -199,14 +201,16 @@ const StreamConnectionCard = ({
   }, [channel.channel_id, channel.stream_id, channelsByUUID]);
 
   useEffect(() => {
-    setData(
-      clients
-        .filter((client) => client.channel.channel_id === channel.channel_id)
-        .map((client) => ({
-          id: client.client_id,
-          ...client,
-        }))
-    );
+    if (Array.isArray(clients)) {
+      setData(
+        clients
+          .filter((client) => client.channel.channel_id === channel.channel_id)
+          .map((client) => ({
+            id: client.client_id,
+            ...client,
+          }))
+      );
+    }
   }, [clients, channel.channel_id]);
 
   const renderHeaderCell = (header) => {
@@ -406,8 +410,8 @@ const StreamConnectionCard = ({
   const channelClientsTable = useTable({
     ...TableHelper.defaultProperties,
     columns: clientsColumns,
-    data,
-    allRowIds: data.map((client) => client.id),
+    data: Array.isArray(data) ? data : [],
+    allRowIds: Array.isArray(data) ? data.map((client) => client.id) : [],
     tableCellProps: () => ({
       padding: 4,
       borderColor: '#444',

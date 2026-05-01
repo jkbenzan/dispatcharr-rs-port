@@ -65,32 +65,34 @@ const Connections = ({
   ) : (
     <ErrorBoundary>
       <Suspense fallback={<LoadingOverlay />}>
-        {combinedConnections.map((connection) => {
-          if (connection.type === 'stream') {
-            return (
-              <StreamConnectionCard
-                key={connection.id}
-                channel={connection.data}
-                clients={clients}
-                stopClient={stopClient}
-                stopChannel={stopChannel}
-                logos={logos}
-                channelsByUUID={channelsByUUID}
-                channels={channels}
-                currentProgram={currentPrograms[connection.data.channel_id]}
-              />
-            );
-          } else if (connection.type === 'vod') {
-            return (
-              <VodConnectionCard
-                key={connection.id}
-                vodContent={connection.data}
-                stopVODClient={handleStopVODClient}
-              />
-            );
-          }
-          return null;
-        })}
+        {Array.isArray(combinedConnections)
+          ? combinedConnections.map((connection) => {
+              if (connection.type === 'stream') {
+                return (
+                  <StreamConnectionCard
+                    key={connection.id}
+                    channel={connection.data}
+                    clients={clients}
+                    stopClient={stopClient}
+                    stopChannel={stopChannel}
+                    logos={logos}
+                    channelsByUUID={channelsByUUID}
+                    channels={channels}
+                    currentProgram={currentPrograms[connection.data.channel_id]}
+                  />
+                );
+              } else if (connection.type === 'vod') {
+                return (
+                  <VodConnectionCard
+                    key={connection.id}
+                    vodContent={connection.data}
+                    stopVODClient={handleStopVODClient}
+                  />
+                );
+              }
+              return null;
+            })
+          : null}
       </Suspense>
     </ErrorBoundary>
   );
