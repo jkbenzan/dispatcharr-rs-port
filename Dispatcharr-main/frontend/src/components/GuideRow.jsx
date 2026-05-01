@@ -229,7 +229,7 @@ const GuideRow = React.memo(({ index, style, data }) => {
           h={'100%'}
           pl={0}
         >
-          {visiblePrograms.length > 0 ? (
+          {Array.isArray(visiblePrograms) && visiblePrograms.length > 0 ? (
             visiblePrograms.map((program) =>
               renderProgram(program, undefined, channel)
             )

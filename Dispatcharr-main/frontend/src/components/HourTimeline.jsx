@@ -87,15 +87,17 @@ const HourTimeline = React.memo(
   ({ hourTimeline, timeFormat, formatDayLabel, handleTimeClick }) => {
     return (
       <>
-        {hourTimeline.map((hourData) => (
-          <HourBlock
-            key={format(hourData.time)}
-            hourData={hourData}
-            timeFormat={timeFormat}
-            formatDayLabel={formatDayLabel}
-            handleTimeClick={handleTimeClick}
-          />
-        ))}
+        {Array.isArray(hourTimeline) ? (
+          hourTimeline.map((hourData) => (
+            <HourBlock
+              key={format(hourData.time)}
+              hourData={hourData}
+              timeFormat={timeFormat}
+              formatDayLabel={formatDayLabel}
+              handleTimeClick={handleTimeClick}
+            />
+          ))
+        ) : null}
       </>
     );
   }

@@ -252,26 +252,28 @@ const StreamChecker = () => {
                       <Box mt="sm">
                         <Text size="xs" c="dimmed" fw={700} tt="uppercase" mb="xs">Active Workers</Text>
                         <Stack gap="sm">
-                          {status.workers.map((worker) => {
-                            const workerProgress = worker.total > 0 ? (worker.completed / worker.total) * 100 : 0;
-                            return (
-                              <Paper key={worker.m3u_account_id} withBorder p="sm" radius="sm">
-                                <Group wrap="nowrap" align="center">
-                                  <RingProgress
-                                    size={40}
-                                    thickness={4}
-                                    roundCaps
-                                    sections={[{ value: workerProgress, color: 'blue' }]}
-                                    label={<Center><Text size="10px" fw={700}>{Math.round(workerProgress)}%</Text></Center>}
-                                  />
-                                  <Stack gap={0} style={{ flex: 1 }}>
-                                    <Text size="sm" fw={700} truncate>{worker.m3u_account_name}</Text>
-                                    <Text size="xs" c="dimmed" truncate>{worker.current_stream_name || 'Idle'}</Text>
-                                  </Stack>
-                                </Group>
-                              </Paper>
-                            );
-                          })}
+                          {Array.isArray(status.workers) ? (
+                            status.workers.map((worker) => {
+                              const workerProgress = worker.total > 0 ? (worker.completed / worker.total) * 100 : 0;
+                              return (
+                                <Paper key={worker.m3u_account_id} withBorder p="sm" radius="sm">
+                                  <Group wrap="nowrap" align="center">
+                                    <RingProgress
+                                      size={40}
+                                      thickness={4}
+                                      roundCaps
+                                      sections={[{ value: workerProgress, color: 'blue' }]}
+                                      label={<Center><Text size="10px" fw={700}>{Math.round(workerProgress)}%</Text></Center>}
+                                    />
+                                    <Stack gap={0} style={{ flex: 1 }}>
+                                      <Text size="sm" fw={700} truncate>{worker.m3u_account_name}</Text>
+                                      <Text size="xs" c="dimmed" truncate>{worker.current_stream_name || 'Idle'}</Text>
+                                    </Stack>
+                                  </Group>
+                                </Paper>
+                              );
+                            })
+                          ) : null}
                         </Stack>
                       </Box>
                     )}
@@ -282,7 +284,7 @@ const StreamChecker = () => {
                         {!status.last_results || status.last_results.length === 0 ? (
                           <Text size="xs" c="dimmed" fs="italic">Waiting for results...</Text>
                         ) : (
-                          status.last_results.slice().reverse().map((s, i) => (
+                          (Array.isArray(status.last_results) ? status.last_results.slice().reverse() : []).map((s, i) => (
                             <Group key={`${s.id}-${i}`} justify="space-between" p={4} style={{ borderBottom: i < status.last_results.length - 1 ? '1px solid var(--mantine-color-dark-4)' : 'none' }}>
                               <Group gap="xs">
                                 {s.stream_stats?.reachable ? <Text color="green" size="xs">✓</Text> : <Text color="red" size="xs">✗</Text>}
@@ -327,7 +329,7 @@ const StreamChecker = () => {
                    </Table.Tr>
                  </Table.Thead>
                  <Table.Tbody>
-                   {rules.sort((a,b) => a.priority - b.priority).map((rule) => (
+                   {(Array.isArray(rules) ? rules.sort((a,b) => a.priority - b.priority) : []).map((rule) => (
                      <Table.Tr key={rule.id}>
                        <Table.Td>{rule.priority}</Table.Td>
                        <Table.Td fw={500}>{rule.name}</Table.Td>

@@ -531,9 +531,7 @@ const EPGsTable = () => {
       const compareDesc = newSorting[0].desc;
 
       setData(
-        epgs.sort((a, b) => {
-          console.log(a);
-          console.log(newSorting[0].id);
+        Object.values(epgs).sort((a, b) => {
           if (a[compareColumn] !== b[compareColumn]) {
             return compareDesc ? 1 : -1;
           }
@@ -546,8 +544,8 @@ const EPGsTable = () => {
 
   const table = useTable({
     columns,
-    data,
-    allRowIds: data.map((epg) => epg.id),
+    data: Array.isArray(data) ? data : [],
+    allRowIds: Array.isArray(data) ? data.map((epg) => epg.id) : [],
     enablePagination: false,
     enableRowSelection: false,
     renderTopToolbar: false,

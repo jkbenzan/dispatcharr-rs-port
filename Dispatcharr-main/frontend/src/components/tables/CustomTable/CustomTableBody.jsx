@@ -92,7 +92,12 @@ const CustomTableBody = ({
 
     return (
       <Box className="tbody" style={{ flex: 1 }}>
-        {rows.map((row, index) => renderTableBodyRow(row, index))}
+        {Array.isArray(rows)
+          ? rows.map((row, index) => renderTableBodyRow(row, index))
+          : (() => {
+              console.warn('CustomTableBody: rows is not an array!', typeof rows, rows);
+              return null;
+            })()}
       </Box>
     );
   };
@@ -125,34 +130,36 @@ const CustomTableBody = ({
             ...customRowStyles, // Apply the remaining custom styles here
           }}
         >
-          {row.getVisibleCells().map((cell) => {
-            return (
-              <Box
-                className="td"
-                key={`td-${cell.id}`}
-                style={{
-                  ...(cell.column.columnDef.grow
-                    ? {
-                        flex: `${cell.column.columnDef.grow === true ? 1 : cell.column.columnDef.grow} 1 0%`,
-                        minWidth: 0,
-                        ...(cell.column.columnDef.maxSize && {
-                          maxWidth: `${cell.column.columnDef.maxSize}px`,
-                        }),
-                      }
-                    : {
-                        flex: `0 0 ${cell.column.getSize ? cell.column.getSize() : 150}px`,
-                        width: `${cell.column.getSize ? cell.column.getSize() : 150}px`,
-                        maxWidth: `${cell.column.getSize ? cell.column.getSize() : 150}px`,
-                      }),
-                  ...(tableCellProps && tableCellProps({ cell })),
-                }}
-              >
-                <Flex align="center" style={{ height: '100%' }}>
-                  {renderBodyCell({ row, cell })}
-                </Flex>
-              </Box>
-            );
-          })}
+          {Array.isArray(row.getVisibleCells())
+            ? row.getVisibleCells().map((cell) => {
+                return (
+                  <Box
+                    className="td"
+                    key={`td-${cell.id}`}
+                    style={{
+                      ...(cell.column.columnDef.grow
+                        ? {
+                            flex: `${cell.column.columnDef.grow === true ? 1 : cell.column.columnDef.grow} 1 0%`,
+                            minWidth: 0,
+                            ...(cell.column.columnDef.maxSize && {
+                              maxWidth: `${cell.column.columnDef.maxSize}px`,
+                            }),
+                          }
+                        : {
+                            flex: `0 0 ${cell.column.getSize ? cell.column.getSize() : 150}px`,
+                            width: `${cell.column.getSize ? cell.column.getSize() : 150}px`,
+                            maxWidth: `${cell.column.getSize ? cell.column.getSize() : 150}px`,
+                          }),
+                      ...(tableCellProps && tableCellProps({ cell })),
+                    }}
+                  >
+                    <Flex align="center" style={{ height: '100%' }}>
+                      {renderBodyCell({ row, cell })}
+                    </Flex>
+                  </Box>
+                );
+              })
+            : null}
         </Box>
         {expandedRowIds.includes(row.original.id) && renderExpandedRow(row)}
       </DraggableRowWrapper>

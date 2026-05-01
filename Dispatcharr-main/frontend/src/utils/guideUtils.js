@@ -118,9 +118,14 @@ export function computeRowHeights(
 export const fetchPrograms = async (params = new URLSearchParams()) => {
   console.log('Fetching program grid...');
   const fetched = await API.getGrid(params); // GETs your EPG grid
-  console.log(`Received ${fetched.length} programs`);
+  console.log(`Received ${fetched?.length || 0} programs`);
 
-  return (fetched || []).map((program) => {
+  if (!Array.isArray(fetched)) {
+    console.warn('fetchPrograms: API.getGrid did not return an array!', typeof fetched, fetched);
+    return [];
+  }
+
+  return fetched.map((program) => {
     return {
       ...program,
       startMs: convertToMs(program.start_time),
