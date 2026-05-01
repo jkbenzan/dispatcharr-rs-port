@@ -1,0 +1,205 @@
+    Checking dispatcharr-rs v0.1.0 (C:\Users\jbenz\dispatcharr-rs-port)
+warning: unused import: `TryIntoModel`
+   --> src\api.rs:130:42
+    |
+130 |     use sea_orm::{ActiveModelTrait, Set, TryIntoModel};
+    |                                          ^^^^^^^^^^^^
+    |
+    = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `std::collections::HashMap`
+  --> src\proxy.rs:19:5
+   |
+19 | use std::collections::HashMap;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: future cannot be sent between threads safely
+    --> src\api.rs:1953:21
+     |
+1953 | /                     tokio::spawn(async move {
+1954 | |                         let error_msg = if is_xc {
+1955 | |                             let mut err = None;
+1956 | |                             let is_success = match crate::m3u::fetch_and_parse_xc_categories(
+...    |
+2006 | |                     });
+     | |______________________^ future created by async block is not `Send`
+     |
+     = help: the trait `std::marker::Send` is not implemented for `dyn StdError`
+note: future is not `Send` as this value is used across an await
+    --> src\m3u.rs:176:58
+     |
+ 168 |     let result = parse_m3u_from_file(db, &file_path, account_id, is_initial, &ws_sender).await;
+     |         ------ has type `Result<(), Box<dyn StdError>>` which is not `Send`
+...
+ 176 |         let _ = update_account_timestamp(db, account_id).await;
+     |                                                          ^^^^^ await occurs here, with `result` maybe used later
+note: required by a bound in `tokio::spawn`
+    --> C:\Users\jbenz\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-1.52.0\src\task\spawn.rs:176:21
+     |
+ 174 |     pub fn spawn<F>(future: F) -> JoinHandle<F::Output>
+     |            ----- required by a bound in this function
+ 175 |     where
+ 176 |         F: Future + Send + 'static,
+     |                     ^^^^ required by this bound in `spawn`
+
+error: future cannot be sent between threads safely
+    --> src\api.rs:1953:21
+     |
+1953 | /                     tokio::spawn(async move {
+1954 | |                         let error_msg = if is_xc {
+1955 | |                             let mut err = None;
+1956 | |                             let is_success = match crate::m3u::fetch_and_parse_xc_categories(
+...    |
+2006 | |                     });
+     | |______________________^ future created by async block is not `Send`
+     |
+     = help: the trait `std::marker::Sync` is not implemented for `dyn StdError`
+note: future is not `Send` as this value is used across an await
+    --> src\m3u.rs:176:58
+     |
+ 173 |     if let Err(e) = &result {
+     |                - has type `&Box<dyn StdError>` which is not `Send`
+...
+ 176 |         let _ = update_account_timestamp(db, account_id).await;
+     |                                                          ^^^^^ await occurs here, with `e` maybe used later
+note: required by a bound in `tokio::spawn`
+    --> C:\Users\jbenz\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-1.52.0\src\task\spawn.rs:176:21
+     |
+ 174 |     pub fn spawn<F>(future: F) -> JoinHandle<F::Output>
+     |            ----- required by a bound in this function
+ 175 |     where
+ 176 |         F: Future + Send + 'static,
+     |                     ^^^^ required by this bound in `spawn`
+
+error: future cannot be sent between threads safely
+    --> src\api.rs:2412:9
+     |
+2412 | /         tokio::spawn(async move {
+2413 | |             let error_msg = if is_xc {
+2414 | |                 let ws_clone = ws_clone_outer.clone();
+2415 | |                 let xc_err = if let Err(e) =
+...    |
+2449 | |         });
+     | |__________^ future created by async block is not `Send`
+     |
+     = help: the trait `std::marker::Send` is not implemented for `dyn StdError`
+note: future is not `Send` as this value is used across an await
+    --> src\m3u.rs:176:58
+     |
+ 168 |     let result = parse_m3u_from_file(db, &file_path, account_id, is_initial, &ws_sender).await;
+     |         ------ has type `Result<(), Box<dyn StdError>>` which is not `Send`
+...
+ 176 |         let _ = update_account_timestamp(db, account_id).await;
+     |                                                          ^^^^^ await occurs here, with `result` maybe used later
+note: required by a bound in `tokio::spawn`
+    --> C:\Users\jbenz\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-1.52.0\src\task\spawn.rs:176:21
+     |
+ 174 |     pub fn spawn<F>(future: F) -> JoinHandle<F::Output>
+     |            ----- required by a bound in this function
+ 175 |     where
+ 176 |         F: Future + Send + 'static,
+     |                     ^^^^ required by this bound in `spawn`
+
+error: future cannot be sent between threads safely
+    --> src\api.rs:2412:9
+     |
+2412 | /         tokio::spawn(async move {
+2413 | |             let error_msg = if is_xc {
+2414 | |                 let ws_clone = ws_clone_outer.clone();
+2415 | |                 let xc_err = if let Err(e) =
+...    |
+2449 | |         });
+     | |__________^ future created by async block is not `Send`
+     |
+     = help: the trait `std::marker::Sync` is not implemented for `dyn StdError`
+note: future is not `Send` as this value is used across an await
+    --> src\m3u.rs:176:58
+     |
+ 173 |     if let Err(e) = &result {
+     |                - has type `&Box<dyn StdError>` which is not `Send`
+...
+ 176 |         let _ = update_account_timestamp(db, account_id).await;
+     |                                                          ^^^^^ await occurs here, with `e` maybe used later
+note: required by a bound in `tokio::spawn`
+    --> C:\Users\jbenz\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-1.52.0\src\task\spawn.rs:176:21
+     |
+ 174 |     pub fn spawn<F>(future: F) -> JoinHandle<F::Output>
+     |            ----- required by a bound in this function
+ 175 |     where
+ 176 |         F: Future + Send + 'static,
+     |                     ^^^^ required by this bound in `spawn`
+
+error: future cannot be sent between threads safely
+    --> src\api.rs:3341:13
+     |
+3341 | /             tokio::spawn(async move {
+3342 | |                 let error_msg = if is_xc {
+3343 | |                     let ws_clone = ws_clone_outer.clone();
+3344 | |                     let xc_err = if let Err(e) =
+...    |
+3386 | |             });
+     | |______________^ future created by async block is not `Send`
+     |
+     = help: the trait `std::marker::Send` is not implemented for `dyn StdError`
+note: future is not `Send` as this value is used across an await
+    --> src\m3u.rs:176:58
+     |
+ 168 |     let result = parse_m3u_from_file(db, &file_path, account_id, is_initial, &ws_sender).await;
+     |         ------ has type `Result<(), Box<dyn StdError>>` which is not `Send`
+...
+ 176 |         let _ = update_account_timestamp(db, account_id).await;
+     |                                                          ^^^^^ await occurs here, with `result` maybe used later
+note: required by a bound in `tokio::spawn`
+    --> C:\Users\jbenz\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-1.52.0\src\task\spawn.rs:176:21
+     |
+ 174 |     pub fn spawn<F>(future: F) -> JoinHandle<F::Output>
+     |            ----- required by a bound in this function
+ 175 |     where
+ 176 |         F: Future + Send + 'static,
+     |                     ^^^^ required by this bound in `spawn`
+
+error: future cannot be sent between threads safely
+    --> src\api.rs:3341:13
+     |
+3341 | /             tokio::spawn(async move {
+3342 | |                 let error_msg = if is_xc {
+3343 | |                     let ws_clone = ws_clone_outer.clone();
+3344 | |                     let xc_err = if let Err(e) =
+...    |
+3386 | |             });
+     | |______________^ future created by async block is not `Send`
+     |
+     = help: the trait `std::marker::Sync` is not implemented for `dyn StdError`
+note: future is not `Send` as this value is used across an await
+    --> src\m3u.rs:176:58
+     |
+ 173 |     if let Err(e) = &result {
+     |                - has type `&Box<dyn StdError>` which is not `Send`
+...
+ 176 |         let _ = update_account_timestamp(db, account_id).await;
+     |                                                          ^^^^^ await occurs here, with `e` maybe used later
+note: required by a bound in `tokio::spawn`
+    --> C:\Users\jbenz\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tokio-1.52.0\src\task\spawn.rs:176:21
+     |
+ 174 |     pub fn spawn<F>(future: F) -> JoinHandle<F::Output>
+     |            ----- required by a bound in this function
+ 175 |     where
+ 176 |         F: Future + Send + 'static,
+     |                     ^^^^ required by this bound in `spawn`
+
+warning: unused import: `Write`
+ --> src\epg.rs:9:49
+  |
+9 | use std::io::{BufRead, BufReader, Cursor, Read, Write};
+  |                                                 ^^^^^
+
+warning: unused variable: `token`
+   --> src\proxy.rs:159:24
+    |
+159 |     } else if let Some(token) = query.token {
+    |                        ^^^^^ help: if this is intentional, prefix it with an underscore: `_token`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `dispatcharr-rs` (bin "dispatcharr-rs") generated 4 warnings
+error: could not compile `dispatcharr-rs` (bin "dispatcharr-rs") due to 6 previous errors; 4 warnings emitted

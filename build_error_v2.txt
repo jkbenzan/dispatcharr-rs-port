@@ -1,0 +1,133 @@
+    Checking dispatcharr-rs v0.1.0 (C:\Users\jbenz\dispatcharr-rs-port)
+warning: unused import: `TryIntoModel`
+   --> src\api.rs:130:42
+    |
+130 |     use sea_orm::{ActiveModelTrait, Set, TryIntoModel};
+    |                                          ^^^^^^^^^^^^
+    |
+    = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `std::collections::HashMap`
+  --> src\proxy.rs:19:5
+   |
+19 | use std::collections::HashMap;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0277]: `?` couldn't convert the error: `dyn StdError: std::marker::Send` is not satisfied
+   --> src\m3u.rs:603:19
+    |
+602 | /         crate::xtream_codes::get_live_categories(&client, &server_url, &username, &password)
+603 | |             .await?;
+    | |                  -^ `dyn StdError` cannot be sent between threads safely
+    | |__________________|
+    |                    this can't be annotated with `?` because it has type `Result<_, Box<dyn StdError>>`
+    |
+    = help: the trait `std::marker::Send` is not implemented for `dyn StdError`
+    = note: the question mark operation (`?`) implicitly performs a conversion on the error value using the `From` trait
+    = note: required for `std::ptr::Unique<dyn StdError>` to implement `std::marker::Send`
+note: required because it appears within the type `Box<dyn StdError>`
+   --> C:\Users\jbenz\.rustup\toolchains\stable-x86_64-pc-windows-msvc\lib/rustlib/src/rust\library\alloc\src\boxed.rs:234:12
+    |
+234 | pub struct Box<
+    |            ^^^
+    = note: required for `Box<dyn StdError + std::marker::Send + std::marker::Sync>` to implement `From<Box<dyn StdError>>`
+
+error[E0277]: `?` couldn't convert the error: `dyn StdError: std::marker::Sync` is not satisfied
+   --> src\m3u.rs:603:19
+    |
+602 | /         crate::xtream_codes::get_live_categories(&client, &server_url, &username, &password)
+603 | |             .await?;
+    | |                  -^ `dyn StdError` cannot be shared between threads safely
+    | |__________________|
+    |                    this can't be annotated with `?` because it has type `Result<_, Box<dyn StdError>>`
+    |
+    = help: the trait `std::marker::Sync` is not implemented for `dyn StdError`
+    = note: the question mark operation (`?`) implicitly performs a conversion on the error value using the `From` trait
+    = note: required for `std::ptr::Unique<dyn StdError>` to implement `std::marker::Sync`
+note: required because it appears within the type `Box<dyn StdError>`
+   --> C:\Users\jbenz\.rustup\toolchains\stable-x86_64-pc-windows-msvc\lib/rustlib/src/rust\library\alloc\src\boxed.rs:234:12
+    |
+234 | pub struct Box<
+    |            ^^^
+    = note: required for `Box<dyn StdError + std::marker::Send + std::marker::Sync>` to implement `From<Box<dyn StdError>>`
+
+error[E0277]: `?` couldn't convert the error: `dyn StdError: Sized` is not satisfied
+   --> src\m3u.rs:603:19
+    |
+602 | /         crate::xtream_codes::get_live_categories(&client, &server_url, &username, &password)
+603 | |             .await?;
+    | |                  -^ doesn't have a size known at compile-time
+    | |__________________|
+    |                    this can't be annotated with `?` because it has type `Result<_, Box<dyn StdError>>`
+    |
+    = help: the trait `Sized` is not implemented for `dyn StdError`
+    = note: the question mark operation (`?`) implicitly performs a conversion on the error value using the `From` trait
+    = note: required for `Box<dyn StdError>` to implement `StdError`
+    = note: required for `Box<dyn StdError + std::marker::Send + std::marker::Sync>` to implement `From<Box<dyn StdError>>`
+
+error[E0277]: `?` couldn't convert the error: `dyn StdError: std::marker::Send` is not satisfied
+   --> src\m3u.rs:610:96
+    |
+610 |         crate::xtream_codes::get_live_streams(&client, &server_url, &username, &password).await?;
+    |         ---------------------------------------------------------------------------------------^ `dyn StdError` cannot be sent between threads safely
+    |         |
+    |         this can't be annotated with `?` because it has type `Result<_, Box<dyn StdError>>`
+    |
+    = help: the trait `std::marker::Send` is not implemented for `dyn StdError`
+    = note: the question mark operation (`?`) implicitly performs a conversion on the error value using the `From` trait
+    = note: required for `std::ptr::Unique<dyn StdError>` to implement `std::marker::Send`
+note: required because it appears within the type `Box<dyn StdError>`
+   --> C:\Users\jbenz\.rustup\toolchains\stable-x86_64-pc-windows-msvc\lib/rustlib/src/rust\library\alloc\src\boxed.rs:234:12
+    |
+234 | pub struct Box<
+    |            ^^^
+    = note: required for `Box<dyn StdError + std::marker::Send + std::marker::Sync>` to implement `From<Box<dyn StdError>>`
+
+error[E0277]: `?` couldn't convert the error: `dyn StdError: std::marker::Sync` is not satisfied
+   --> src\m3u.rs:610:96
+    |
+610 |         crate::xtream_codes::get_live_streams(&client, &server_url, &username, &password).await?;
+    |         ---------------------------------------------------------------------------------------^ `dyn StdError` cannot be shared between threads safely
+    |         |
+    |         this can't be annotated with `?` because it has type `Result<_, Box<dyn StdError>>`
+    |
+    = help: the trait `std::marker::Sync` is not implemented for `dyn StdError`
+    = note: the question mark operation (`?`) implicitly performs a conversion on the error value using the `From` trait
+    = note: required for `std::ptr::Unique<dyn StdError>` to implement `std::marker::Sync`
+note: required because it appears within the type `Box<dyn StdError>`
+   --> C:\Users\jbenz\.rustup\toolchains\stable-x86_64-pc-windows-msvc\lib/rustlib/src/rust\library\alloc\src\boxed.rs:234:12
+    |
+234 | pub struct Box<
+    |            ^^^
+    = note: required for `Box<dyn StdError + std::marker::Send + std::marker::Sync>` to implement `From<Box<dyn StdError>>`
+
+error[E0277]: `?` couldn't convert the error: `dyn StdError: Sized` is not satisfied
+   --> src\m3u.rs:610:96
+    |
+610 |         crate::xtream_codes::get_live_streams(&client, &server_url, &username, &password).await?;
+    |         ---------------------------------------------------------------------------------------^ doesn't have a size known at compile-time
+    |         |
+    |         this can't be annotated with `?` because it has type `Result<_, Box<dyn StdError>>`
+    |
+    = help: the trait `Sized` is not implemented for `dyn StdError`
+    = note: the question mark operation (`?`) implicitly performs a conversion on the error value using the `From` trait
+    = note: required for `Box<dyn StdError>` to implement `StdError`
+    = note: required for `Box<dyn StdError + std::marker::Send + std::marker::Sync>` to implement `From<Box<dyn StdError>>`
+
+warning: unused import: `Write`
+ --> src\epg.rs:9:49
+  |
+9 | use std::io::{BufRead, BufReader, Cursor, Read, Write};
+  |                                                 ^^^^^
+
+warning: unused variable: `token`
+   --> src\proxy.rs:159:24
+    |
+159 |     } else if let Some(token) = query.token {
+    |                        ^^^^^ help: if this is intentional, prefix it with an underscore: `_token`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+For more information about this error, try `rustc --explain E0277`.
+warning: `dispatcharr-rs` (bin "dispatcharr-rs") generated 4 warnings
+error: could not compile `dispatcharr-rs` (bin "dispatcharr-rs") due to 6 previous errors; 4 warnings emitted

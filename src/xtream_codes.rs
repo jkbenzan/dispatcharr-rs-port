@@ -85,7 +85,7 @@ pub async fn get_live_categories(
     server_url: &str,
     username: &str,
     password: &str,
-) -> Result<Vec<XcCategory>, Box<dyn Error>> {
+) -> Result<Vec<XcCategory>, Box<dyn Error + Send + Sync>> {
     let url = format!("{}/player_api.php", server_url.trim_end_matches('/'));
 
     let res = client
@@ -108,7 +108,7 @@ pub async fn get_live_streams(
     server_url: &str,
     username: &str,
     password: &str,
-) -> Result<Vec<XcStream>, Box<dyn Error>> {
+) -> Result<Vec<XcStream>, Box<dyn Error + Send + Sync>> {
     let url = format!("{}/player_api.php", server_url.trim_end_matches('/'));
 
     let res = client
@@ -156,7 +156,7 @@ pub async fn get_vod_categories(
     server_url: &str,
     username: &str,
     password: &str,
-) -> Result<Vec<XcCategory>, Box<dyn Error>> {
+) -> Result<Vec<XcCategory>, Box<dyn Error + Send + Sync>> {
     let url = format!("{}/player_api.php", server_url.trim_end_matches('/'));
     let res = client
         .get(&url)
@@ -191,7 +191,7 @@ pub async fn get_vod_streams(
     server_url: &str,
     username: &str,
     password: &str,
-) -> Result<Vec<XcVodStream>, Box<dyn Error>> {
+) -> Result<Vec<XcVodStream>, Box<dyn Error + Send + Sync>> {
     let url = format!("{}/player_api.php", server_url.trim_end_matches('/'));
     let res = client
         .get(&url)
@@ -236,7 +236,7 @@ pub async fn get_series_categories(
     server_url: &str,
     username: &str,
     password: &str,
-) -> Result<Vec<XcCategory>, Box<dyn Error>> {
+) -> Result<Vec<XcCategory>, Box<dyn Error + Send + Sync>> {
     let url = format!("{}/player_api.php", server_url.trim_end_matches('/'));
     let res = client
         .get(&url)
@@ -274,7 +274,7 @@ pub async fn get_series(
     server_url: &str,
     username: &str,
     password: &str,
-) -> Result<Vec<XcSeries>, Box<dyn Error>> {
+) -> Result<Vec<XcSeries>, Box<dyn Error + Send + Sync>> {
     let url = format!("{}/player_api.php", server_url.trim_end_matches('/'));
     let res = client
         .get(&url)
@@ -323,7 +323,7 @@ pub async fn get_series_info(
     username: &str,
     password: &str,
     series_id: i32,
-) -> Result<serde_json::Value, Box<dyn Error>> {
+) -> Result<serde_json::Value, Box<dyn Error + Send + Sync>> {
     let url = format!("{}/player_api.php", server_url.trim_end_matches('/'));
     let res = client
         .get(&url)

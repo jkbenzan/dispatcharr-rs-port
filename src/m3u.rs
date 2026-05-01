@@ -142,7 +142,7 @@ pub async fn fetch_and_parse_m3u(
     account_id: i64,
     is_initial: bool,
     ws_sender: Option<Sender<Value>>,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), Box<dyn Error + Send + Sync>> {
     let mut ua_id = None;
     if let Ok(Some(acc)) = m3u_account::Entity::find_by_id(account_id).one(db).await {
         ua_id = acc.user_agent_id;
@@ -179,7 +179,7 @@ pub async fn fetch_and_parse_m3u(
     result
 }
 
-pub async fn update_account_timestamp(db: &DatabaseConnection, account_id: i64) -> Result<(), Box<dyn Error>> {
+pub async fn update_account_timestamp(db: &DatabaseConnection, account_id: i64) -> Result<(), Box<dyn Error + Send + Sync>> {
     if let Ok(Some(acc)) = m3u_account::Entity::find_by_id(account_id).one(db).await {
         let mut active: m3u_account::ActiveModel = acc.into();
         active.updated_at = Set(Some(Utc::now().into()));
@@ -188,7 +188,7 @@ pub async fn update_account_timestamp(db: &DatabaseConnection, account_id: i64) 
     Ok(())
 }
 
-async fn download_m3u_to_temp_file(url: &str, user_agent: &str) -> Result<PathBuf, Box<dyn Error>> {
+async fn download_m3u_to_temp_file(url: &str, user_agent: &str) -> Result<PathBuf, Box<dyn Error + Send + Sync>> {
     let temp_dir = std::env::temp_dir();
     let file_name = format!("playlist_{}.m3u", rand::random::<u64>());
     let file_path = temp_dir.join(file_name);
@@ -219,7 +219,7 @@ async fn parse_m3u_from_file(
     account_id: i64,
     is_initial: bool,
     ws_sender: &Option<Sender<Value>>,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), Box<dyn Error + Send + Sync>> {
 
     let filters = m3u_filter::Entity::find()
         .filter(m3u_filter::Column::M3uAccountId.eq(account_id))
@@ -557,7 +557,7 @@ pub async fn fetch_and_parse_xc(
     db: &DatabaseConnection,
     account_id: i64,
     ws_sender: Option<Sender<Value>>,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), Box<dyn Error + Send + Sync>> {
     let acc = match m3u_account::Entity::find_by_id(account_id).one(db).await {
         Ok(Some(a)) => a,
         _ => return Err("Account not found".into()),
@@ -803,7 +803,7 @@ pub async fn fetch_and_parse_xc(
 pub async fn fetch_and_parse_xc_vod(
     db: &DatabaseConnection,
     account_id: i64,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), Box<dyn Error + Send + Sync>> {
     let acc = match m3u_account::Entity::find_by_id(account_id).one(db).await {
         Ok(Some(a)) => a,
         _ => return Err("Account not found".into()),
@@ -948,7 +948,7 @@ pub async fn fetch_and_parse_xc_vod(
 pub async fn fetch_and_parse_xc_series(
     db: &DatabaseConnection,
     account_id: i64,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), Box<dyn Error + Send + Sync>> {
     let acc = match m3u_account::Entity::find_by_id(account_id).one(db).await {
         Ok(Some(a)) => a,
         _ => return Err("Account not found".into()),
@@ -1093,7 +1093,7 @@ pub async fn fetch_and_parse_xc_categories(
     db: &DatabaseConnection,
     account_id: i64,
     ws_sender: Option<Sender<Value>>,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), Box<dyn Error + Send + Sync>> {
     let acc = match m3u_account::Entity::find_by_id(account_id).one(db).await {
         Ok(Some(a)) => a,
         _ => return Err("Account not found".into()),
@@ -1341,7 +1341,7 @@ pub async fn fetch_and_parse_xc_categories(
     Ok(())
 }
 
-pub async fn rehash_all_streams(db: &DatabaseConnection) -> Result<usize, Box<dyn Error>> {
+pub async fn rehash_all_streams(db: &DatabaseConnection) -> Result<usize, Box<dyn Error + Send + Sync>> {
     use crate::entities::stream;
     use sha2::Digest;
 
