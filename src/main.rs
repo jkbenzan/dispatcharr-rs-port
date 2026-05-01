@@ -583,6 +583,8 @@ async fn main() {
                                 .await;
                             }
                         }
+                        // Ensure we update the timestamp even if it failed so we don't loop
+                        let _ = crate::m3u::update_account_timestamp(&worker_db, acc.id).await;
                     }
                 }
             }

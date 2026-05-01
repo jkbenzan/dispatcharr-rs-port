@@ -170,7 +170,22 @@ pub async fn fetch_and_parse_m3u(
     // Cleanup
     let _ = std::fs::remove_file(&file_path);
     
+    if let Err(e) = &result {
+        eprintln!("[M3U] Error during refresh for account {}: {}", account_id, e);
+        // Even if it failed, we update the timestamp so we don't loop every 5 minutes
+        let _ = update_account_timestamp(db, account_id).await;
+    }
+
     result
+}
+
+pub async fn update_account_timestamp(db: &DatabaseConnection, account_id: i64) -> Result<(), Box<dyn Error>> {
+    if let Ok(Some(acc)) = m3u_account::Entity::find_by_id(account_id).one(db).await {
+        let mut active: m3u_account::ActiveModel = acc.into();
+        active.updated_at = Set(Some(Utc::now().into()));
+        let _ = active.update(db).await;
+    }
+    Ok(())
 }
 
 async fn download_m3u_to_temp_file(url: &str, user_agent: &str) -> Result<PathBuf, Box<dyn Error>> {
