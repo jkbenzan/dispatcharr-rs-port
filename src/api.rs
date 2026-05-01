@@ -480,6 +480,42 @@ async fn get_channel_json(
 
     ch_json
 }
+#[derive(serde::Deserialize)]
+pub struct UuidsReq {
+    pub uuids: Vec<uuid::Uuid>,
+}
+
+pub async fn get_channels_by_uuids(
+    State(state): State<Arc<AppState>>,
+    _current_user: CurrentUser,
+    Json(payload): Json<UuidsReq>,
+) -> Result<Json<Value>, StatusCode> {
+    use sea_orm::{EntityTrait, QueryFilter, ColumnTrait};
+
+    let channels = crate::entities::channel::Entity::find()
+        .filter(crate::entities::channel::Column::Uuid.is_in(payload.uuids))
+        .all(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let mut result = Vec::new();
+    for channel in channels {
+        result.push(json!({
+            "id": channel.id,
+            "uuid": channel.uuid,
+            "name": channel.name,
+            "channel_number": channel.channel_number,
+            "tvg_id": channel.tvg_id,
+            "logo_id": channel.logo_id,
+            "channel_group_id": channel.channel_group_id,
+            "stream_profile_id": channel.stream_profile_id,
+            "user_level": channel.user_level,
+            "is_adult": channel.is_adult,
+        }));
+    }
+
+    Ok(Json(json!(result)))
+}
 
 pub async fn get_channels(
     State(state): State<Arc<AppState>>,
