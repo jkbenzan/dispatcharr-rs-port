@@ -24,6 +24,7 @@ pub struct ClientStat {
     pub client_id: String,
     pub user_id: Option<i64>,
     pub ip: String,
+    pub user_agent: String,
     pub connected_at: u64,
 }
 
@@ -123,7 +124,14 @@ pub async fn handle_proxy(
     State(state): State<Arc<AppState>>,
     Query(query): Query<ProxyQuery>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: axum::http::HeaderMap,
 ) -> Result<Response<Body>, StatusCode> {
+    let user_agent = headers
+        .get(axum::http::header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("Unknown")
+        .to_string();
+
     // 1. Identify User
     let mut authenticated_user: Option<user::Model> = None;
     if let (Some(u), Some(p)) = (query.u, query.p) {
@@ -299,6 +307,7 @@ pub async fn handle_proxy(
             client_id: client_id.clone(),
             user_id: authenticated_user.as_ref().map(|u| u.id),
             ip: addr.ip().to_string(),
+            user_agent: user_agent.clone(),
             connected_at: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()

@@ -119,14 +119,19 @@ pub async fn update_setting(
         .ok_or(StatusCode::NOT_FOUND)?
         .into();
 
-    s.key = Set(payload.key);
-    s.name = Set(payload.name);
-    s.value = Set(payload.value);
+    s.key = Set(payload.key.clone());
+    s.name = Set(payload.name.clone());
+    s.value = Set(payload.value.clone());
+
+    tracing::info!("💾 DB SAVE: Setting '{}' (id: {})", payload.key, id);
 
     let updated = s
         .update(&state.db)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| {
+            tracing::error!("❌ DB SAVE FAILED: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     Ok(Json(json!({
         "id": updated.id,
@@ -171,7 +176,8 @@ pub async fn initialize_core_settings(db: &sea_orm::DatabaseConnection) {
             serde_json::json!({
                 "buffer_size": 1024,
                 "retry_count": 3,
-                "stream_checker_parallel_providers": 1
+                "stream_checker_parallel_providers": 1,
+                "default_user_agent": "TiviMate/5.0.4 (Linux;Android 11) iPTV-Client"
             }),
         ),
         (
