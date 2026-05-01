@@ -585,8 +585,12 @@ async fn main() {
                                 .await;
                             }
                         }
+                        println!("[Background Worker] Finished parsing for account {}", acc.id);
                         // Ensure we update the timestamp even if it failed so we don't loop
-                        let _ = crate::m3u::update_account_timestamp(&worker_db, acc.id).await;
+                        let res = crate::m3u::update_account_timestamp(&worker_db, acc.id).await;
+                        if let Err(e) = res {
+                            eprintln!("[Background Worker] Error calling timestamp update: {}", e);
+                        }
                     }
                 }
             }

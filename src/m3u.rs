@@ -183,7 +183,10 @@ pub async fn update_account_timestamp(db: &DatabaseConnection, account_id: i64) 
     if let Ok(Some(acc)) = m3u_account::Entity::find_by_id(account_id).one(db).await {
         let mut active: m3u_account::ActiveModel = acc.into();
         active.updated_at = Set(Some(Utc::now().into()));
-        let _ = active.update(db).await;
+        match active.update(db).await {
+            Ok(_) => println!("[M3U] Successfully updated timestamp for account {}", account_id),
+            Err(e) => eprintln!("[M3U] FAILED to update timestamp for account {}: {}", account_id, e),
+        }
     }
     Ok(())
 }
