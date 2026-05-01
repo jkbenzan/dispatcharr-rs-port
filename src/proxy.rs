@@ -126,11 +126,19 @@ pub async fn handle_proxy(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     headers: axum::http::HeaderMap,
 ) -> Result<Response<Body>, StatusCode> {
-    let user_agent = headers
+    let client_user_agent = headers
         .get(axum::http::header::USER_AGENT)
         .and_then(|v| v.to_str().ok())
         .unwrap_or("Unknown")
         .to_string();
+
+    // Enhanced IP Detection (check X-Forwarded-For for Nginx/Docker)
+    let client_ip = headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|| addr.ip().to_string());
 
     // 1. Identify User
     let mut authenticated_user: Option<user::Model> = None;
@@ -255,12 +263,19 @@ pub async fn handle_proxy(
                     channel_id, target_url
                 );
 
-                let resp = state
-                    .http_client
-                    .get(target_url)
-                    .timeout(std::time::Duration::from_secs(15))
-                    .send()
-                    .await;
+                // Get the User-Agent from settings or fallback
+                let mut provider_request = state.http_client.get(target_url)
+                    .timeout(std::time::Duration::from_secs(30));
+
+                // Apply Default User Agent if configured
+                let stream_settings = crate::settings::get_setting_by_key(&state.db, "stream_settings").await;
+                if let Some(ss) = stream_settings {
+                    if let Some(ua) = ss.get("default_user_agent").and_then(|v| v.as_str()) {
+                        provider_request = provider_request.header(axum::http::header::USER_AGENT, ua);
+                    }
+                }
+
+                let resp = provider_request.send().await;
 
                 match resp {
                     Ok(r) if r.status().is_success() => {
@@ -306,8 +321,8 @@ pub async fn handle_proxy(
         stats.clients.push(ClientStat {
             client_id: client_id.clone(),
             user_id: authenticated_user.as_ref().map(|u| u.id),
-            ip: addr.ip().to_string(),
-            user_agent: user_agent.clone(),
+            ip: client_ip,
+            user_agent: client_user_agent.clone(),
             connected_at: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()

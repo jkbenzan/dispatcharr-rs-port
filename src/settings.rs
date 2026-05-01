@@ -102,6 +102,20 @@ pub async fn get_setting(
     }
 }
 
+pub async fn get_setting_by_key(db: &sea_orm::DatabaseConnection, key: &str) -> Option<serde_json::Value> {
+    use crate::entities::core_settings;
+    use sea_orm::EntityTrait;
+    use sea_orm::QueryFilter;
+    use sea_orm::ColumnTrait;
+
+    core_settings::Entity::find()
+        .filter(core_settings::Column::Key.eq(key))
+        .one(db)
+        .await
+        .unwrap_or_default()
+        .map(|s| s.value)
+}
+
 pub async fn update_setting(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
