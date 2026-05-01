@@ -553,13 +553,16 @@ async fn main() {
             {
                 for acc in accounts {
                     let refresh_interval = acc.refresh_interval as i64;
-                    if refresh_interval <= 0 {
+                    if refresh_interval <= 0 || acc.status == "fetching" {
                         continue;
                     } // 0 means manual refresh only
 
                     let last_updated = acc.updated_at.unwrap_or_else(|| Utc::now().into());
                     let threshold = last_updated.with_timezone(&Utc)
                         + chrono::Duration::hours(refresh_interval);
+
+                    println!("[Background Worker] Account {} ({}): Last Updated: {:?}, Interval: {}h, Threshold: {:?}, Now: {:?}", 
+                        acc.id, acc.name, last_updated, refresh_interval, threshold, Utc::now());
 
                     if Utc::now() >= threshold {
                         println!(
