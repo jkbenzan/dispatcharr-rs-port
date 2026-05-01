@@ -60,16 +60,18 @@ const CustomTableHeader = ({
 
   // Calculate minimum width based only on fixed-size columns
   const minTableWidth = useMemo(() => {
-    if (!headerGroups || headerGroups.length === 0) return 0;
+    if (!Array.isArray(headerGroups) || headerGroups.length === 0) return 0;
 
     const width =
-      headerGroups[0]?.headers.reduce((total, header) => {
-        // Only count columns with fixed sizes, flexible columns will expand
-        const columnSize = header.column.columnDef.size
-          ? header.getSize()
-          : header.column.columnDef.minSize || 150; // Default min for flexible columns
-        return total + columnSize;
-      }, 0) || 0;
+      headerGroups[0]?.headers && Array.isArray(headerGroups[0].headers)
+        ? headerGroups[0].headers.reduce((total, header) => {
+            // Only count columns with fixed sizes, flexible columns will expand
+            const columnSize = header.column.columnDef.size
+              ? header.getSize()
+              : header.column.columnDef.minSize || 150; // Default min for flexible columns
+            return total + columnSize;
+          }, 0)
+        : 0;
 
     return width;
   }, [headerGroups]);
@@ -91,93 +93,97 @@ const CustomTableHeader = ({
       style={headerStyle}
       data-header-pinned={headerPinned ? 'true' : 'false'}
     >
-      {getHeaderGroups().map((headerGroup) => (
-        <Box
-          className="tr"
-          key={headerGroup.id}
-          style={{
-            display: 'flex',
-            width: '100%',
-            minWidth: '100%', // Force full width
-            paddingLeft: shouldEnableDrag ? 28 : 0,
-          }}
-        >
-          {headerGroup.headers.map((header) => {
-            return (
-              <Box
-                className="th"
-                key={header.id}
-                style={{
-                  ...(header.column.columnDef.grow
-                    ? {
-                        flex: `${header.column.columnDef.grow === true ? 1 : header.column.columnDef.grow} 1 0%`,
-                        minWidth: 0,
-                        ...(header.column.columnDef.maxSize && {
-                          maxWidth: `${header.column.columnDef.maxSize}px`,
-                        }),
-                      }
-                    : {
-                        flex: `0 0 ${header.getSize ? header.getSize() : 150}px`,
-                        width: `${header.getSize ? header.getSize() : 150}px`,
-                        maxWidth: `${header.getSize ? header.getSize() : 150}px`,
-                      }),
-                  position: 'relative',
-                  // ...(tableCellProps && tableCellProps({ cell: header })),
-                }}
-              >
-                <Flex
-                  align="center"
-                  style={{
-                    ...(header.column.columnDef.style &&
-                      header.column.columnDef.style),
-                    height: '100%',
-                    width: '100%',
-                    paddingRight: header.column.getCanResize() ? '8px' : '0px', // Add padding for resize handle
-                  }}
-                >
-                  {renderHeaderCell(header)}
-                </Flex>
-                {header.column.getCanResize() && (
-                  <div
-                    onMouseDown={header.getResizeHandler()}
-                    onTouchStart={header.getResizeHandler()}
-                    className={`resizer ${
-                      header.column.getIsResizing() ? 'isResizing' : ''
-                    }`}
+      {Array.isArray(getHeaderGroups())
+        ? getHeaderGroups().map((headerGroup) => (
+            <Box
+              className="tr"
+              key={headerGroup.id}
+              style={{
+                display: 'flex',
+                width: '100%',
+                minWidth: '100%', // Force full width
+                paddingLeft: shouldEnableDrag ? 28 : 0,
+              }}
+            >
+              {Array.isArray(headerGroup.headers)
+                ? headerGroup.headers.map((header) => {
+                return (
+                  <Box
+                    className="th"
+                    key={header.id}
                     style={{
-                      position: 'absolute',
-                      right: 0,
-                      top: 0,
-                      height: '100%',
-                      width: '8px', // Make it slightly wider
-                      cursor: 'col-resize',
-                      userSelect: 'none',
-                      touchAction: 'none',
-                      backgroundColor: header.column.getIsResizing()
-                        ? '#3b82f6'
-                        : 'transparent',
-                      opacity: header.column.getIsResizing() ? 1 : 0.3, // Make it more visible by default
-                      transition: 'opacity 0.2s',
-                      zIndex: 1000, // Ensure it's on top
+                      ...(header.column.columnDef.grow
+                        ? {
+                            flex: `${header.column.columnDef.grow === true ? 1 : header.column.columnDef.grow} 1 0%`,
+                            minWidth: 0,
+                            ...(header.column.columnDef.maxSize && {
+                              maxWidth: `${header.column.columnDef.maxSize}px`,
+                            }),
+                          }
+                        : {
+                            flex: `0 0 ${header.getSize ? header.getSize() : 150}px`,
+                            width: `${header.getSize ? header.getSize() : 150}px`,
+                            maxWidth: `${header.getSize ? header.getSize() : 150}px`,
+                          }),
+                      position: 'relative',
+                      // ...(tableCellProps && tableCellProps({ cell: header })),
                     }}
-                    onMouseEnter={(e) => {
-                      e.target.style.opacity = '1';
-                      e.target.style.backgroundColor = '#6b7280';
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!header.column.getIsResizing()) {
-                        e.target.style.opacity = '0.5';
-                        e.target.style.backgroundColor = 'transparent';
-                      }
-                    }}
-                  />
-                )}
-              </Box>
-            );
-          })}
+                  >
+                    <Flex
+                      align="center"
+                      style={{
+                        ...(header.column.columnDef.style &&
+                          header.column.columnDef.style),
+                        height: '100%',
+                        width: '100%',
+                        paddingRight: header.column.getCanResize() ? '8px' : '0px', // Add padding for resize handle
+                      }}
+                    >
+                      {renderHeaderCell(header)}
+                    </Flex>
+                    {header.column.getCanResize() && (
+                      <div
+                        onMouseDown={header.getResizeHandler()}
+                        onTouchStart={header.getResizeHandler()}
+                        className={`resizer ${
+                          header.column.getIsResizing() ? 'isResizing' : ''
+                        }`}
+                        style={{
+                          position: 'absolute',
+                          right: 0,
+                          top: 0,
+                          height: '100%',
+                          width: '8px', // Make it slightly wider
+                          cursor: 'col-resize',
+                          userSelect: 'none',
+                          touchAction: 'none',
+                          backgroundColor: header.column.getIsResizing()
+                            ? '#3b82f6'
+                            : 'transparent',
+                          opacity: header.column.getIsResizing() ? 1 : 0.3, // Make it more visible by default
+                          transition: 'opacity 0.2s',
+                          zIndex: 1000, // Ensure it's on top
+                        }}
+                        onMouseEnter={(e) => {
+                          e.target.style.opacity = '1';
+                          e.target.style.backgroundColor = '#6b7280';
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!header.column.getIsResizing()) {
+                            e.target.style.opacity = '0.5';
+                            e.target.style.backgroundColor = 'transparent';
+                          }
+                        }}
+                      />
+                    )}
+                  </Box>
+                );
+              })
+            : null}
         </Box>
-      ))}
-    </Box>
+      ))
+    : null}
+</Box>
   );
 };
 

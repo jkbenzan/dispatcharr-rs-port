@@ -114,6 +114,7 @@ export const getStreamsByIds = (streamId) => {
 };
 
 export const getStreamOptions = (availableStreams, m3uAccountsMap) => {
+  if (!Array.isArray(availableStreams)) return [];
   return availableStreams.map((stream) => {
     // Get account name from our mapping if it exists
     const accountName =

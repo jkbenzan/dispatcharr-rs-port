@@ -18,11 +18,13 @@ const CustomTable = ({ table }) => {
     if (!headerGroups || headerGroups.length === 0) return 0;
 
     const width =
-      headerGroups[0]?.headers.reduce((total, header) => {
-        const colDef = header.column.columnDef;
-        const size = colDef.grow ? colDef.minSize || 0 : header.getSize();
-        return total + size;
-      }, 0) || 0;
+      headerGroups[0]?.headers && Array.isArray(headerGroups[0].headers)
+        ? headerGroups[0].headers.reduce((total, header) => {
+            const colDef = header.column.columnDef;
+            const size = colDef.grow ? colDef.minSize || 0 : header.getSize();
+            return total + size;
+          }, 0)
+        : 0;
 
     return width;
   }, [table, columnSizing]);

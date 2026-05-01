@@ -496,7 +496,10 @@ const StreamConnectionCard = ({
     'Unknown M3U Profile';
 
   // Create select options for available streams
-  const streamOptions = getStreamOptions(availableStreams, m3uAccountsMap);
+  const streamOptions = useMemo(
+    () => getStreamOptions(availableStreams, m3uAccountsMap),
+    [availableStreams, m3uAccountsMap]
+  );
 
   // Handle preview channel button click
   const handlePreviewChannel = () => {
