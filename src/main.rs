@@ -184,7 +184,7 @@ async fn main() {
     tracing::info!("🚀 BACKEND STARTING...");
 
     // Auto-download ffmpeg/ffprobe if not present
-    ensure_ffmpeg();
+    // ensure_ffmpeg();
 
     let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL missing");
     let mut opt = ConnectOptions::new(db_url);

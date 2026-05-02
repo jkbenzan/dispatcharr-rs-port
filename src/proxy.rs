@@ -39,7 +39,7 @@ pub struct Broadcaster {
     pub stream_id: Arc<RwLock<Option<String>>>,
     pub start_time: u64,
     pub total_bytes: Arc<AtomicU64>,
-    pub pumper_handle: Arc<tokio::task::JoinHandle<()>>,
+    pub pumper_handle: Arc<RwLock<Option<tokio::task::JoinHandle<()>>>>,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -102,25 +102,86 @@ pub struct ProxyQuery {
 }
 
 async fn get_stream_fallback(
-    channel_id: &str,
+    identifier: &str,
     db: &sea_orm::DatabaseConnection,
 ) -> Result<Vec<(channel_stream::Model, Option<stream::Model>)>, StatusCode> {
-    let _stream = stream::Entity::find()
-        .filter(stream::Column::StreamHash.eq(channel_id))
+    tracing::debug!("Checking fallback identifier: {}", identifier);
+    
+    // 1. Try numeric ID
+    if let Ok(id) = identifier.parse::<i64>() {
+        tracing::debug!("Searching for streams with channel_id: {}", id);
+        let streams = channel_stream::Entity::find()
+            .filter(channel_stream::Column::ChannelId.eq(id))
+            .order_by_asc(channel_stream::Column::Order)
+            .find_also_related(stream::Entity)
+            .all(db)
+            .await
+            .map_err(|e| {
+                tracing::error!("get_stream_fallback DB Error: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+        
+        if !streams.is_empty() {
+            tracing::debug!("Found {} streams for channel_id {}", streams.len(), id);
+            return Ok(streams);
+        }
+    }
+
+    // 2. Try UUID as string match on Channel
+    tracing::debug!("Searching for channel with UUID string match: {}", identifier);
+    let channel_opt = channel::Entity::find()
+        .filter(channel::Column::Uuid.eq(identifier))
         .one(db)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .ok_or(StatusCode::NOT_FOUND)?;
+        .map_err(|e| {
+            tracing::error!("get_stream_fallback DB Error: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
-    Ok(vec![(
-        channel_stream::Model {
-            id: 0,
-            channel_id: 0,
-            stream_id: _stream.id,
-            order: 0,
-        },
-        Some(_stream),
-    )])
+    if let Some(_channel) = channel_opt {
+        tracing::debug!("Found channel by UUID string: {}", _channel.name);
+        let streams = channel_stream::Entity::find()
+            .filter(channel_stream::Column::ChannelId.eq(_channel.id))
+            .order_by_asc(channel_stream::Column::Order)
+            .find_also_related(stream::Entity)
+            .all(db)
+            .await
+            .map_err(|e| {
+                tracing::error!("get_stream_fallback DB Error: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+        
+        if !streams.is_empty() {
+            return Ok(streams);
+        }
+    }
+
+    // 3. Try Stream Hash
+    tracing::debug!("Searching for stream with hash: {}", identifier);
+    let stream_opt = stream::Entity::find()
+        .filter(stream::Column::StreamHash.eq(identifier))
+        .one(db)
+        .await
+        .map_err(|e| {
+            tracing::error!("get_stream_fallback DB Error: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    if let Some(_stream) = stream_opt {
+        tracing::debug!("Found stream by hash: {}", _stream.id);
+        return Ok(vec![(
+            channel_stream::Model {
+                id: 0,
+                channel_id: 0,
+                stream_id: _stream.id,
+                order: 0,
+            },
+            Some(_stream),
+        )]);
+    }
+
+    tracing::warn!("No match found for fallback identifier {}", identifier);
+    Err(StatusCode::NOT_FOUND)
 }
 
 pub async fn handle_ts_status(State(state): State<Arc<AppState>>) -> axum::Json<serde_json::Value> {
@@ -231,13 +292,17 @@ pub async fn broadcaster_pumper(
                     if subs == 0 {
                         if no_subscribers_since.is_none() {
                             no_subscribers_since = Some(tokio::time::Instant::now());
+                            *broadcaster.status.write().await = BroadcasterStatus::Stopping;
                         } else if no_subscribers_since.unwrap().elapsed().as_secs() > settings.channel_shutdown_delay {
                             tracing::info!("Channel {} shutdown delay reached, terminating broadcaster", channel_id);
                             state.broadcasters.remove(&channel_id);
                             return;
                         }
                     } else {
-                        no_subscribers_since = None;
+                        if no_subscribers_since.is_some() {
+                            no_subscribers_since = None;
+                            *broadcaster.status.write().await = BroadcasterStatus::Streaming;
+                        }
                     }
 
                     let chunk_result = tokio::time::timeout(
@@ -252,8 +317,12 @@ pub async fn broadcaster_pumper(
                             {
                                 let mut rb = broadcaster.ring_buffer.write().await;
                                 rb.push_back(bytes.clone());
-                                while rb.iter().map(|b| b.len()).sum::<usize>() > settings.chunk_size {
-                                    rb.pop_front();
+                                // Limit ring buffer to roughly chunk_size bytes
+                                let mut current_size: usize = rb.iter().map(|b| b.len()).sum();
+                                while current_size > settings.chunk_size && !rb.is_empty() {
+                                    if let Some(front) = rb.pop_front() {
+                                        current_size -= front.len();
+                                    }
                                 }
                             }
 
@@ -310,13 +379,15 @@ pub async fn get_or_create_broadcaster(
         stream_id: Arc::new(tokio::sync::RwLock::new(None)),
         start_time: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
         total_bytes: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-        pumper_handle: Arc::new(tokio::spawn(async move {})),
+        pumper_handle: Arc::new(tokio::sync::RwLock::new(None)),
     });
 
     state.broadcasters.insert(channel_id.clone(), broadcaster.clone());
 
     let b_clone = broadcaster.clone();
-    tokio::spawn(broadcaster_pumper(channel_id, state, channel_streams, b_clone));
+    let handle = tokio::spawn(broadcaster_pumper(channel_id, state, channel_streams, b_clone));
+    
+    *broadcaster.pumper_handle.write().await = Some(handle);
 
     broadcaster
 }
@@ -325,9 +396,9 @@ pub async fn handle_proxy(
     Path(channel_id): Path<String>,
     State(state): State<Arc<AppState>>,
     Query(query): Query<ProxyQuery>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     headers: axum::http::HeaderMap,
 ) -> Result<Response<Body>, StatusCode> {
+    let addr: std::net::SocketAddr = "127.0.0.1:12345".parse().unwrap();
     let client_user_agent = headers
         .get(axum::http::header::USER_AGENT)
         .and_then(|v| v.to_str().ok())
@@ -371,10 +442,6 @@ pub async fn handle_proxy(
         }
     }
 
-    // If no auth provided, for now we might allow it but ideally we should require it
-    // Original Django app might have a default user or based on setting.
-    // For now, if no auth, we'll assign to "None" and skip limits if so configured.
-
     // 2. Enforce User Limits
     if let Some(user) = &authenticated_user {
         let limit = user.stream_limit;
@@ -413,10 +480,6 @@ pub async fn handle_proxy(
                         let mut active = state.active_streams.write().await;
                         if let Some(stats) = active.get_mut(ch_id) {
                             stats.clients.retain(|c| c.client_id != *cl_id);
-                            // The actual connection will drop when the stream finishes reading the next chunk or if we had a way to signal it.
-                            // In this simple proxy, we don't have a direct handle to the task, 
-                            // but when the client is removed from the stats, we could potentially drop the body stream.
-                            // However, the Body::from_stream is already running.
                         }
                     }
                 } else {
@@ -437,7 +500,7 @@ pub async fn handle_proxy(
             .one(&state.db)
             .await
             .map_err(|e| {
-                println!("DB Error fetching channel: {}", e);
+                tracing::error!("DB Error fetching channel: {}", e);
                 StatusCode::INTERNAL_SERVER_ERROR
             })?;
 
@@ -445,16 +508,19 @@ pub async fn handle_proxy(
             current_channel_model = Some(_channel.clone());
             let parsed_id = _channel.id;
 
-            channel_stream::Entity::find()
+            let channel_streams = channel_stream::Entity::find()
                 .filter(channel_stream::Column::ChannelId.eq(parsed_id))
                 .order_by_asc(channel_stream::Column::Order)
                 .find_also_related(stream::Entity)
                 .all(&state.db)
                 .await
                 .map_err(|e| {
-                    println!("DB Error fetching channel streams: {}", e);
+                    tracing::error!("DB Error fetching channel streams: {}", e);
                     StatusCode::INTERNAL_SERVER_ERROR
-                })?
+                })?;
+            
+            tracing::info!("Found {} streams for channel {}", channel_streams.len(), parsed_id);
+            channel_streams
         } else {
             get_stream_fallback(&channel_id, &state.db).await?
         }
@@ -463,7 +529,7 @@ pub async fn handle_proxy(
     };
 
     if channel_streams.is_empty() {
-        println!("No streams found for identifier {}", channel_id);
+        tracing::warn!("No streams found for identifier {}", channel_id);
         return Err(StatusCode::NOT_FOUND);
     }
 
