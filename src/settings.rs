@@ -23,7 +23,7 @@ pub async fn list_settings(
     State(state): State<Arc<AppState>>,
     current_user: CurrentUser,
 ) -> Result<Json<Value>, StatusCode> {
-    let is_admin = current_user.0.is_superuser || current_user.0.is_staff;
+    let is_admin = current_user.is_admin();
 
     let settings = core_settings::Entity::find()
         .all(&state.db)
@@ -53,7 +53,7 @@ pub async fn create_setting(
     current_user: CurrentUser,
     Json(payload): Json<SettingReq>,
 ) -> Result<Json<Value>, StatusCode> {
-    if !current_user.0.is_superuser && !current_user.0.is_staff {
+    if !current_user.is_admin() {
         return Err(StatusCode::FORBIDDEN);
     }
 
@@ -82,7 +82,7 @@ pub async fn get_setting(
     Path(id): Path<i64>,
     current_user: CurrentUser,
 ) -> Result<Json<Value>, StatusCode> {
-    if !current_user.0.is_superuser && !current_user.0.is_staff {
+    if !current_user.is_admin() {
         return Err(StatusCode::FORBIDDEN);
     }
 
@@ -122,7 +122,7 @@ pub async fn update_setting(
     current_user: CurrentUser,
     Json(payload): Json<SettingReq>,
 ) -> Result<Json<Value>, StatusCode> {
-    if !current_user.0.is_superuser && !current_user.0.is_staff {
+    if !current_user.is_admin() {
         return Err(StatusCode::FORBIDDEN);
     }
 

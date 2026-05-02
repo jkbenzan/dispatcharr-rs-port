@@ -714,7 +714,7 @@ pub async fn get_notifications(
     let offset = (page.saturating_sub(1)) * page_size;
 
     let user_id = current_user.0.id;
-    let is_admin = current_user.0.is_superuser || current_user.0.is_staff;
+    let is_admin = current_user.is_admin();
     let now: chrono::DateTime<chrono::FixedOffset> = chrono::Utc::now().into();
 
     let dismissals = core_notificationdismissal::Entity::find()
@@ -791,7 +791,7 @@ pub async fn get_notifications_count(
     current_user: CurrentUser,
 ) -> Json<Value> {
     let user_id = current_user.0.id;
-    let is_admin = current_user.0.is_superuser || current_user.0.is_staff;
+    let is_admin = current_user.is_admin();
     let now: chrono::DateTime<chrono::FixedOffset> = chrono::Utc::now().into();
 
     let dismissals = core_notificationdismissal::Entity::find()
@@ -847,7 +847,7 @@ pub async fn dismiss_all_notifications(
                 .add(core_systemnotification::Column::ExpiresAt.gt(now)),
         );
 
-    let is_admin = current_user.0.is_superuser || current_user.0.is_staff;
+    let is_admin = current_user.is_admin();
     if !is_admin {
         q = q.filter(core_systemnotification::Column::AdminOnly.eq(false));
     }
@@ -3459,7 +3459,7 @@ pub async fn get_comskip_config(
     State(state): State<Arc<AppState>>,
     current_user: CurrentUser,
 ) -> Result<Json<Value>, StatusCode> {
-    if !current_user.0.is_superuser && !current_user.0.is_staff {
+    if !current_user.is_admin() {
         return Err(StatusCode::FORBIDDEN);
     }
 
@@ -3492,7 +3492,7 @@ pub async fn upload_comskip_ini(
     current_user: CurrentUser,
     mut multipart: Multipart,
 ) -> Result<Json<Value>, StatusCode> {
-    if !current_user.0.is_superuser && !current_user.0.is_staff {
+    if !current_user.is_admin() {
         return Err(StatusCode::FORBIDDEN);
     }
 

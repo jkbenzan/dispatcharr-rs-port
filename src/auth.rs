@@ -22,6 +22,12 @@ pub struct Claims {
 
 pub struct CurrentUser(pub user::Model);
 
+impl CurrentUser {
+    pub fn is_admin(&self) -> bool {
+        self.0.is_superuser || self.0.is_staff || self.0.user_level >= 10
+    }
+}
+
 #[async_trait]
 impl FromRequestParts<Arc<AppState>> for CurrentUser {
     type Rejection = StatusCode;

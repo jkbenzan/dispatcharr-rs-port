@@ -83,7 +83,7 @@ pub async fn list_users(
     State(state): State<Arc<AppState>>,
     current_user: CurrentUser,
 ) -> Result<Json<Value>, StatusCode> {
-    if !current_user.0.is_superuser {
+    if !current_user.is_admin() {
         return Err(StatusCode::FORBIDDEN);
     }
     let users = user::Entity::find()
@@ -113,7 +113,7 @@ pub async fn create_user(
     current_user: CurrentUser,
     Json(payload): Json<CreateUserReq>,
 ) -> Result<Json<Value>, StatusCode> {
-    if !current_user.0.is_superuser {
+    if !current_user.is_admin() {
         return Err(StatusCode::FORBIDDEN);
     }
     let hashed = if let Some(p) = payload.password {
@@ -182,7 +182,7 @@ pub async fn get_user(
     Path(id): Path<i64>,
     current_user: CurrentUser,
 ) -> Result<Json<Value>, StatusCode> {
-    if !current_user.0.is_superuser {
+    if !current_user.is_admin() {
         return Err(StatusCode::FORBIDDEN);
     }
     let u = user::Entity::find_by_id(id)
@@ -211,7 +211,7 @@ pub async fn update_user(
     current_user: CurrentUser,
     Json(payload): Json<UpdateUserReq>,
 ) -> Result<Json<Value>, StatusCode> {
-    if !current_user.0.is_superuser {
+    if !current_user.is_admin() {
         return Err(StatusCode::FORBIDDEN);
     }
     let mut u: user::ActiveModel = user::Entity::find_by_id(id)
@@ -300,7 +300,7 @@ pub async fn delete_user(
     Path(id): Path<i64>,
     current_user: CurrentUser,
 ) -> Result<StatusCode, StatusCode> {
-    if !current_user.0.is_superuser {
+    if !current_user.is_admin() {
         return Err(StatusCode::FORBIDDEN);
     }
     user::Entity::delete_by_id(id)
@@ -382,7 +382,7 @@ pub async fn list_groups(
     State(state): State<Arc<AppState>>,
     current_user: CurrentUser,
 ) -> Result<Json<Value>, StatusCode> {
-    if !current_user.0.is_superuser {
+    if !current_user.is_admin() {
         return Err(StatusCode::FORBIDDEN);
     }
 
@@ -416,7 +416,7 @@ pub async fn create_group(
     current_user: CurrentUser,
     Json(payload): Json<GroupReq>,
 ) -> Result<Json<Value>, StatusCode> {
-    if !current_user.0.is_superuser {
+    if !current_user.is_admin() {
         return Err(StatusCode::FORBIDDEN);
     }
 
@@ -449,7 +449,7 @@ pub async fn get_group(
     Path(id): Path<i32>,
     current_user: CurrentUser,
 ) -> Result<Json<Value>, StatusCode> {
-    if !current_user.0.is_superuser {
+    if !current_user.is_admin() {
         return Err(StatusCode::FORBIDDEN);
     }
 
@@ -483,7 +483,7 @@ pub async fn update_group(
     current_user: CurrentUser,
     Json(payload): Json<GroupReq>,
 ) -> Result<Json<Value>, StatusCode> {
-    if !current_user.0.is_superuser {
+    if !current_user.is_admin() {
         return Err(StatusCode::FORBIDDEN);
     }
 
@@ -524,7 +524,7 @@ pub async fn delete_group(
     Path(id): Path<i32>,
     current_user: CurrentUser,
 ) -> Result<StatusCode, StatusCode> {
-    if !current_user.0.is_superuser {
+    if !current_user.is_admin() {
         return Err(StatusCode::FORBIDDEN);
     }
     auth_group::Entity::delete_by_id(id)
@@ -576,7 +576,7 @@ pub async fn generate_api_key(
     Json(payload): Json<ApiKeyReq>,
 ) -> Result<Json<Value>, StatusCode> {
     let target_user_id = payload.user_id.unwrap_or(current_user.0.id);
-    if target_user_id != current_user.0.id && !current_user.0.is_superuser {
+    if target_user_id != current_user.0.id && !current_user.is_admin() {
         return Err(StatusCode::FORBIDDEN);
     }
 
@@ -604,7 +604,7 @@ pub async fn revoke_api_key(
     Json(payload): Json<ApiKeyReq>,
 ) -> Result<Json<Value>, StatusCode> {
     let target_user_id = payload.user_id.unwrap_or(current_user.0.id);
-    if target_user_id != current_user.0.id && !current_user.0.is_superuser {
+    if target_user_id != current_user.0.id && !current_user.is_admin() {
         return Err(StatusCode::FORBIDDEN);
     }
 
