@@ -510,7 +510,14 @@ pub async fn test_stream(
     State(state): State<Arc<AppState>>,
     Path(stream_id): Path<i64>,
 ) -> impl IntoResponse {
-    match check_single_stream(&state, stream_id, None).await {
+    let settings = crate::settings::get_maintenance_settings(&state.db).await;
+    let duration = if settings.extended_test_enabled {
+        Some(settings.extended_test_duration_seconds)
+    } else {
+        None
+    };
+
+    match check_single_stream(&state, stream_id, duration).await {
         Ok(stream_data) => (
             StatusCode::OK,
             Json(json!({ "success": true, "stream": stream_data })),
@@ -521,6 +528,7 @@ pub async fn test_stream(
         ),
     }
 }
+
 
 #[derive(Deserialize)]
 pub struct BulkCheckRequest {
@@ -1001,22 +1009,17 @@ pub async fn run_automated_maintenance(state: Arc<AppState>) -> Result<(), Box<d
     }
 
     info!("[Maintenance] Found {} stale streams to check.", stale_streams.len());
+
     
     let mut affected_channels = std::collections::HashSet::new();
     let mut success_count = 0;
     let mut failure_count = 0;
 
-    let test_duration = if settings.extended_test_enabled {
-        Some(settings.extended_test_duration_seconds)
-    } else {
-        None
-    };
-
-
     for s in stale_streams {
+
         let stream_id = s.id;
-        // Run check
-        match check_single_stream(&state, stream_id, test_duration).await {
+        // Run check (always use default short test for automated background checks)
+        match check_single_stream(&state, stream_id, None).await {
             Ok(_) => {
                 success_count += 1;
             }
