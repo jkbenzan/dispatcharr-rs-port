@@ -338,3 +338,54 @@ pub async fn get_http_client(db: &sea_orm::DatabaseConnection) -> reqwest::Clien
 
     builder.build().expect("Failed to build reqwest client")
 }
+
+#[derive(Debug, Clone)]
+pub struct ProxySettings {
+    pub buffering_timeout: u64,
+    pub buffering_speed: f64,
+    pub channel_shutdown_delay: u64,
+    pub max_retries: u32,
+    pub chunk_size: usize,
+}
+
+impl Default for ProxySettings {
+    fn default() -> Self {
+        Self {
+            buffering_timeout: 10,
+            buffering_speed: 1.0,
+            channel_shutdown_delay: 60,
+            max_retries: 3,
+            chunk_size: 1024 * 1024, // 1MB
+        }
+    }
+}
+
+pub async fn get_proxy_settings(db: &sea_orm::DatabaseConnection) -> ProxySettings {
+    let setting = crate::entities::core_settings::Entity::find()
+        .filter(crate::entities::core_settings::Column::Key.eq("proxy_settings"))
+        .one(db)
+        .await
+        .unwrap_or_default();
+
+    let mut proxy_settings = ProxySettings::default();
+
+    if let Some(s) = setting {
+        if let Some(timeout) = s.value.get("buffering_timeout").and_then(|v| v.as_u64()) {
+            proxy_settings.buffering_timeout = timeout;
+        }
+        if let Some(speed) = s.value.get("buffering_speed").and_then(|v| v.as_f64()) {
+            proxy_settings.buffering_speed = speed;
+        }
+        if let Some(delay) = s.value.get("channel_shutdown_delay").and_then(|v| v.as_u64()) {
+            proxy_settings.channel_shutdown_delay = delay;
+        }
+        if let Some(retries) = s.value.get("max_retries").and_then(|v| v.as_u64()) {
+            proxy_settings.max_retries = retries as u32;
+        }
+        if let Some(chunk) = s.value.get("chunk_size").and_then(|v| v.as_u64()) {
+            proxy_settings.chunk_size = chunk as usize;
+        }
+    }
+
+    proxy_settings
+}

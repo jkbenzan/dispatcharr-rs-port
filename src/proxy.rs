@@ -12,12 +12,35 @@ use axum::{
 use futures_util::StreamExt;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use serde::{Serialize, Deserialize};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::collections::{HashMap, VecDeque};
+use std::net::SocketAddr;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tokio::sync::{broadcast, RwLock};
 use uuid::Uuid;
-use std::collections::HashMap;
-use std::net::SocketAddr;
+
+#[derive(Clone, Copy, PartialEq, Debug, Serialize)]
+pub enum BroadcasterStatus {
+    Connecting,
+    Streaming,
+    Buffering,
+    Failover,
+    Stopping,
+}
+
+pub struct Broadcaster {
+    pub channel_id: String,
+    pub tx: broadcast::Sender<bytes::Bytes>,
+    pub subscriber_count: Arc<AtomicUsize>,
+    pub ring_buffer: Arc<RwLock<VecDeque<bytes::Bytes>>>,
+    pub status: Arc<RwLock<BroadcasterStatus>>,
+    pub provider_ua: Arc<RwLock<String>>,
+    pub stream_id: Arc<RwLock<Option<String>>>,
+    pub start_time: u64,
+    pub total_bytes: Arc<AtomicU64>,
+    pub pumper_handle: Arc<tokio::task::JoinHandle<()>>,
+}
 
 #[derive(Serialize, Clone, Debug)]
 pub struct ClientStat {
@@ -61,6 +84,11 @@ impl Drop for ClientDropGuard {
                 if stats.clients.is_empty() {
                     active.remove(&channel_id);
                 }
+            }
+            
+            // Decrement subscriber count
+            if let Some(b) = state.broadcasters.get(&channel_id) {
+                b.subscriber_count.fetch_sub(1, Ordering::SeqCst);
             }
         });
     }
@@ -137,6 +165,160 @@ pub async fn handle_ts_status(State(state): State<Arc<AppState>>) -> axum::Json<
 
 pub async fn handle_vod_stats() -> axum::Json<serde_json::Value> {
     axum::Json(serde_json::json!([]))
+}
+
+pub async fn broadcaster_pumper(
+    channel_id: String,
+    state: Arc<AppState>,
+    channel_streams: Vec<(channel_stream::Model, Option<stream::Model>)>,
+    broadcaster: Arc<Broadcaster>,
+) {
+    let settings = crate::settings::get_proxy_settings(&state.db).await;
+    let mut retry_count = 0;
+    let mut stream_index = 0;
+    
+    loop {
+        if stream_index >= channel_streams.len() {
+            tracing::error!("All streams failed for channel {}", channel_id);
+            *broadcaster.status.write().await = BroadcasterStatus::Failover;
+            break;
+        }
+
+        let (_cs, stream_opt) = &channel_streams[stream_index];
+        let stream = match stream_opt {
+            Some(s) => s,
+            None => {
+                stream_index += 1;
+                continue;
+            }
+        };
+
+        let target_url = match &stream.url {
+            Some(url) => url,
+            None => {
+                stream_index += 1;
+                continue;
+            }
+        };
+
+        *broadcaster.stream_id.write().await = Some(stream.id.to_string());
+        *broadcaster.status.write().await = BroadcasterStatus::Connecting;
+
+        let mut provider_request = state.http_client.get(target_url);
+        let stream_settings = crate::settings::get_setting_by_key(&state.db, "stream_settings").await;
+        if let Some(ss) = stream_settings {
+            if let Some(ua) = ss.get("default_user_agent").and_then(|v| v.as_str()) {
+                provider_request = provider_request.header(axum::http::header::USER_AGENT, ua);
+                *broadcaster.provider_ua.write().await = ua.to_string();
+            }
+        }
+
+        tracing::info!("📡 Broadcaster connecting to: {}", target_url);
+
+        let connect_result = tokio::time::timeout(
+            std::time::Duration::from_secs(settings.buffering_timeout),
+            provider_request.send()
+        ).await;
+
+        match connect_result {
+            Ok(Ok(resp)) if resp.status().is_success() => {
+                *broadcaster.status.write().await = BroadcasterStatus::Streaming;
+                let mut bytes_stream = resp.bytes_stream();
+                let mut no_subscribers_since: Option<tokio::time::Instant> = None;
+
+                loop {
+                    let subs = broadcaster.subscriber_count.load(Ordering::Relaxed);
+                    if subs == 0 {
+                        if no_subscribers_since.is_none() {
+                            no_subscribers_since = Some(tokio::time::Instant::now());
+                        } else if no_subscribers_since.unwrap().elapsed().as_secs() > settings.channel_shutdown_delay {
+                            tracing::info!("Channel {} shutdown delay reached, terminating broadcaster", channel_id);
+                            state.broadcasters.remove(&channel_id);
+                            return;
+                        }
+                    } else {
+                        no_subscribers_since = None;
+                    }
+
+                    let chunk_result = tokio::time::timeout(
+                        std::time::Duration::from_secs(settings.buffering_timeout),
+                        bytes_stream.next()
+                    ).await;
+
+                    match chunk_result {
+                        Ok(Some(Ok(bytes))) => {
+                            broadcaster.total_bytes.fetch_add(bytes.len() as u64, Ordering::Relaxed);
+                            
+                            {
+                                let mut rb = broadcaster.ring_buffer.write().await;
+                                rb.push_back(bytes.clone());
+                                while rb.iter().map(|b| b.len()).sum::<usize>() > settings.chunk_size {
+                                    rb.pop_front();
+                                }
+                            }
+
+                            let _ = broadcaster.tx.send(bytes);
+                        }
+                        Ok(Some(Err(e))) => {
+                            tracing::warn!("Stream read error for {}: {}", target_url, e);
+                            break;
+                        }
+                        Ok(None) => {
+                            tracing::info!("Stream {} ended naturally", target_url);
+                            break;
+                        }
+                        Err(_) => {
+                            tracing::warn!("Stream {} buffering timeout!", target_url);
+                            *broadcaster.status.write().await = BroadcasterStatus::Buffering;
+                            break;
+                        }
+                    }
+                }
+            }
+            _ => {
+                tracing::warn!("Failed to connect to {}, triggering failover", target_url);
+            }
+        }
+
+        retry_count += 1;
+        if retry_count >= settings.max_retries {
+            retry_count = 0;
+            stream_index += 1;
+        }
+    }
+    
+    state.broadcasters.remove(&channel_id);
+}
+
+pub async fn get_or_create_broadcaster(
+    channel_id: String,
+    state: Arc<AppState>,
+    channel_streams: Vec<(channel_stream::Model, Option<stream::Model>)>,
+) -> Arc<Broadcaster> {
+    if let Some(b) = state.broadcasters.get(&channel_id) {
+        return b.clone();
+    }
+
+    let (tx, _) = tokio::sync::broadcast::channel(1024);
+    let broadcaster = Arc::new(Broadcaster {
+        channel_id: channel_id.clone(),
+        tx,
+        subscriber_count: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+        ring_buffer: Arc::new(tokio::sync::RwLock::new(std::collections::VecDeque::new())),
+        status: Arc::new(tokio::sync::RwLock::new(BroadcasterStatus::Connecting)),
+        provider_ua: Arc::new(tokio::sync::RwLock::new(String::new())),
+        stream_id: Arc::new(tokio::sync::RwLock::new(None)),
+        start_time: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
+        total_bytes: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        pumper_handle: Arc::new(tokio::spawn(async move {})),
+    });
+
+    state.broadcasters.insert(channel_id.clone(), broadcaster.clone());
+
+    let b_clone = broadcaster.clone();
+    tokio::spawn(broadcaster_pumper(channel_id, state, channel_streams, b_clone));
+
+    broadcaster
 }
 
 pub async fn handle_proxy(
@@ -285,69 +467,10 @@ pub async fn handle_proxy(
         return Err(StatusCode::NOT_FOUND);
     }
 
-    let mut successful_resp = None;
-    let mut ua_log = "Default".to_string();
-
-    for (_cs, stream_opt) in &channel_streams {
-        if let Some(stream) = stream_opt {
-            if let Some(target_url) = &stream.url {
-                println!(
-                    "▶️ Proxying Stream Identifier: {} -> {}",
-                    channel_id, target_url
-                );
-
-                // Get the User-Agent from settings or fallback
-                let mut provider_request = state.http_client.get(target_url); // No request-level timeout to allow streaming
-
-                // Apply Default User Agent if configured
-                let stream_settings = crate::settings::get_setting_by_key(&state.db, "stream_settings").await;
-                if let Some(ss) = stream_settings {
-                    if let Some(ua) = ss.get("default_user_agent").and_then(|v| v.as_str()) {
-                        provider_request = provider_request.header(axum::http::header::USER_AGENT, ua);
-                        ua_log = ua.to_string();
-                    }
-                }
-                tracing::info!("📡 FETCH: {} (User-Agent: {})", target_url, ua_log);
-
-                match provider_request.send().await {
-                    Ok(resp) if resp.status().is_success() => {
-                        // Record Event: Stream Started
-                        let channel_name = current_channel_model.as_ref().map(|c| c.name.clone());
-                        let _ = crate::events::record_event(
-                            &state.db,
-                            "channel_start",
-                            channel_name,
-                            serde_json::json!({
-                                "channel_id": current_channel_model.as_ref().map(|c| c.id),
-                                "ip_address": client_ip.clone(),
-                                "user_agent": client_user_agent.clone(),
-                                "user": authenticated_user.as_ref().map(|u| u.username.clone()).unwrap_or("Anonymous".to_string())
-                            })
-                        ).await;
-
-                        successful_resp = Some(resp);
-                        break;
-                    }
-                    Ok(r) => {
-                        println!(
-                            "⚠️ Stream {} returned status {}, trying next",
-                            target_url,
-                            r.status()
-                        );
-                    }
-                    Err(e) => {
-                        println!("⚠️ Stream {} failed: {}, trying next", target_url, e);
-                    }
-                }
-            }
-        }
-    }
-
-    let resp = successful_resp.ok_or(StatusCode::BAD_GATEWAY)?;
-
+    let broadcaster = get_or_create_broadcaster(channel_id.clone(), state.clone(), channel_streams.clone()).await;
+    
     // 5. Zero-Copy Byte Streaming
     let client_id = Uuid::new_v4().to_string();
-    let bytes_counter;
     
     // Fetch M3U Account info for the profile name
     let mut m3u_profile_data = None;
@@ -360,12 +483,18 @@ pub async fn handle_proxy(
         }
     }
 
+    let provider_user_agent = {
+        let ua = broadcaster.provider_ua.read().await;
+        ua.clone()
+    };
+
     {
         let mut active = state.active_streams.write().await;
         let stats = active
             .entry(channel_id.clone())
             .or_insert_with(|| {
                 let profile_id = current_channel_model
+                    .as_ref()
                     .and_then(|ch| ch.stream_profile_id)
                     .map(|id| id.to_string())
                     .unwrap_or_else(|| "Proxy".to_string());
@@ -374,15 +503,12 @@ pub async fn handle_proxy(
                     channel_id: channel_id.clone(),
                     stream_id: channel_streams[0].0.stream_id.to_string(),
                     stream_profile: profile_id,
-                    provider_user_agent: ua_log.clone(),
-                uptime: 0,
-                total_bytes: Arc::new(AtomicU64::new(0)),
-                clients: Vec::new(),
-                start_time: SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs(),
-                m3u_profile: m3u_profile_data,
+                    provider_user_agent: provider_user_agent,
+                    uptime: 0,
+                    total_bytes: broadcaster.total_bytes.clone(),
+                    clients: Vec::new(),
+                    start_time: broadcaster.start_time,
+                    m3u_profile: m3u_profile_data,
                 }
             });
             
@@ -394,38 +520,49 @@ pub async fn handle_proxy(
         stats.clients.push(ClientStat {
             client_id: client_id.clone(),
             user_id: authenticated_user.as_ref().map(|u| u.id),
-            ip_address: client_ip,
+            ip_address: client_ip.clone(),
             user_agent: client_user_agent.clone(),
             connected_at: now,
             connection_duration: 0.0,
             connected_since: 0.0,
         });
-        bytes_counter = stats.total_bytes.clone();
     }
 
-    let state_clone = state.clone();
-    let channel_id_clone = channel_id.clone();
-    let client_id_clone = client_id.clone();
+    broadcaster.subscriber_count.fetch_add(1, Ordering::SeqCst);
 
-    let stream = resp.bytes_stream().map(move |result| {
-        // Periodically check if this client is still in the active list (for termination)
-        // This is a bit expensive but allows us to terminate streams remotely.
-        // We'll check every chunk, or maybe we should only check if we had a "dirty" flag.
-        // For now, let's just use the guard to increment bytes.
-        if let Ok(bytes) = &result {
-            bytes_counter.fetch_add(bytes.len() as u64, Ordering::Relaxed);
-        }
-        result.map_err(std::io::Error::other)
+    // Record Event: Stream Started
+    let channel_name = current_channel_model.as_ref().map(|c| c.name.clone());
+    let _ = crate::events::record_event(
+        &state.db,
+        "channel_start",
+        channel_name,
+        serde_json::json!({
+            "channel_id": current_channel_model.as_ref().map(|c| c.id),
+            "ip_address": client_ip.clone(),
+            "user_agent": client_user_agent.clone(),
+            "user": authenticated_user.as_ref().map(|u| u.username.clone()).unwrap_or("Anonymous".to_string())
+        })
+    ).await;
+
+    let guard = Arc::new(ClientDropGuard {
+        channel_id: channel_id.clone(),
+        client_id: client_id.clone(),
+        state: state.clone(),
     });
 
-    // Wrap the stream in a way that checks for termination
+    let rx = broadcaster.tx.subscribe();
+    let ring_data = {
+        let rb = broadcaster.ring_buffer.read().await;
+        rb.clone()
+    };
+    
     let state_for_stream = state.clone();
     let channel_id_for_stream = channel_id.clone();
     let client_id_for_stream = client_id.clone();
-
-    let monitored_stream = futures_util::stream::unfold(
-        (stream, state_for_stream, channel_id_for_stream, client_id_for_stream),
-        move |(mut s, st, ch, cl)| async move {
+    
+    let stream = futures_util::stream::unfold(
+        (ring_data.into_iter(), rx, state_for_stream, channel_id_for_stream, client_id_for_stream),
+        move |(mut ring_iter, mut rx, st, ch, cl)| async move {
             // Check if client is still active
             {
                 let active = st.active_streams.read().await;
@@ -439,21 +576,21 @@ pub async fn handle_proxy(
                 }
             }
 
-            match s.next().await {
-                Some(res) => Some((res, (s, st, ch, cl))),
-                None => None,
+            if let Some(bytes) = ring_iter.next() {
+                return Some((Ok::<_, std::io::Error>(bytes), (ring_iter, rx, st, ch, cl)));
             }
-        },
+            
+            loop {
+                match rx.recv().await {
+                    Ok(bytes) => return Some((Ok(bytes), (ring_iter, rx, st, ch, cl))),
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => return None,
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                }
+            }
+        }
     );
 
-    let guard = Arc::new(ClientDropGuard {
-        channel_id: channel_id_clone,
-        client_id: client_id_clone,
-        state: state_clone,
-    });
-
-    // Use a wrapper body that holds the guard
-    let final_stream = monitored_stream.map(move |res| {
+    let final_stream = stream.map(move |res| {
         let _g = &guard;
         res
     });

@@ -119,6 +119,7 @@ pub struct AppState {
     pub ws_sender: tokio::sync::broadcast::Sender<serde_json::Value>,
     pub active_streams:
         Arc<tokio::sync::RwLock<std::collections::HashMap<String, crate::proxy::ChannelStats>>>,
+    pub broadcasters: Arc<dashmap::DashMap<String, Arc<crate::proxy::Broadcaster>>>,
     pub bulk_check_status:
         Arc<tokio::sync::RwLock<crate::stream_checker::checker::BulkCheckStatus>>,
 }
@@ -206,6 +207,7 @@ async fn main() {
         http_client,
         ws_sender,
         active_streams: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
+        broadcasters: Arc::new(dashmap::DashMap::new()),
         bulk_check_status: Arc::new(tokio::sync::RwLock::new(Default::default())),
     });
 
