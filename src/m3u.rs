@@ -520,7 +520,7 @@ async fn parse_m3u_from_file(
     // --- End Stale Stream Cleanup ---
 
     if let Ok(Some(acc)) = m3u_account::Entity::find_by_id(account_id).one(db).await {
-        let mut active: m3u_account::ActiveModel = acc.into();
+        let mut active: m3u_account::ActiveModel = acc.clone().into();
         if is_initial {
             active.status = Set("pending_setup".to_string());
             active.last_message = Set(Some(
@@ -540,6 +540,16 @@ async fn parse_m3u_from_file(
             active.status = Set("success".to_string());
             active.last_message = Set(Some("Successfully synced!".to_string()));
             let _ = active.clone().update(db).await;
+
+            let _ = crate::events::record_event(
+                db,
+                "m3u_refresh",
+                Some(acc.name.clone()),
+                serde_json::json!({
+                    "account_id": account_id,
+                    "status": "success"
+                })
+            ).await;
             broadcast_progress(
                 &ws_sender,
                 account_id,
@@ -938,11 +948,22 @@ pub async fn fetch_and_parse_xc_vod(
 
     // Update Status
     if let Ok(Some(acc)) = m3u_account::Entity::find_by_id(account_id).one(db).await {
-        let mut final_active: m3u_account::ActiveModel = acc.into();
+        let mut final_active: m3u_account::ActiveModel = acc.clone().into();
         final_active.status = Set("success".to_string());
         final_active.last_message = Set(Some("Successfully synced VOD!".to_string()));
         final_active.updated_at = Set(Some(Utc::now().into()));
         let _ = final_active.update(db).await;
+
+        let _ = crate::events::record_event(
+            db,
+            "m3u_refresh",
+            Some(acc.name.clone()),
+            serde_json::json!({
+                "account_id": account_id,
+                "status": "success",
+                "type": "xc"
+            })
+        ).await;
     }
 
     Ok(())

@@ -173,11 +173,21 @@ pub async fn refresh_all_guides(
     let _ = std::fs::remove_file(&file_path);
 
     if let Ok(Some(src)) = epg_source::Entity::find_by_id(source_id).one(db).await {
-        let mut active: epg_source::ActiveModel = src.into();
+        let mut active: epg_source::ActiveModel = src.clone().into();
         active.status = Set("success".to_string());
         active.last_message = Set(Some("Successfully synced XMLTV!".to_string()));
         active.updated_at = Set(Some(Utc::now().into()));
         let _ = active.update(db).await;
+
+        let _ = crate::events::record_event(
+            db,
+            "epg_refresh",
+            Some(src.name.clone()),
+            serde_json::json!({
+                "source_id": source_id,
+                "status": "success"
+            })
+        ).await;
     }
 
     broadcast("success", "Successfully synced XMLTV!");

@@ -17,6 +17,7 @@ mod auth;
 mod channel_sync;
 mod entities;
 mod epg;
+mod events;
 mod m3u;
 mod outputs;
 mod proxy;
@@ -497,7 +498,7 @@ async fn main() {
             "/api/channels/streams/",
             get(api::get_streams).post(api::create_stream),
         )
-        .route("/api/core/system-events/", get(api::get_paginated_object))
+        .route("/api/core/system-events/", get(api::get_system_events))
         .route("/api/connect/integrations/", get(api::get_paginated_object))
         .route("/api/plugins/plugins/", get(api::get_paginated_object))
         // --- OUTPUTS & PROVISIONING ---

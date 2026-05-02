@@ -207,6 +207,32 @@ pub async fn get_paginated_object() -> Json<Value> {
     }))
 }
 
+pub async fn get_system_events(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Json<Value> {
+    let limit: u64 = params.get("limit").and_then(|l| l.parse().ok()).unwrap_or(100);
+    let offset: u64 = params.get("offset").and_then(|o| o.parse().ok()).unwrap_or(0);
+
+    let count = core_systemevent::Entity::find().count(&state.db).await.unwrap_or(0);
+    let events = core_systemevent::Entity::find()
+        .order_by_desc(core_systemevent::Column::Timestamp)
+        .limit(limit)
+        .offset(offset)
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+
+    Json(json!({
+        "count": count,
+        "total": count,
+        "next": null,
+        "previous": null,
+        "events": events,
+        "results": events
+    }))
+}
+
 // --------------------------------------------------------
 // CORE SETTINGS & USER STATE
 // Solves the `TypeError: Cannot read properties of undefined (reading 'length')`
@@ -227,7 +253,7 @@ pub async fn get_core_settings() -> Json<Value> {
 
 use crate::entities::{
     channel, channel_group, channel_profile, core_notificationdismissal,
-    core_settings, core_streamprofile, core_systemnotification, core_useragent, epg_data,
+    core_settings, core_streamprofile, core_systemevent, core_systemnotification, core_useragent, epg_data,
     epg_program, epg_source, m3u_account, stream, user,
 };
 use crate::{

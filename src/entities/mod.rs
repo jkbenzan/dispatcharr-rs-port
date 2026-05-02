@@ -10,6 +10,7 @@ pub mod channel_stream;
 pub mod core_notificationdismissal;
 pub mod core_settings;
 pub mod core_streamprofile;
+pub mod core_systemevent;
 pub mod core_systemnotification;
 pub mod core_useragent;
 pub mod epg_data;

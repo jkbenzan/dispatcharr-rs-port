@@ -307,14 +307,25 @@ pub async fn handle_proxy(
                         ua_log = ua.to_string();
                     }
                 }
-
                 tracing::info!("📡 FETCH: {} (User-Agent: {})", target_url, ua_log);
 
-                let resp = provider_request.send().await;
+                match provider_request.send().await {
+                    Ok(resp) if resp.status().is_success() => {
+                        // Record Event: Stream Started
+                        let channel_name = current_channel_model.as_ref().map(|c| c.name.clone());
+                        let _ = crate::events::record_event(
+                            &state.db,
+                            "channel_start",
+                            channel_name,
+                            serde_json::json!({
+                                "channel_id": current_channel_model.as_ref().map(|c| c.id),
+                                "ip_address": client_ip.clone(),
+                                "user_agent": client_user_agent.clone(),
+                                "user": authenticated_user.as_ref().map(|u| u.username.clone()).unwrap_or("Anonymous".to_string())
+                            })
+                        ).await;
 
-                match resp {
-                    Ok(r) if r.status().is_success() => {
-                        successful_resp = Some(r);
+                        successful_resp = Some(resp);
                         break;
                     }
                     Ok(r) => {
