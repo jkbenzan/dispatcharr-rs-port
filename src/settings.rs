@@ -11,6 +11,23 @@ use std::sync::Arc;
 use crate::auth::CurrentUser;
 use crate::entities::core_settings;
 use crate::AppState;
+use sea_orm::{ColumnTrait, DatabaseConnection, QueryFilter};
+
+pub async fn get_maintenance_settings(db: &DatabaseConnection) -> crate::background::MaintenanceSettings {
+    let s = core_settings::Entity::find()
+        .filter(core_settings::Column::Key.eq("maintenance_settings"))
+        .one(db)
+        .await;
+
+    if let Ok(Some(s)) = s {
+        if let Ok(settings) = serde_json::from_value(s.value) {
+            return settings;
+        }
+    }
+
+    crate::background::MaintenanceSettings::default()
+}
+
 
 #[derive(Deserialize)]
 pub struct SettingReq {
@@ -155,8 +172,8 @@ pub async fn update_setting(
     })))
 }
 
-use sea_orm::QueryFilter;
-use sea_orm::ColumnTrait;
+
+
 
 pub async fn initialize_core_settings(db: &sea_orm::DatabaseConnection) {
     let defaults = vec![

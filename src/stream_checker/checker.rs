@@ -881,36 +881,23 @@ fn evaluate_rule(rule: &stream_sorting_rule::Model, stream_stats: &Value) -> boo
     }
 }
 
-pub async fn bulk_sort_streams(
-    State(state): State<Arc<AppState>>,
-    Json(payload): Json<BulkSortRequest>,
-) -> impl IntoResponse {
-    let rules = match stream_sorting_rule::Entity::find()
+pub async fn internal_bulk_sort_streams(
+    state: &Arc<AppState>,
+    payload: BulkSortRequest,
+) -> Result<i32, Box<dyn std::error::Error + Send + Sync>> {
+    let rules = stream_sorting_rule::Entity::find()
         .order_by_asc(stream_sorting_rule::Column::Priority)
         .all(&state.db)
-        .await
-    {
-        Ok(r) => r,
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"success": false, "message": "Failed to load rules"})),
-            )
-        }
-    };
+        .await?;
 
     let mut sorted_channels = 0;
 
     for channel_id in payload.channel_ids {
         // Find all channel streams
-        let channel_streams = match channel_stream::Entity::find()
+        let channel_streams = channel_stream::Entity::find()
             .filter(channel_stream::Column::ChannelId.eq(channel_id))
             .all(&state.db)
-            .await
-        {
-            Ok(cs) => cs,
-            Err(_) => continue,
-        };
+            .await?;
 
         let mut scored_streams: Vec<(channel_stream::Model, i32)> = Vec::new();
 
@@ -947,11 +934,113 @@ pub async fn bulk_sort_streams(
         sorted_channels += 1;
     }
 
-    (
-        StatusCode::OK,
-        Json(json!({
-            "success": true,
-            "message": format!("Successfully sorted {} channels.", sorted_channels)
-        })),
-    )
+    Ok(sorted_channels)
+}
+
+pub async fn bulk_sort_streams(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<BulkSortRequest>,
+) -> impl IntoResponse {
+    match internal_bulk_sort_streams(&state, payload).await {
+        Ok(count) => (
+            StatusCode::OK,
+            Json(json!({
+                "success": true,
+                "message": format!("Successfully sorted {} channels.", count)
+            })),
+        ),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"success": false, "message": "Failed to sort channels"})),
+        ),
+    }
+}
+
+pub async fn run_automated_maintenance(state: Arc<AppState>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    use chrono::{DateTime, Utc, Duration};
+
+
+    let settings = crate::settings::get_maintenance_settings(&state.db).await;
+    
+    // Find streams that haven't been checked in N days
+    let streams = stream::Entity::find().all(&state.db).await?;
+    let mut stale_streams = Vec::new();
+    let threshold = Utc::now() - Duration::days(settings.stream_check_frequency_days as i64);
+
+    for s in streams {
+        let is_stale = if let Some(props) = &s.custom_properties {
+            if let Some(updated_at_str) = props.get("stream_stats_updated_at").and_then(|v| v.as_str()) {
+                if let Ok(updated_at) = DateTime::parse_from_rfc3339(updated_at_str) {
+                    updated_at.with_timezone(&Utc) < threshold
+                } else {
+                    true
+                }
+            } else {
+                true
+            }
+        } else {
+            true
+        };
+
+        if is_stale {
+            stale_streams.push(s);
+        }
+        if stale_streams.len() >= settings.batch_size {
+            break;
+        }
+    }
+
+    if stale_streams.is_empty() {
+        return Ok(());
+    }
+
+    info!("[Maintenance] Found {} stale streams to check.", stale_streams.len());
+    
+    let mut affected_channels = std::collections::HashSet::new();
+    let mut success_count = 0;
+    let mut failure_count = 0;
+
+    for s in stale_streams {
+        let stream_id = s.id;
+        // Run check
+        match check_single_stream(&state, stream_id).await {
+            Ok(_) => {
+                success_count += 1;
+            }
+            Err(e) => {
+                failure_count += 1;
+                error!("[Maintenance] Check failed for stream {}: {:?}", stream_id, e);
+            }
+        }
+
+
+        // Find affected channels
+        let cs_links = channel_stream::Entity::find()
+            .filter(channel_stream::Column::StreamId.eq(stream_id))
+            .all(&state.db)
+            .await?;
+        for link in cs_links {
+            affected_channels.insert(link.channel_id);
+        }
+    }
+
+    // Update Telemetry
+    {
+        let mut telemetry = state.background_telemetry.write().await;
+        telemetry.stream_check.last_run_at = Some(Utc::now());
+        telemetry.stream_check.total_processed += success_count + failure_count;
+        telemetry.stream_check.success_count += success_count;
+        telemetry.stream_check.failure_count += failure_count;
+    }
+
+    // Trigger Bulk Sort for affected channels
+    if !affected_channels.is_empty() {
+        info!("[Maintenance] Re-sorting {} affected channels.", affected_channels.len());
+        let payload = BulkSortRequest {
+            channel_ids: affected_channels.into_iter().collect(),
+        };
+        let _ = internal_bulk_sort_streams(&state, payload).await;
+    }
+
+    Ok(())
 }

@@ -98,6 +98,19 @@ pub async fn upload_logo(
     Ok(axum::Json(logo_to_json(inserted.try_into_model().unwrap())))
 }
 
+pub async fn get_background_telemetry(
+    axum::extract::State(state): axum::extract::State<std::sync::Arc<crate::AppState>>,
+    current_user: crate::auth::CurrentUser,
+) -> Result<axum::Json<Value>, axum::http::StatusCode> {
+    if !current_user.is_admin() {
+        return Err(axum::http::StatusCode::FORBIDDEN);
+    }
+
+    let telemetry = state.background_telemetry.read().await;
+    Ok(axum::Json(serde_json::to_value(&*telemetry).unwrap()))
+}
+
+
 pub async fn get_logo(
     axum::extract::State(state): axum::extract::State<std::sync::Arc<crate::AppState>>,
     axum::extract::Path(id): axum::extract::Path<i64>,

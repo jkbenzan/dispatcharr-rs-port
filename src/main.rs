@@ -14,6 +14,7 @@ use tower_http::services::{ServeDir, ServeFile};
 mod accounts;
 mod api;
 mod auth;
+mod background;
 mod channel_sync;
 mod entities;
 mod epg;
@@ -122,6 +123,8 @@ pub struct AppState {
     pub broadcasters: Arc<dashmap::DashMap<String, Arc<crate::proxy::Broadcaster>>>,
     pub bulk_check_status:
         Arc<tokio::sync::RwLock<crate::stream_checker::checker::BulkCheckStatus>>,
+    pub background_telemetry: crate::background::Telemetry,
+    pub last_activity_at: std::sync::Arc<std::sync::atomic::AtomicU64>,
 }
 
 async fn ws_handler(ws: WebSocketUpgrade, State(state): State<Arc<AppState>>) -> impl IntoResponse {
@@ -245,6 +248,10 @@ async fn main() {
         active_streams: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         broadcasters: Arc::new(dashmap::DashMap::new()),
         bulk_check_status: Arc::new(tokio::sync::RwLock::new(Default::default())),
+        background_telemetry: Arc::new(tokio::sync::RwLock::new(crate::background::BackgroundTelemetry::default())),
+        last_activity_at: Arc::new(std::sync::atomic::AtomicU64::new(
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs()
+        )),
     });
 
     // SPA Routing: Serve index.html if the user hits a route like /channels directly
@@ -352,6 +359,7 @@ async fn main() {
             put(api::update_streamprofile).delete(api::delete_streamprofile),
         )
         .route("/api/core/rehash-streams/", post(api::rehash_streams))
+        .route("/api/core/background-telemetry/", get(api::get_background_telemetry))
         // --- CHANNELS & M3U ---
         .route("/api/channels/channels/", get(api::get_channels))
         .route("/api/channels/channels/summary/", get(api::get_channels_summary))
@@ -581,6 +589,7 @@ async fn main() {
 
     // Spawn Background Worker for M3U Accounts
     let worker_db = state.db.clone();
+    let m3u_state = state.clone();
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(tokio::time::Duration::from_secs(60 * 5)).await; // run every 5 minutes
@@ -630,7 +639,16 @@ async fn main() {
                         if let Err(e) = res {
                             eprintln!("[Background Worker] Error calling timestamp update: {}", e);
                         }
+
+                        // Update Telemetry
+                        {
+                            let mut telemetry = m3u_state.background_telemetry.write().await;
+                            telemetry.m3u_refresh.last_run_at = Some(chrono::Utc::now());
+                            telemetry.m3u_refresh.total_processed += 1;
+                            telemetry.m3u_refresh.success_count += 1; // Basic increment for now
+                        }
                     }
+
                 }
             }
         }
@@ -639,6 +657,7 @@ async fn main() {
     // Spawn Background Worker for EPG Sources
     let epg_worker_db = state.db.clone();
     let epg_ws_sender = state.ws_sender.clone();
+    let epg_state = state.clone();
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(tokio::time::Duration::from_secs(60 * 10)).await; // run every 10 minutes
@@ -678,11 +697,64 @@ async fn main() {
                         // Ensure we update the timestamp even if it failed so we don't loop
                         let _ = crate::epg::update_source_timestamp(&epg_worker_db, src.id).await;
                         println!("[Background Worker] Finished EPG sync for source {}", src.id);
+
+                        // Update Telemetry
+                        {
+                            let mut telemetry = epg_state.background_telemetry.write().await;
+                            telemetry.epg_refresh.last_run_at = Some(chrono::Utc::now());
+                            telemetry.epg_refresh.total_processed += 1;
+                            telemetry.epg_refresh.success_count += 1; // Basic increment
+                        }
                     }
                 }
             }
         }
     });
+
+
+    // Spawn Background Maintenance Worker
+    let maint_state = state.clone();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(tokio::time::Duration::from_secs(60 * 30)).await; // run every 30 minutes
+            use chrono::{Local, Timelike};
+            
+            let settings = crate::settings::get_maintenance_settings(&maint_state.db).await;
+            let now_local = Local::now();
+            let current_hour = now_local.hour();
+
+            // 1. Check Off-Hours Constraint
+            let is_off_hours = if settings.off_hours_start <= settings.off_hours_end {
+                current_hour >= settings.off_hours_start && current_hour < settings.off_hours_end
+            } else {
+                // Handle range crossing midnight (e.g. 22 to 04)
+                current_hour >= settings.off_hours_start || current_hour < settings.off_hours_end
+            };
+
+            if !is_off_hours {
+                continue;
+            }
+
+            // 2. Check Idle Constraint
+            let broadcasters_empty = maint_state.broadcasters.is_empty();
+            let last_activity = maint_state.last_activity_at.load(std::sync::atomic::Ordering::SeqCst);
+            let now_unix = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+            let idle_duration = now_unix.saturating_sub(last_activity);
+            
+            let is_idle = broadcasters_empty && idle_duration >= (settings.idle_threshold_minutes * 60);
+
+            if !is_idle {
+                println!("[Maintenance Worker] Skipping: System is not idle (Broadcasters: {}, Idle: {}s)", !broadcasters_empty, idle_duration);
+                continue;
+            }
+
+            println!("[Maintenance Worker] System is idle and in off-hours. Starting automated maintenance.");
+            if let Err(e) = crate::stream_checker::checker::run_automated_maintenance(maint_state.clone()).await {
+                eprintln!("[Maintenance Worker] Error during maintenance: {}", e);
+            }
+        }
+    });
+
 
 
     // Spawn a secondary listener on port 8001 specifically for WebSockets

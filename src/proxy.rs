@@ -86,14 +86,22 @@ impl Drop for ClientDropGuard {
                     active.remove(&channel_id);
                 }
             }
-            
             // Decrement subscriber count
             if let Some(b) = state.broadcasters.get(&channel_id) {
                 b.subscriber_count.fetch_sub(1, Ordering::SeqCst);
             }
+
+            // Update last activity timestamp
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+            state.last_activity_at.store(now, Ordering::SeqCst);
         });
     }
 }
+
+
 
 #[derive(Deserialize)]
 pub struct ProxyQuery {
