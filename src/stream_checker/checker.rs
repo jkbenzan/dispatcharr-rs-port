@@ -234,7 +234,11 @@ impl Default for BulkCheckStatus {
 pub async fn check_single_stream(
     state: &Arc<AppState>,
     stream_id: i64,
+    test_duration: Option<u32>,
 ) -> Result<serde_json::Value, (StatusCode, String)> {
+    let duration = test_duration.unwrap_or(10);
+    let duration_str = duration.to_string();
+
     let stream_obj = match stream::Entity::find_by_id(stream_id).one(&state.db).await {
         Ok(Some(s)) => s,
         _ => return Err((StatusCode::NOT_FOUND, "Stream not found".to_string())),
@@ -246,8 +250,8 @@ pub async fn check_single_stream(
     };
 
     info!(
-        "🔍 Testing Stream: {} (URL: {})",
-        stream_obj.name, stream_url
+        "🔍 Testing Stream: {} (URL: {}, Duration: {}s)",
+        stream_obj.name, stream_url, duration
     );
 
     // 1. Run ffprobe
@@ -395,11 +399,11 @@ pub async fn check_single_stream(
     }
 
     // 2. Run ffmpeg for bitrate
-    info!("🎬 FFmpeg Bitrate Analysis for {}", stream_obj.name);
+    info!("🎬 FFmpeg Bitrate Analysis for {} ({}s)", stream_obj.name, duration);
     let ffmpeg_bin = resolve_ffmpeg();
     let mut ffmpeg_cmd = Command::new(&ffmpeg_bin);
     ffmpeg_cmd.args(&[
-        "-t", "10", // Test duration
+        "-t", &duration_str,
         "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.3",
         "-i", &stream_url,
         "-c", "copy",
@@ -407,8 +411,10 @@ pub async fn check_single_stream(
         "-",
     ]);
 
+    let timeout_secs = (duration + 30) as u64;
     let ffmpeg_result =
-        match tokio::time::timeout(Duration::from_secs(40), ffmpeg_cmd.output()).await {
+        match tokio::time::timeout(Duration::from_secs(timeout_secs), ffmpeg_cmd.output()).await {
+
             Ok(Ok(output)) => output,
             Ok(Err(e)) => {
                 error!("ffmpeg failed to start: {}", e);
@@ -504,7 +510,7 @@ pub async fn test_stream(
     State(state): State<Arc<AppState>>,
     Path(stream_id): Path<i64>,
 ) -> impl IntoResponse {
-    match check_single_stream(&state, stream_id).await {
+    match check_single_stream(&state, stream_id, None).await {
         Ok(stream_data) => (
             StatusCode::OK,
             Json(json!({ "success": true, "stream": stream_data })),
@@ -645,7 +651,7 @@ pub async fn start_bulk_check(
                             }
                         }
 
-                        let res = check_single_stream(&state_c, stream_obj.id).await;
+                        let res = check_single_stream(&state_c, stream_obj.id, None).await;
 
                         {
                             let mut st = state_c.bulk_check_status.write().await;
@@ -1000,10 +1006,17 @@ pub async fn run_automated_maintenance(state: Arc<AppState>) -> Result<(), Box<d
     let mut success_count = 0;
     let mut failure_count = 0;
 
+    let test_duration = if settings.extended_test_enabled {
+        Some(settings.extended_test_duration_seconds)
+    } else {
+        None
+    };
+
+
     for s in stale_streams {
         let stream_id = s.id;
         // Run check
-        match check_single_stream(&state, stream_id).await {
+        match check_single_stream(&state, stream_id, test_duration).await {
             Ok(_) => {
                 success_count += 1;
             }

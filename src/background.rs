@@ -38,6 +38,8 @@ pub struct MaintenanceSettings {
     pub off_hours_end: u32,
     pub idle_threshold_minutes: u64,
     pub batch_size: usize,
+    pub extended_test_enabled: bool,
+    pub extended_test_duration_seconds: u32,
 }
 
 impl Default for MaintenanceSettings {
@@ -48,8 +50,11 @@ impl Default for MaintenanceSettings {
             off_hours_end: 6,
             idle_threshold_minutes: 30,
             batch_size: 50,
+            extended_test_enabled: false,
+            extended_test_duration_seconds: 60,
         }
     }
 }
+
 
 pub type Telemetry = Arc<RwLock<BackgroundTelemetry>>;
