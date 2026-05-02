@@ -17,7 +17,7 @@ import Limiter from './utils';
 
 // If needed, you can set a base host or keep it empty if relative requests
 const host = import.meta.env.DEV
-  ? `http://${window.location.hostname}:5656`
+  ? `http://${window.location.hostname}:8080`
   : '';
 
 const errorNotification = (message, error) => {

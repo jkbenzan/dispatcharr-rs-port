@@ -26,6 +26,7 @@ pub enum BroadcasterStatus {
     Streaming,
     Buffering,
     Failover,
+    Offline,
     Stopping,
 }
 
@@ -240,9 +241,60 @@ pub async fn broadcaster_pumper(
     
     loop {
         if stream_index >= channel_streams.len() {
-            tracing::error!("All streams failed for channel {}", channel_id);
-            *broadcaster.status.write().await = BroadcasterStatus::Failover;
-            break;
+            tracing::error!("All streams failed for channel {}. Entering offline loop.", channel_id);
+            *broadcaster.status.write().await = BroadcasterStatus::Offline;
+            
+            let offline_path = std::path::Path::new("data/offline.ts");
+            if offline_path.exists() {
+                let start_offline = tokio::time::Instant::now();
+                if let Ok(file) = tokio::fs::File::open(offline_path).await {
+                    let mut reader = tokio::io::BufReader::new(file);
+                    use tokio::io::{AsyncReadExt, AsyncSeekExt};
+                    let mut buffer = [0u8; 1316]; // standard TS packet size * 7
+                    
+                    while start_offline.elapsed().as_secs() < 30 {
+                        let subs = broadcaster.subscriber_count.load(Ordering::Relaxed);
+                        if subs == 0 {
+                            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                            continue;
+                        }
+                        
+                        match reader.read(&mut buffer).await {
+                            Ok(0) => {
+                                if reader.seek(std::io::SeekFrom::Start(0)).await.is_err() {
+                                    break;
+                                }
+                            }
+                            Ok(n) => {
+                                let bytes = bytes::Bytes::copy_from_slice(&buffer[..n]);
+                                broadcaster.total_bytes.fetch_add(bytes.len() as u64, Ordering::Relaxed);
+                                {
+                                    let mut rb = broadcaster.ring_buffer.write().await;
+                                    rb.push_back(bytes.clone());
+                                    let mut current_size: usize = rb.iter().map(|b| b.len()).sum();
+                                    while current_size > settings.chunk_size && !rb.is_empty() {
+                                        if let Some(front) = rb.pop_front() {
+                                            current_size -= front.len();
+                                        }
+                                    }
+                                }
+                                let _ = broadcaster.tx.send(bytes);
+                                tokio::time::sleep(tokio::time::Duration::from_millis(5)).await;
+                            }
+                            Err(_) => break,
+                        }
+                    }
+                } else {
+                    tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+                }
+            } else {
+                tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+            }
+            
+            tracing::info!("Offline period ended for channel {}. Retrying live streams...", channel_id);
+            stream_index = 0;
+            retry_count = 0;
+            continue;
         }
 
         let (_cs, stream_opt) = &channel_streams[stream_index];

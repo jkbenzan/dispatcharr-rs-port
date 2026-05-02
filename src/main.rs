@@ -197,6 +197,42 @@ async fn main() {
     // Initialize core settings defaults
     crate::settings::initialize_core_settings(&db).await;
 
+    let offline_path = std::path::Path::new("data/offline.ts");
+    if !offline_path.exists() {
+        tracing::info!("Generating fallback offline.ts video...");
+        std::fs::create_dir_all("data").ok();
+        
+        let ffmpeg_cmd = if ffmpeg_sidecar::paths::ffmpeg_path().exists() {
+            ffmpeg_sidecar::paths::ffmpeg_path().to_string_lossy().to_string()
+        } else {
+            "ffmpeg".to_string()
+        };
+        
+        let output = std::process::Command::new(ffmpeg_cmd)
+            .args(&[
+                "-f", "lavfi",
+                "-i", "testsrc=size=1280x720:rate=24",
+                "-f", "lavfi",
+                "-i", "aevalsrc=0",
+                "-t", "5",
+                "-c:v", "libx264",
+                "-preset", "ultrafast",
+                "-tune", "zerolatency",
+                "-b:v", "500k",
+                "-c:a", "aac",
+                "-b:a", "64k",
+                "-f", "mpegts",
+                "data/offline.ts"
+            ])
+            .output();
+            
+        match output {
+            Ok(res) if res.status.success() => tracing::info!("✅ fallback offline.ts generated"),
+            Ok(res) => tracing::warn!("Failed to generate offline.ts: {:?}", String::from_utf8_lossy(&res.stderr)),
+            Err(e) => tracing::warn!("Failed to run ffmpeg for offline.ts: {}", e),
+        }
+    }
+
     // Create a broadcast channel for websockets with a capacity of 100
     let (ws_sender, _) = tokio::sync::broadcast::channel(100);
 
