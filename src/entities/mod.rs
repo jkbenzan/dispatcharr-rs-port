@@ -32,3 +32,4 @@ pub mod vod_m3useriesrelation;
 pub mod vod_m3uvodcategoryrelation;
 pub mod vod_movie;
 pub mod vod_series;
+

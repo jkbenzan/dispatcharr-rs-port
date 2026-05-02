@@ -2,7 +2,7 @@ use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize, Default)]
-#[sea_orm(table_name = "dispatcharr_channels_logo", schema_name = "public")]
+#[sea_orm(table_name = "dispatcharr_channels_logo")]
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i64,
@@ -14,3 +14,4 @@ pub struct Model {
 pub enum Relation {}
 
 impl ActiveModelBehavior for ActiveModel {}
+

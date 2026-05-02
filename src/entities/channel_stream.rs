@@ -3,8 +3,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize)]
 #[sea_orm(
-    table_name = "dispatcharr_channels_channelstream",
-    schema_name = "public"
+    table_name = "dispatcharr_channels_channelstream"
 )]
 pub struct Model {
     #[sea_orm(primary_key)]
@@ -33,3 +32,4 @@ impl Related<super::stream::Entity> for Entity {
 }
 
 impl ActiveModelBehavior for ActiveModel {}
+

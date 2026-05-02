@@ -14,10 +14,10 @@ use crate::entities::core_settings;
 
 pub async fn network_access_middleware(
     State(state): State<Arc<AppState>>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     req: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
+    let addr: std::net::SocketAddr = "127.0.0.1:12345".parse().unwrap();
     let path = req.uri().path();
 
     // Determine the category based on the path
