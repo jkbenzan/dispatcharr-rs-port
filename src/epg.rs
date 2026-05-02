@@ -275,6 +275,19 @@ async fn update_source_status(
     }
 }
 
+pub async fn update_source_timestamp(
+    db: &DatabaseConnection,
+    source_id: i64,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    if let Ok(Some(src)) = epg_source::Entity::find_by_id(source_id).one(db).await {
+        let mut active: epg_source::ActiveModel = src.into();
+        active.updated_at = Set(Some(Utc::now().into()));
+        let _ = active.update(db).await?;
+    }
+    Ok(())
+}
+
+
 async fn insert_missing_channels(
     db: &DatabaseConnection,
     source_id: i64,

@@ -636,6 +636,55 @@ async fn main() {
         }
     });
 
+    // Spawn Background Worker for EPG Sources
+    let epg_worker_db = state.db.clone();
+    let epg_ws_sender = state.ws_sender.clone();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(tokio::time::Duration::from_secs(60 * 10)).await; // run every 10 minutes
+            use chrono::Utc;
+            use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+
+            if let Ok(sources) = crate::entities::epg_source::Entity::find()
+                .filter(crate::entities::epg_source::Column::IsActive.eq(true))
+                .all(&epg_worker_db)
+                .await
+            {
+                for src in sources {
+                    let refresh_interval = src.refresh_interval as i64;
+                    if refresh_interval <= 0 || src.status == "fetching" || src.status == "parsing" {
+                        continue;
+                    }
+
+                    let last_updated = src.updated_at.unwrap_or_else(|| Utc::now().into());
+                    let threshold = last_updated.with_timezone(&Utc)
+                        + chrono::Duration::hours(refresh_interval);
+
+                    if Utc::now() >= threshold {
+                        println!(
+                            "[Background Worker] Refreshing EPG source {} ({})",
+                            src.id, src.name
+                        );
+                        let url = src.url.clone().or_else(|| src.file_path.clone()).unwrap_or_default();
+                        if !url.is_empty() {
+                            let _ = crate::epg::refresh_all_guides(
+                                &epg_worker_db, 
+                                &url, 
+                                src.id, 
+                                Some(epg_ws_sender.clone())
+                            ).await;
+                        }
+                        
+                        // Ensure we update the timestamp even if it failed so we don't loop
+                        let _ = crate::epg::update_source_timestamp(&epg_worker_db, src.id).await;
+                        println!("[Background Worker] Finished EPG sync for source {}", src.id);
+                    }
+                }
+            }
+        }
+    });
+
+
     // Spawn a secondary listener on port 8001 specifically for WebSockets
     // This provides backward compatibility with the old Django/Daphne Nginx configuration.
     let state_clone = state.clone();
