@@ -62,6 +62,38 @@ export const PROXY_SETTINGS_OPTIONS = {
   },
 };
 
+export const MAINTENANCE_SETTINGS_OPTIONS = {
+  stream_check_frequency_days: {
+    label: 'Check Frequency (Days)',
+    description: "How often to re-check a stream's health (default 7 days)",
+  },
+  off_hours_start: {
+    label: 'Off-Hours Start',
+    description: 'Hour (0-23) when automated maintenance can begin',
+  },
+  off_hours_end: {
+    label: 'Off-Hours End',
+    description: 'Hour (0-23) when automated maintenance must end',
+  },
+  idle_threshold_minutes: {
+    label: 'Idle Threshold (Minutes)',
+    description: 'System must be idle for this long before maintenance starts',
+  },
+  batch_size: {
+    label: 'Batch Size',
+    description: 'Number of streams to check in a single maintenance run',
+  },
+  extended_test_enabled: {
+    label: 'Enable Extended Testing',
+    description: 'Perform longer, more thorough health checks for manual tests',
+  },
+  extended_test_duration_seconds: {
+    label: 'Extended Test Duration (Seconds)',
+    description: 'Duration of the extended health check',
+  },
+};
+
+
 export const USER_LIMITS_OPTIONS = {
   terminate_on_limit_exceeded: {
     label: 'Terminate on Limit Exceeded',
