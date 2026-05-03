@@ -365,6 +365,16 @@ const ChannelStreams = ({ channel, isExpanded }) => {
                   <Badge size="xs" variant="light" color="teal">
                     {accountName}
                   </Badge>
+                  {stream.status === 'frozen' && (
+                    <Badge size="xs" variant="filled" color="red">
+                      FROZEN
+                    </Badge>
+                  )}
+                  {stream.status === 'black_screen' && (
+                    <Badge size="xs" variant="filled" color="dark">
+                      BLACK SCREEN
+                    </Badge>
+                  )}
                   {stream.quality && (
                     <Badge size="xs" variant="light" color="gray">
                       {stream.quality}

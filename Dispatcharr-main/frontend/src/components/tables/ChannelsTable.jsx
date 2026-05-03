@@ -1154,12 +1154,18 @@ const ChannelsTable = ({ onReady, hideLinks = false, streamCheckerMode = false }
           const streams = row.original.streams || [];
           const total = streams.length;
           let unreachable = 0;
+          let frozen = 0;
+          let blackScreen = 0;
           let maxRes = 0;
           const providers = new Set();
 
           streams.forEach(s => {
               // Use m3u_account_id for provider tracking (correct field)
               if (s.m3u_account_id) providers.add(s.m3u_account_id);
+              
+              if (s.status === 'frozen') frozen++;
+              if (s.status === 'black_screen') blackScreen++;
+
               const stats = s.stream_stats;
               if (stats) {
                 // Only count as unreachable if test explicitly determined it (reachable===false)
@@ -1178,6 +1184,12 @@ const ChannelsTable = ({ onReady, hideLinks = false, streamCheckerMode = false }
               <Badge size="sm" color="blue">Total: {total}</Badge>
               {unreachable > 0 && (
                 <Badge size="sm" color="red">Unreachable: {unreachable}</Badge>
+              )}
+              {frozen > 0 && (
+                <Badge size="sm" color="orange">Frozen: {frozen}</Badge>
+              )}
+              {blackScreen > 0 && (
+                <Badge size="sm" color="dark">Black: {blackScreen}</Badge>
               )}
               <Badge size="sm" color="grape">Providers: {providers.size}</Badge>
               {maxRes > 0 && <Badge size="sm" color="teal">Max Res: {maxRes}p</Badge>}

@@ -290,6 +290,8 @@ const StreamChecker = () => {
                                 {s.stream_stats?.reachable ? <Text color="green" size="xs">✓</Text> : <Text color="red" size="xs">✗</Text>}
                                 <Text size="xs" c="gray.3" truncate style={{ maxWidth: '150px' }}>{s.name}</Text>
                               </Group>
+                              {s.status === 'frozen' && <Badge size="xs" color="red">FROZEN</Badge>}
+                              {s.status === 'black_screen' && <Badge size="xs" color="dark">BLACK SCREEN</Badge>}
                               {s.stream_stats?.resolution && <Text size="xs" c="dimmed">{s.stream_stats.resolution}</Text>}
                             </Group>
                           ))
