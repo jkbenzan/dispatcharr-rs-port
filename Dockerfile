@@ -45,7 +45,8 @@ WORKDIR /app
 COPY --from=backend-builder /app/target/release/dispatcharr-rs /usr/local/bin/
 
 # Copy the React frontend (main app)
-COPY --from=frontend-builder /app/frontend/dist /app/dist
+# Vite is configured to output to ../dist (relative to frontend/)
+COPY --from=frontend-builder /app/dist /app/dist
 
 # Copy the Angular channel manager mini-app to /channel-manager/
 COPY --from=angular-builder /app/dist/browser /app/dist/channel-manager
