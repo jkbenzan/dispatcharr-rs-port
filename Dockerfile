@@ -1,11 +1,11 @@
-# STEP 1: Build the Angular Frontend
+# STEP 1: Build the React Frontend
 FROM node:20-slim AS frontend-builder
 
-WORKDIR /app/angular-frontend
-COPY angular-frontend/package*.json ./
+WORKDIR /app/frontend
+COPY frontend/package*.json ./
 RUN npm ci
-COPY angular-frontend/ ./
-RUN npx ng build
+COPY frontend/ ./
+RUN npm run build
 
 # STEP 2: Build the Rust Binary
 FROM rust:bookworm AS backend-builder
@@ -36,10 +36,9 @@ WORKDIR /app
 COPY --from=backend-builder /app/target/release/dispatcharr-rs /usr/local/bin/
 
 # Copy the compiled frontend from the Node builder stage
-# Angular 18 outputs to dist/browser/ within the outputPath
-COPY --from=frontend-builder /app/dist/browser /app/dist
+COPY --from=frontend-builder /app/frontend/dist /app/dist
 
 EXPOSE 8080
 
 # Start the application
-CMD ["dispatcharr-rs"]
+CMD ["dispatcharr-rs"]
