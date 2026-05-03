@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Box, Accordion, Loader, Text, Group, ActionIcon, ScrollArea } from '@mantine/core';
 import { Search } from 'lucide-react';
 import { useDroppable } from '@dnd-kit/core';
+import { FixedSizeList as List } from 'react-window';
+import AutoSizer from 'react-virtualized-auto-sizer';
 import API from '../../api';
 
 const DroppableChannel = ({ channel, isSelected, onSelectChannel }) => {
@@ -85,14 +87,36 @@ const ChannelsTreePane = ({ selectedChannelId, onSelectChannel }) => {
               <Accordion.Panel>
                 {loadedGroups[group.id] ? (
                   channelsData[group.id] ? (
-                    channelsData[group.id].map((channel) => (
-                      <DroppableChannel 
-                        key={channel.id} 
-                        channel={channel} 
-                        isSelected={selectedChannelId === channel.id}
-                        onSelectChannel={onSelectChannel} 
-                      />
-                    ))
+                    <Box style={{ height: Math.min(channelsData[group.id].length * 40, 400), width: '100%' }}>
+                      <AutoSizer>
+                        {({ height, width }) => (
+                          <List
+                            height={height}
+                            itemCount={channelsData[group.id].length}
+                            itemSize={40}
+                            width={width}
+                            itemData={{
+                              channels: channelsData[group.id],
+                              selectedChannelId,
+                              onSelectChannel
+                            }}
+                          >
+                            {({ index, style, data }) => {
+                              const channel = data.channels[index];
+                              return (
+                                <div style={style}>
+                                  <DroppableChannel 
+                                    channel={channel} 
+                                    isSelected={data.selectedChannelId === channel.id}
+                                    onSelectChannel={data.onSelectChannel} 
+                                  />
+                                </div>
+                              );
+                            }}
+                          </List>
+                        )}
+                      </AutoSizer>
+                    </Box>
                   ) : (
                     <Loader size="xs" />
                   )

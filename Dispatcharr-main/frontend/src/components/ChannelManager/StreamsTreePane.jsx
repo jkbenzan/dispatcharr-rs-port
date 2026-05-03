@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Box, Accordion, Loader, Text, Group, Select, TextInput, ScrollArea, Checkbox, ActionIcon, Button, Flex } from '@mantine/core';
 import { Search, Eye, GripVertical } from 'lucide-react';
 import { useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
+import { FixedSizeList as List } from 'react-window';
+import AutoSizer from 'react-virtualized-auto-sizer';
 import API from '../../api';
 
 const DraggableStream = ({ stream, isSelected, onToggle }) => {
@@ -59,10 +61,13 @@ const StreamsTreePane = ({ selectedStreamIds, onToggleStreamSelection, onSelectA
         ]);
         
         const m3us = Array.isArray(m3uRes) ? m3uRes : m3uRes?.results || [];
-        setM3uAccounts(m3us.map(m => ({ value: String(m.id), label: m.name })));
+        setM3uAccounts(m3us.filter(m => m.id).map(m => ({ value: String(m.id), label: String(m.name || m.id) })));
         
         const groups = filterRes?.groups || [];
-        setStreamGroups(groups.map(g => ({ value: g.name, label: g.name })));
+        setStreamGroups(groups.map(g => {
+          const name = typeof g === 'string' ? g : g.name;
+          return name ? { value: String(name), label: String(name) } : null;
+        }).filter(Boolean));
       } catch (e) {
         console.error(e);
       } finally {
@@ -80,11 +85,17 @@ const StreamsTreePane = ({ selectedStreamIds, onToggleStreamSelection, onSelectA
         params.set('m3u_account', selectedM3u);
         const filterRes = await API.getStreamFilterOptions(params);
         const groups = filterRes?.groups || [];
-        setStreamGroups(groups.map(g => ({ value: g.name, label: g.name })));
+        setStreamGroups(groups.map(g => {
+          const name = typeof g === 'string' ? g : g.name;
+          return name ? { value: String(name), label: String(name) } : null;
+        }).filter(Boolean));
       } else {
         const filterRes = await API.getStreamFilterOptions(new URLSearchParams());
         const groups = filterRes?.groups || [];
-        setStreamGroups(groups.map(g => ({ value: g.name, label: g.name })));
+        setStreamGroups(groups.map(g => {
+          const name = typeof g === 'string' ? g : g.name;
+          return name ? { value: String(name), label: String(name) } : null;
+        }).filter(Boolean));
       }
     };
     fetchGroupsForM3u();
@@ -215,14 +226,36 @@ const StreamsTreePane = ({ selectedStreamIds, onToggleStreamSelection, onSelectA
                       {streams.length === 0 ? (
                         <Text size="sm" c="dimmed" px="xs">No streams found.</Text>
                       ) : (
-                        streams.map((stream) => (
-                          <DraggableStream 
-                            key={stream.id} 
-                            stream={stream} 
-                            isSelected={selectedStreamIds.includes(stream.id)}
-                            onToggle={onToggleStreamSelection}
-                          />
-                        ))
+                        <Box style={{ height: Math.min(streams.length * 40, 400), width: '100%' }}>
+                          <AutoSizer>
+                            {({ height, width }) => (
+                              <List
+                                height={height}
+                                itemCount={streams.length}
+                                itemSize={40}
+                                width={width}
+                                itemData={{
+                                  streams,
+                                  selectedStreamIds,
+                                  onToggleStreamSelection
+                                }}
+                              >
+                                {({ index, style, data }) => {
+                                  const stream = data.streams[index];
+                                  return (
+                                    <div style={style}>
+                                      <DraggableStream 
+                                        stream={stream} 
+                                        isSelected={data.selectedStreamIds.includes(stream.id)}
+                                        onToggle={data.onToggleStreamSelection}
+                                      />
+                                    </div>
+                                  );
+                                }}
+                              </List>
+                            )}
+                          </AutoSizer>
+                        </Box>
                       )}
                     </Box>
                   ) : (
