@@ -1,12 +1,11 @@
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import ChannelsTable from '../components/tables/ChannelsTable';
-import StreamsTable from '../components/tables/StreamsTable';
-import { Box } from '@mantine/core';
-import { Allotment } from 'allotment';
+import ChannelManager from '../components/ChannelManager';
+import { Box, Tabs, rem } from '@mantine/core';
+import { LayoutGrid, Settings2 } from 'lucide-react';
 import { USER_LEVELS } from '../constants';
 import useAuthStore from '../store/auth';
 import useLogosStore from '../store/logos';
-import useLocalStorage from '../hooks/useLocalStorage';
 import ErrorBoundary from '../components/ErrorBoundary';
 
 const PageContent = () => {
@@ -17,24 +16,15 @@ const PageContent = () => {
   const enableLogoRendering = useLogosStore((s) => s.enableLogoRendering);
 
   const channelsReady = useRef(false);
-  const streamsReady = useRef(false);
+  const managerReady = useRef(false);
   const logosTriggered = useRef(false);
 
-  const [allotmentSizes, setAllotmentSizes] = useLocalStorage(
-    'channels-splitter-sizes',
-    [60, 40]
-  );
+  const [activeTab, setActiveTab] = useState('channels');
 
-  // Only load logos when BOTH tables are ready
+  // Only load logos when channels table is ready
   const tryLoadLogos = useCallback(() => {
-    if (
-      channelsReady.current &&
-      streamsReady.current &&
-      !logosTriggered.current
-    ) {
+    if (channelsReady.current && !logosTriggered.current) {
       logosTriggered.current = true;
-      // Use requestAnimationFrame to defer logo loading until after browser paint
-      // This ensures EPG column is fully rendered before logos start loading
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           enableLogoRendering();
@@ -49,23 +39,9 @@ const PageContent = () => {
     tryLoadLogos();
   }, [tryLoadLogos]);
 
-  const handleStreamsReady = useCallback(() => {
-    streamsReady.current = true;
-    tryLoadLogos();
-  }, [tryLoadLogos]);
-
-  const handleSplitChange = (sizes) => {
-    setAllotmentSizes(sizes);
-  };
-
-  const handleResize = (sizes) => {
-    setAllotmentSizes(sizes);
-  };
-
   if (!authUser.id) return <></>;
 
   if (authUser.user_level <= USER_LEVELS.STANDARD) {
-    handleStreamsReady();
     return (
       <Box style={{ padding: 10 }}>
         <ChannelsTable onReady={handleChannelsReady} />
@@ -73,29 +49,32 @@ const PageContent = () => {
     );
   }
 
+  const iconStyle = { width: rem(14), height: rem(14) };
+
   return (
-    <Box h={'100vh'} w={'100%'} display={'flex'} style={{ overflowX: 'auto' }}>
-      <Allotment
-        defaultSizes={allotmentSizes}
-        h={'100%'}
-        w={'100%'}
-        miw={'625px'}
-        className="custom-allotment"
-        minSize={100}
-        onChange={handleSplitChange}
-        onResize={handleResize}
-      >
-        <Box p={10} miw={'100px'} style={{ overflowX: 'auto' }}>
-          <Box miw={'625px'}>
+    <Box h={'100vh'} w={'100%'} display={'flex'} style={{ flexDirection: 'column', overflowX: 'auto' }}>
+      <Tabs value={activeTab} onChange={setActiveTab} style={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
+        <Tabs.List px="md" pt="sm">
+          <Tabs.Tab value="channels" leftSection={<LayoutGrid style={iconStyle} />}>
+            Channels Grid
+          </Tabs.Tab>
+          <Tabs.Tab value="manager" leftSection={<Settings2 style={iconStyle} />}>
+            Channel Manager
+          </Tabs.Tab>
+        </Tabs.List>
+
+        <Tabs.Panel value="channels" style={{ flexGrow: 1, padding: 10, minHeight: 0 }}>
+          <Box h="100%">
             <ChannelsTable onReady={handleChannelsReady} />
           </Box>
-        </Box>
-        <Box p={10} miw={'100px'} style={{ overflowX: 'auto' }}>
-          <Box miw={'625px'}>
-            <StreamsTable onReady={handleStreamsReady} />
+        </Tabs.Panel>
+
+        <Tabs.Panel value="manager" style={{ flexGrow: 1, padding: 10, minHeight: 0 }}>
+          <Box h="100%">
+            {activeTab === 'manager' && <ChannelManager />}
           </Box>
-        </Box>
-      </Allotment>
+        </Tabs.Panel>
+      </Tabs>
     </Box>
   );
 };

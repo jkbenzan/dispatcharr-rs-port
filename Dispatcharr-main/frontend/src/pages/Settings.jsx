@@ -8,7 +8,6 @@ import {
   Loader,
   Paper,
   Title,
-  RemovableScroll,
   ScrollArea,
 } from '@mantine/core';
 import {

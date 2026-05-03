@@ -5,11 +5,11 @@ import React, {
   useState,
   useRef,
 } from 'react';
-import API from '../../api';
-import StreamForm from '../forms/Stream';
-import usePlaylistsStore from '../../store/playlists';
-import useChannelsStore from '../../store/channels';
-import { copyToClipboard, useDebounce } from '../../utils';
+import API from '../api';
+import StreamForm from './forms/Stream';
+import usePlaylistsStore from '../store/playlists';
+import useChannelsStore from '../store/channels';
+import { copyToClipboard, useDebounce } from '../utils';
 import {
   SquarePlus,
   ListPlus,
@@ -58,18 +58,19 @@ import {
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useNavigate } from 'react-router-dom';
-import useSettingsStore from '../../store/settings';
-import useVideoStore from '../../store/useVideoStore';
-import useChannelsTableStore from '../../store/channelsTable';
-import useStreamProfilesStore from '../../store/streamProfiles.jsx';
-import useAuthStore from '../../store/auth.jsx';
-import useWarningsStore from '../../store/warnings';
-import { CustomTable, useTable } from './CustomTable';
-import { USER_LEVELS } from '../../constants';
-import useLocalStorage from '../../hooks/useLocalStorage';
-import ConfirmationDialog from '../ConfirmationDialog';
-import CreateChannelModal from '../modals/CreateChannelModal';
-import useStreamsTableStore from '../../store/streamsTable';
+import useSettingsStore from '../store/settings';
+import useVideoStore from '../store/useVideoStore';
+import useChannelsTableStore from '../store/channelsTable';
+import useStreamProfilesStore from '../store/streamProfiles.jsx';
+import useAuthStore from '../store/auth.jsx';
+import useWarningsStore from '../store/warnings';
+import { CustomTable, useTable } from './tables/CustomTable';
+import { USER_LEVELS } from '../constants';
+import useLocalStorage from '../hooks/useLocalStorage';
+import ConfirmationDialog from './ConfirmationDialog';
+import CreateChannelModal from './modals/CreateChannelModal';
+import useStreamsTableStore from '../store/streamsTable';
+import { getGroupedRowModel, getExpandedRowModel } from '@tanstack/react-table';
 
 const StreamRowActions = ({
   theme,
@@ -186,7 +187,7 @@ const StreamRowActions = ({
   );
 };
 
-const StreamsTable = ({ onReady }) => {
+const ChannelManager = ({ onReady }) => {
   const theme = useMantineTheme();
   const hasSignaledReady = useRef(false);
   const hasFetchedOnce = useRef(false);
@@ -245,6 +246,10 @@ const StreamsTable = ({ onReady }) => {
     unassigned: false,
     hide_stale: false,
   });
+  
+  // Grouping state
+  const [groupBy, setGroupBy] = useState('none');
+
   const [columnSizing, setColumnSizing] = useLocalStorage(
     'streams-table-column-sizing',
     {}
@@ -1292,6 +1297,16 @@ const StreamsTable = ({ onReady }) => {
     ]
   );
 
+  // Build table state
+  const tableState = {
+    pagination,
+    sorting,
+  };
+  
+  if (groupBy !== 'none') {
+    tableState.grouping = [groupBy];
+  }
+
   const table = useTable({
     columns,
     data,
@@ -1873,4 +1888,4 @@ This action cannot be undone.`}
   );
 };
 
-export default StreamsTable;
+export default ChannelManager;

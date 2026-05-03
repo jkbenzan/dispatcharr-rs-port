@@ -5,7 +5,7 @@ import { useMemo } from 'react';
 import table from '../../../helpers/table';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { GripVertical } from 'lucide-react';
+import { GripVertical, ChevronDown, ChevronRight } from 'lucide-react';
 import useChannelsTableStore from '../../../store/channelsTable';
 
 const CustomTableBody = ({
@@ -93,7 +93,39 @@ const CustomTableBody = ({
     return (
       <Box className="tbody" style={{ flex: 1 }}>
         {Array.isArray(rows)
-          ? rows.map((row, index) => renderTableBodyRow(row, index))
+          ? rows.map((row, index) => {
+              if (row.getIsGrouped && row.getIsGrouped()) {
+                return (
+                  <Box
+                    key={`group-${row.id}`}
+                    style={{
+                      padding: '12px 16px',
+                      backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                      cursor: 'pointer',
+                      borderBottom: '1px solid rgba(255, 255, 255, 0.1)'
+                    }}
+                    onClick={row.getToggleExpandedHandler()}
+                  >
+                    <Flex align="center" gap="sm">
+                      <Box style={{ display: 'flex', alignItems: 'center' }}>
+                        {row.getIsExpanded() ? (
+                          <ChevronDown size={16} />
+                        ) : (
+                          <ChevronRight size={16} />
+                        )}
+                      </Box>
+                      <Box style={{ fontWeight: 600 }}>
+                        {row.getValue(row.groupingColumnId)}
+                      </Box>
+                      <Box style={{ fontSize: '0.875rem', opacity: 0.7 }}>
+                        ({row.subRows.length})
+                      </Box>
+                    </Flex>
+                  </Box>
+                );
+              }
+              return renderTableBodyRow(row, index);
+            })
           : (() => {
               console.warn('CustomTableBody: rows is not an array!', typeof rows, rows);
               return null;
