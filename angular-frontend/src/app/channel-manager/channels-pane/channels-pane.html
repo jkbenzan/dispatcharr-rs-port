@@ -27,7 +27,11 @@
                 <div
                   *ngFor="let channel of group.channels"
                   class="channel-item"
+                  [class.selected]="channel.id === selectedChannelId"
                   [title]="channel.name"
+                  (click)="onChannelClick(channel)"
+                  cdkDropList
+                  (cdkDropListDropped)="handleDrop($event, channel)"
                 >
                   <span class="channel-name">{{ channel.name }}</span>
                   <span class="channel-number" *ngIf="channel.channel_number">

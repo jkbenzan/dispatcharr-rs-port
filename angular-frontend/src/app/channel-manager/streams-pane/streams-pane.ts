@@ -1,9 +1,10 @@
-import { ChangeDetectionStrategy, Component, inject, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, EventEmitter, inject, Input, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormControl, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { ApiService } from '../../api.service';
 import { TuiAccordion, TuiMultiSelect } from '@taiga-ui/kit';
 import { TuiLoader, TuiTextfield } from '@taiga-ui/core';
+import { CdkDrag, CdkDropList } from '@angular/cdk/drag-drop';
 
 @Component({
   selector: 'app-streams-pane',
@@ -13,9 +14,11 @@ import { TuiLoader, TuiTextfield } from '@taiga-ui/core';
     FormsModule,
     ReactiveFormsModule,
     TuiAccordion,
-    TuiMultiSelect,
     TuiLoader,
     TuiTextfield,
+    TuiMultiSelect,
+    CdkDrag,
+    CdkDropList
   ],
   templateUrl: './streams-pane.html',
   styleUrl: './streams-pane.less',
@@ -23,6 +26,11 @@ import { TuiLoader, TuiTextfield } from '@taiga-ui/core';
 })
 export class StreamsPaneComponent implements OnInit {
   private readonly api = inject(ApiService);
+
+  @Input() selectedStreamIds: number[] = [];
+  @Output() toggleStreamSelection = new EventEmitter<number>();
+  @Output() selectAllInGroup = new EventEmitter<{streams: any[], isSelected: boolean}>();
+  @Output() assignClicked = new EventEmitter<void>();
 
   readonly providerControl = new FormControl<string[]>([]);
   readonly groupControl = new FormControl<string[]>([]);
@@ -100,5 +108,28 @@ export class StreamsPaneComponent implements OnInit {
   onSearchChange(query: string) {
     this.searchQuery = query;
     this.fetchStreams();
+  }
+
+  isStreamSelected(id: number): boolean {
+    return this.selectedStreamIds.includes(id);
+  }
+
+  isGroupFullySelected(group: any): boolean {
+    return group.streams.length > 0 && group.streams.every((s: any) => this.isStreamSelected(s.id));
+  }
+
+  onToggleStream(id: number, event: Event) {
+    event.stopPropagation();
+    this.toggleStreamSelection.emit(id);
+  }
+
+  onToggleGroup(group: any, event: Event) {
+    event.stopPropagation();
+    const isSelected = !this.isGroupFullySelected(group);
+    this.selectAllInGroup.emit({ streams: group.streams, isSelected });
+  }
+
+  onAssign() {
+    this.assignClicked.emit();
   }
 }

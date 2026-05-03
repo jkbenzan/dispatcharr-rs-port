@@ -1,6 +1,15 @@
 <div class="pane-container">
   <div class="pane-header">
-    <h3 class="tui-text_h6">Streams</h3>
+    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+      <h3 class="tui-text_h6">Streams</h3>
+      <button 
+        class="tui-button tui-button_size_s" 
+        [disabled]="selectedStreamIds.length === 0"
+        (click)="onAssign()"
+      >
+        Assign ({{ selectedStreamIds.length }})
+      </button>
+    </div>
   </div>
 
   <div class="filters-bar">
@@ -45,17 +54,32 @@
         <ng-container *ngFor="let group of streamGroups">
           <button tuiAccordion>
             <div class="group-header">
-              <span>{{ group.name }}</span>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <input 
+                  type="checkbox" 
+                  [checked]="isGroupFullySelected(group)"
+                  (click)="onToggleGroup(group, $event)"
+                />
+                <span>{{ group.name }}</span>
+              </div>
               <span class="tui-text_caption group-count">{{ group.streams.length }}</span>
             </div>
           </button>
 
           <div tuiItem>
-            <div class="streams-list">
+            <div class="streams-list" cdkDropList>
               <div
                 *ngFor="let stream of group.streams"
                 class="stream-item"
+                (click)="onToggleStream(stream.id, $event)"
+                cdkDrag
+                [cdkDragData]="stream"
               >
+                <input 
+                  type="checkbox" 
+                  [checked]="isStreamSelected(stream.id)"
+                  style="margin-right: 12px; pointer-events: none;"
+                />
                 <div class="stream-info">
                   <span class="stream-name">{{ stream.name }}</span>
                   <span class="stream-details" *ngIf="stream.m3u_account_name">

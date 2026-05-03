@@ -1,11 +1,19 @@
-<div class="channel-manager-wrapper">
+<div class="channel-manager-wrapper" cdkDropListGroup>
   <div class="split-pane">
     <div class="pane left">
-      <app-channels-pane></app-channels-pane>
+      <app-channels-pane
+        [selectedChannelId]="selectedChannelId"
+        (channelSelected)="onChannelSelected($event)"
+      ></app-channels-pane>
     </div>
     <div class="divider"></div>
     <div class="pane right">
-      <app-streams-pane></app-streams-pane>
+      <app-streams-pane
+        [selectedStreamIds]="selectedStreamIds"
+        (toggleStreamSelection)="onToggleStreamSelection($event)"
+        (selectAllInGroup)="onSelectAllInGroup($event)"
+        (assignClicked)="onAssign()"
+      ></app-streams-pane>
     </div>
   </div>
 </div>

@@ -85,19 +85,17 @@
 }
 
 .stream-item {
+  display: flex;
+  align-items: center;
   padding: 10px 16px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  cursor: grab;
+  cursor: pointer;
   transition: background 0.2s;
   margin: 0 8px;
   border-radius: 4px;
 
   &:hover {
     background: var(--tui-base-02);
-  }
-
-  &:active {
-    cursor: grabbing;
   }
 }
 
