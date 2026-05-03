@@ -1,21 +1,12 @@
-import { ChangeDetectionStrategy, Component, EventEmitter, inject, Input, OnInit, Output } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, EventEmitter, inject, Input, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormControl, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ApiService } from '../../api.service';
 import { WebSocketService } from '../../websocket.service';
-import { TuiAccordion, TuiDataListWrapper, TuiSelect } from '@taiga-ui/kit';
-import { TuiLoader, TuiButton, TuiDialogService, TuiDataList, TuiTextfield } from '@taiga-ui/core';
+import { TuiLoader, TuiButton, TuiDialogService, TuiTextfield } from '@taiga-ui/core';
 import { PolymorpheusContent } from '@taiga-ui/polymorpheus';
 import { ChannelListItemComponent } from '../channel-list-item/channel-list-item';
 import { firstValueFrom } from 'rxjs';
-
-interface ChannelGroup {
-  id: number;
-  name: string;
-  channel_count?: number;
-  channels?: any[];
-  loading?: boolean;
-}
 
 @Component({
   selector: 'app-channels-pane',
@@ -24,13 +15,9 @@ interface ChannelGroup {
     CommonModule,
     FormsModule,
     ReactiveFormsModule,
-    TuiAccordion,
     TuiLoader,
     TuiButton,
     TuiTextfield,
-    TuiSelect,
-    TuiDataList,
-    TuiDataListWrapper,
     ChannelListItemComponent
   ],
   templateUrl: './channels-pane.html',
@@ -41,58 +28,79 @@ export class ChannelsPaneComponent implements OnInit {
   private readonly api = inject(ApiService);
   private readonly ws = inject(WebSocketService);
   private readonly dialogs = inject(TuiDialogService);
+  private readonly cdr = inject(ChangeDetectorRef);
   
   @Input() selectedChannelId: number | null = null;
   @Output() channelSelected = new EventEmitter<number>();
 
-  groups: ChannelGroup[] = [];
+  channels: any[] = [];
   loading = true;
+  searchQuery = '';
+  
+  // Pagination
+  totalCount = 0;
+  currentPage = 1;
+  hasNextPage = false;
 
   createChannelForm = new FormGroup({
     name: new FormControl('', Validators.required),
     channel_number: new FormControl<number | null>(null),
-    group_id: new FormControl<number | null>(null),
   });
 
   ngOnInit() {
-    this.fetchGroups();
+    this.fetchChannels();
 
     this.ws.messages$.subscribe(msg => {
       if (msg.type === 'playlist_created' || msg.type === 'm3u_refresh_done' || msg.type === 'channel_updated') {
-        this.fetchGroups();
+        this.fetchChannels();
       }
     });
   }
 
-  fetchGroups() {
-    this.api.getChannelGroups().subscribe({
+  fetchChannels() {
+    this.loading = true;
+    const params: any = {
+      page: this.currentPage,
+      ordering: 'channel_number',
+    };
+    if (this.searchQuery) {
+      params.search = this.searchQuery;
+    }
+
+    this.api.getChannels(params).subscribe({
       next: (res: any) => {
-        const results = Array.isArray(res) ? res : res?.results || [];
-        this.groups = results.map((g: any) => ({ ...g, channels: null, loading: false }));
+        this.channels = res?.results || [];
+        this.totalCount = res?.count || 0;
+        this.hasNextPage = !!res?.next;
         this.loading = false;
+        this.cdr.markForCheck();
       },
       error: (err) => {
-        console.error('Error fetching channel groups', err);
+        console.error('Error fetching channels', err);
         this.loading = false;
+        this.cdr.markForCheck();
       }
     });
   }
 
-  onGroupExpand(group: ChannelGroup) {
-    if (group.channels !== null) return;
+  onSearchChange(query: string) {
+    this.searchQuery = query;
+    this.currentPage = 1;
+    this.fetchChannels();
+  }
 
-    group.loading = true;
-    this.api.queryChannels({ channel_group: group.id, page_size: 1000 }).subscribe({
-      next: (res: any) => {
-        group.channels = Array.isArray(res) ? res : res?.results || [];
-        group.loading = false;
-      },
-      error: (err) => {
-        console.error(`Error fetching channels for group ${group.name}`, err);
-        group.loading = false;
-        group.channels = [];
-      }
-    });
+  nextPage() {
+    if (this.hasNextPage) {
+      this.currentPage++;
+      this.fetchChannels();
+    }
+  }
+
+  prevPage() {
+    if (this.currentPage > 1) {
+      this.currentPage--;
+      this.fetchChannels();
+    }
   }
 
   onChannelClick(channel: any) {
@@ -100,8 +108,8 @@ export class ChannelsPaneComponent implements OnInit {
   }
 
   handleDragOver(event: DragEvent) {
-    if (event.dataTransfer?.types.includes('streamids') || event.dataTransfer?.types.includes('text/plain')) {
-      event.preventDefault();
+    event.preventDefault();
+    if (event.dataTransfer) {
       event.dataTransfer.dropEffect = 'copy';
     }
   }
@@ -111,26 +119,23 @@ export class ChannelsPaneComponent implements OnInit {
     if (!event.dataTransfer) return;
 
     try {
-      const streamIdsStr = event.dataTransfer.getData('streamIds');
+      const streamIdsStr = event.dataTransfer.getData('application/json');
       if (!streamIdsStr) return;
       const streamIds: number[] = JSON.parse(streamIdsStr);
 
-      const channelStreamsRes: any = await firstValueFrom(this.api.getChannelStreams(channel.id));
-      const existingStreamIds = Array.isArray(channelStreamsRes) 
-        ? channelStreamsRes.map((s: any) => s.stream_id ?? s.stream?.id ?? s.id) 
-        : [];
+      // The channel object from getChannels already has a streams array
+      const existingStreamIds = (channel.streams || []).map((s: any) => s.id);
 
       // Combine and deduplicate
       const newStreamIds = Array.from(new Set([...existingStreamIds, ...streamIds]));
 
       if (newStreamIds.length > existingStreamIds.length) {
-        await firstValueFrom(this.api.updateChannel({
-          id: channel.id,
+        await firstValueFrom(this.api.updateChannel(channel.id, {
           streams: newStreamIds,
         }));
         
-        console.log(`Assigned streams to channel ${channel.name}`);
-        // TODO: Notification
+        console.log(`Assigned ${newStreamIds.length - existingStreamIds.length} stream(s) to channel "${channel.name}"`);
+        this.fetchChannels(); // Refresh to show updated stream counts
       }
     } catch (err) {
       console.error('Drag assignment failed:', err);
@@ -150,17 +155,11 @@ export class ChannelsPaneComponent implements OnInit {
       
       const payload: any = { name: vals.name };
       if (vals.channel_number != null) payload.channel_number = vals.channel_number;
-      
-      // If the group_id is actually a group object from the select
-      if (vals.group_id) {
-        const groupObj = vals.group_id as any;
-        payload.channel_group = groupObj.id ? groupObj.id : groupObj;
-      }
 
       await firstValueFrom(this.api.createChannel(payload));
       
       observer.complete();
-      this.fetchGroups(); // Refresh list
+      this.fetchChannels(); // Refresh list
     } catch (err) {
       console.error('Error creating channel', err);
     }

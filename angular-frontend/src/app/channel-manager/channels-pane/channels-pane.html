@@ -1,47 +1,51 @@
 <div class="pane-container">
-  <div class="pane-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-    <h3 class="tui-text_h6">Channels</h3>
-    <button class="tui-button tui-button_size_s" (click)="showCreateDialog(createChannelTemplate)">
-      Create Channel
-    </button>
+  <div class="pane-header">
+    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+      <h3 class="tui-text_h6">Channels ({{ totalCount }})</h3>
+      <button tuiButton size="s" appearance="primary" (click)="showCreateDialog(createChannelTemplate)">
+        + Create
+      </button>
+    </div>
+  </div>
+
+  <div class="search-bar">
+    <tui-textfield>
+      <input
+        tuiTextfield
+        type="text"
+        placeholder="Search channels..."
+        [(ngModel)]="searchQuery"
+        (ngModelChange)="onSearchChange($event)"
+      />
+    </tui-textfield>
   </div>
 
   <tui-loader [overlay]="true" [loading]="loading">
     <div class="scroll-area">
-      <tui-accordion [closeOthers]="false">
-        <ng-container *ngFor="let group of groups">
-          <button
-            tuiAccordion
-            (click)="onGroupExpand(group)"
-            class="group-btn"
-          >
-            <div class="group-header">
-              <span>{{ group.name }}</span>
-              <span class="tui-text_caption group-count">{{ group.channel_count }}</span>
-            </div>
-          </button>
-          
-          <div tuiItem>
-            <tui-loader [loading]="!!group.loading">
-              <div class="channels-list">
-                <div *ngIf="group.channels?.length === 0" class="empty-state">
-                  No channels in this group.
-                </div>
-                <app-channel-list-item
-                  *ngFor="let channel of group.channels"
-                  [channel]="channel"
-                  [isSelected]="channel.id === selectedChannelId"
-                  (clicked)="onChannelClick(channel)"
-                  (itemDragOver)="handleDragOver($event)"
-                  (itemDrop)="handleDropNative($event, channel)"
-                ></app-channel-list-item>
-              </div>
-            </tui-loader>
-          </div>
-        </ng-container>
-      </tui-accordion>
+      <div *ngIf="!loading && channels.length === 0" class="empty-state">
+        No channels found.
+      </div>
+
+      <app-channel-list-item
+        *ngFor="let channel of channels"
+        [channel]="channel"
+        [isSelected]="channel.id === selectedChannelId"
+        (clicked)="onChannelClick(channel)"
+        (itemDragOver)="handleDragOver($event)"
+        (itemDrop)="handleDropNative($event, channel)"
+      ></app-channel-list-item>
     </div>
   </tui-loader>
+
+  <div class="pagination-bar" *ngIf="totalCount > 0">
+    <button tuiButton size="s" appearance="flat" [disabled]="currentPage <= 1" (click)="prevPage()">
+      ← Prev
+    </button>
+    <span class="page-info">Page {{ currentPage }}</span>
+    <button tuiButton size="s" appearance="flat" [disabled]="!hasNextPage" (click)="nextPage()">
+      Next →
+    </button>
+  </div>
 </div>
 
 <ng-template #createChannelTemplate let-observer>
@@ -56,15 +60,6 @@
       <tui-textfield>
         <input tuiTextfield type="number" formControlName="channel_number" placeholder="Channel Number" />
       </tui-textfield>
-
-      <tui-select formControlName="group_id">
-        Channel Group
-        <tui-data-list-wrapper
-          *tuiDataList
-          [items]="groups"
-          itemContent="name"
-        ></tui-data-list-wrapper>
-      </tui-select>
     </div>
 
     <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px;">

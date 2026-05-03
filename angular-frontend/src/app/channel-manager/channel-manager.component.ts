@@ -4,12 +4,11 @@ import { ChannelsPaneComponent } from './channels-pane/channels-pane';
 import { StreamsPaneComponent } from './streams-pane/streams-pane';
 import { ApiService } from '../api.service';
 import { firstValueFrom } from 'rxjs';
-import { CdkDropListGroup } from '@angular/cdk/drag-drop';
 
 @Component({
   selector: 'app-channel-manager',
   standalone: true,
-  imports: [CommonModule, ChannelsPaneComponent, StreamsPaneComponent, CdkDropListGroup],
+  imports: [CommonModule, ChannelsPaneComponent, StreamsPaneComponent],
   templateUrl: './channel-manager.component.html',
   styleUrl: './channel-manager.component.less',
   changeDetection: ChangeDetectionStrategy.Default,
@@ -50,27 +49,22 @@ export class ChannelManagerComponent {
     }
 
     try {
-      // Get current streams for the selected channel
-      const channelStreamsRes: any = await firstValueFrom(this.api.getChannelStreams(this.selectedChannelId));
-      const existingStreamIds = Array.isArray(channelStreamsRes) 
-        ? channelStreamsRes.map((s: any) => s.stream_id ?? s.stream?.id ?? s.id) 
-        : [];
+      // Fetch current channel data to get existing stream ids
+      const channelRes: any = await firstValueFrom(this.api.getChannelStreams(this.selectedChannelId));
+      const channelData = channelRes?.results?.[0] || channelRes;
+      const existingStreamIds = (channelData?.streams || []).map((s: any) => s.id);
 
       // Add new streams
       const newStreamIds = Array.from(new Set([...existingStreamIds, ...this.selectedStreamIds]));
 
-      await firstValueFrom(this.api.updateChannel({
-        id: this.selectedChannelId,
+      await firstValueFrom(this.api.updateChannel(this.selectedChannelId, {
         streams: newStreamIds,
       }));
 
-      // In a real app we'd use Taiga UI alerts, for now simple alert
       console.log(`Successfully assigned ${this.selectedStreamIds.length} stream(s)`);
       
       // Clear selection
       this.selectedStreamIds = [];
-      
-      // TODO: refresh channels or stream counts if necessary
     } catch (err) {
       console.error('Failed to assign streams', err);
       alert('Failed to assign streams');

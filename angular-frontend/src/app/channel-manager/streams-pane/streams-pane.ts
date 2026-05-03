@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, EventEmitter, inject, Input, OnInit, Output } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, EventEmitter, inject, Input, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormControl, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { ApiService } from '../../api.service';
@@ -23,6 +23,7 @@ import { TuiLoader, TuiTextfield } from '@taiga-ui/core';
 })
 export class StreamsPaneComponent implements OnInit {
   private readonly api = inject(ApiService);
+  private readonly cdr = inject(ChangeDetectorRef);
 
   @Input() selectedStreamIds: number[] = [];
   @Output() toggleStreamSelection = new EventEmitter<number>();
@@ -48,41 +49,45 @@ export class StreamsPaneComponent implements OnInit {
     this.api.getPlaylists().subscribe((res: any) => {
       const results = Array.isArray(res) ? res : res?.results || [];
       this.providers = results.map((p: any) => p.name || String(p.id));
+      this.cdr.markForCheck();
     });
 
     this.api.getStreamGroups().subscribe((res: any) => {
       const results = Array.isArray(res) ? res : res?.results || [];
       this.groups = results.map((g: any) => g.name || g.group_name || String(g));
+      this.cdr.markForCheck();
     });
   }
 
   fetchStreams() {
     this.loading = true;
-    const params: any = {
-      page_size: 100,
-    };
+    this.cdr.markForCheck();
+    
+    const params: any = {};
 
     if (this.providerControl.value?.length) {
-      params.m3u_account = this.providerControl.value;
+      params.m3u_account = this.providerControl.value.join('::');
     }
     
     if (this.groupControl.value?.length) {
-      params.channel_group = this.groupControl.value;
+      params.channel_group = this.groupControl.value.join('::');
     }
 
     if (this.searchQuery) {
       params.search = this.searchQuery;
     }
 
-    this.api.queryStreams(params).subscribe({
+    this.api.getStreams(params).subscribe({
       next: (res: any) => {
         const streams = Array.isArray(res) ? res : res?.results || [];
         this.groupStreams(streams);
         this.loading = false;
+        this.cdr.markForCheck();
       },
       error: (err) => {
         console.error('Error fetching streams', err);
         this.loading = false;
+        this.cdr.markForCheck();
       }
     });
   }
@@ -90,7 +95,7 @@ export class StreamsPaneComponent implements OnInit {
   private groupStreams(streams: any[]) {
     const grouped: { [key: string]: any[] } = {};
     streams.forEach(s => {
-      const groupName = s.channel_group || 'Ungrouped';
+      const groupName = s.channel_group || s.channel_group_id || 'Ungrouped';
       if (!grouped[groupName]) grouped[groupName] = [];
       grouped[groupName].push(s);
     });
@@ -137,13 +142,14 @@ export class StreamsPaneComponent implements OnInit {
         ? this.selectedStreamIds 
         : [stream.id];
         
-      event.dataTransfer.setData('streamIds', JSON.stringify(idsToDrag));
+      // Use 'application/json' as the data type — browser normalizes custom types to lowercase
+      event.dataTransfer.setData('application/json', JSON.stringify(idsToDrag));
       event.dataTransfer.effectAllowed = 'copy';
       
-      // Optional: custom drag image
+      // Custom drag image showing count
       const dragEl = document.createElement('div');
       dragEl.textContent = `${idsToDrag.length} stream(s)`;
-      dragEl.style.cssText = 'position: absolute; top: -1000px; background: #646cff; color: white; padding: 4px 8px; border-radius: 4px;';
+      dragEl.style.cssText = 'position: absolute; top: -1000px; background: #646cff; color: white; padding: 4px 12px; border-radius: 6px; font-size: 13px; font-weight: 500;';
       document.body.appendChild(dragEl);
       event.dataTransfer.setDragImage(dragEl, 0, 0);
       setTimeout(() => document.body.removeChild(dragEl), 0);

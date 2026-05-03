@@ -13,7 +13,7 @@ export class ApiService {
     return this.http.get('/api/channels/groups/');
   }
 
-  queryChannels(params: any): Observable<any> {
+  getChannels(params: any = {}): Observable<any> {
     let httpParams = new HttpParams();
     Object.keys(params).forEach(key => {
       const value = params[key];
@@ -23,31 +23,33 @@ export class ApiService {
         httpParams = httpParams.set(key, value);
       }
     });
-    return this.http.get('/api/channels/', { params: httpParams });
+    return this.http.get('/api/channels/channels/', { params: httpParams });
   }
 
   getChannelStreams(channelId: number): Observable<any> {
-    return this.http.get(`/api/channels/${channelId}/streams/`);
+    // Channel data from getChannels already includes streams array
+    // But if we need to fetch separately:
+    return this.http.get(`/api/channels/channels/${channelId}/`);
   }
 
-  updateChannel(channelData: any): Observable<any> {
-    return this.http.put(`/api/channels/${channelData.id}/`, channelData);
+  updateChannel(id: number, channelData: any): Observable<any> {
+    return this.http.patch(`/api/channels/channels/${id}/`, channelData);
   }
 
   createChannel(channelData: any): Observable<any> {
-    return this.http.post('/api/channels/', channelData);
+    return this.http.post('/api/channels/channels/', channelData);
   }
 
   // Streams
   getPlaylists(): Observable<any> {
-    return this.http.get('/api/m3u_accounts/');
+    return this.http.get('/api/m3u/accounts/');
   }
 
   getStreamGroups(): Observable<any> {
-    return this.http.get('/api/streams/groups/');
+    return this.http.get('/api/channels/groups/');
   }
 
-  queryStreams(params: any): Observable<any> {
+  getStreams(params: any = {}): Observable<any> {
     let httpParams = new HttpParams();
     Object.keys(params).forEach(key => {
       const value = params[key];
@@ -57,6 +59,10 @@ export class ApiService {
         httpParams = httpParams.set(key, value);
       }
     });
-    return this.http.get('/api/streams/', { params: httpParams });
+    return this.http.get('/api/channels/streams/', { params: httpParams });
+  }
+
+  getStreamFilterOptions(): Observable<any> {
+    return this.http.get('/api/channels/streams/filter-options/');
   }
 }
