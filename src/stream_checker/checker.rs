@@ -406,7 +406,7 @@ pub async fn check_single_stream(
         "-t", &duration_str,
         "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.3",
         "-i", &stream_url,
-        "-c", "copy",
+        "-vf", "freezedetect=n=0.003:d=2,blackdetect=d=2:pix_th=0.1",
         "-f", "null",
         "-",
     ]);
@@ -436,9 +436,18 @@ pub async fn check_single_stream(
         };
 
     let mut bitrate: Option<f64> = None;
+    let mut is_frozen = false;
+    let mut is_black = false;
+
     if ffmpeg_result.status.success() || ffmpeg_result.status.code().unwrap_or(1) != 0 {
         let stderr = String::from_utf8_lossy(&ffmpeg_result.stderr);
-        for line in stderr.lines().rev() {
+        for line in stderr.lines() {
+            if line.contains("freeze_start:") {
+                is_frozen = true;
+            }
+            if line.contains("black_start:") {
+                is_black = true;
+            }
             if line.contains("bitrate=") {
                 if let Some(idx) = line.find("bitrate=") {
                     let parts: Vec<&str> = line[idx..].split_whitespace().collect();
@@ -446,13 +455,20 @@ pub async fn check_single_stream(
                         let bit_str = parts[0].replace("bitrate=", "");
                         if let Ok(b) = bit_str.replace("kbits/s", "").trim().parse::<f64>() {
                             bitrate = Some(b);
-                            break;
                         }
                     }
                 }
             }
         }
     }
+
+    let status = if is_frozen {
+        "frozen"
+    } else if is_black {
+        "black_screen"
+    } else {
+        "online"
+    };
 
     let stats = json!({
         "reachable": true,
@@ -464,7 +480,11 @@ pub async fn check_single_stream(
         "audio_codec": audio_codec,
         "audio_channels": channels,
         "video_bitrate": bitrate,
-        "status": "online"
+        "status": status,
+        "issues": {
+            "frozen": is_frozen,
+            "black_screen": is_black
+        }
     });
 
     let mut active_stream: stream::ActiveModel = stream_obj.clone().into();
