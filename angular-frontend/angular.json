@@ -20,6 +20,7 @@
         "build": {
           "builder": "@angular/build:application",
           "options": {
+            "outputPath": "../dist",
             "browser": "src/main.ts",
             "tsConfig": "tsconfig.app.json",
             "inlineStyleLanguage": "less",
@@ -31,7 +32,7 @@
             ],
             "styles": [
               "@taiga-ui/styles/taiga-ui-fonts.less",
-              "@taiga-ui/styles/taiga-ui-global.less",
+              "@taiga-ui/styles/taiga-ui-theme.less",
               "src/styles.less"
             ]
           },

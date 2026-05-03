@@ -1,25 +1,14 @@
-import { Component, inject, OnInit } from '@angular/core';
-import { ApiService } from '../api.service';
+import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { ChannelsPaneComponent } from './channels-pane/channels-pane';
+import { StreamsPaneComponent } from './streams-pane/streams-pane';
 
 @Component({
   selector: 'app-channel-manager',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, ChannelsPaneComponent, StreamsPaneComponent],
   templateUrl: './channel-manager.component.html',
-  styleUrl: './channel-manager.component.less'
+  styleUrl: './channel-manager.component.less',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class ChannelManagerComponent implements OnInit {
-  private api = inject(ApiService);
-  
-  groups: any[] = [];
-
-  ngOnInit() {
-    this.api.getChannelGroups().subscribe(
-      (res: any) => {
-        this.groups = Array.isArray(res) ? res : res?.results || [];
-      },
-      err => console.error('Error fetching groups', err)
-    );
-  }
-}
+export class ChannelManagerComponent {}

@@ -1,24 +1,35 @@
-.channel-manager-layout {
+.channel-manager-wrapper {
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
   display: flex;
-  height: 100%;
+  background: var(--tui-base-01);
+}
+
+.split-pane {
+  display: flex;
   width: 100%;
-  
-  .pane {
-    padding: 1rem;
-    overflow-y: auto;
-  }
-  
-  .left-pane {
-    width: 300px;
-    border-right: 1px solid #333;
-  }
-  
-  .right-pane {
-    flex: 1;
+  height: 100%;
+}
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+
+  &.left {
+    width: 350px;
+    min-width: 250px;
   }
 
-  .group-item {
-    padding: 0.5rem;
-    border-bottom: 1px solid #222;
+  &.right {
+    flex: 1;
   }
+}
+
+.divider {
+  width: 1px;
+  background: var(--tui-base-03);
+  height: 100%;
 }

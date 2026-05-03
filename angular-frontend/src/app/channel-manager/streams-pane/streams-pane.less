@@ -1,0 +1,124 @@
+.pane-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.pane-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--tui-base-03);
+  background: var(--tui-base-01);
+
+  h3 {
+    margin: 0;
+    color: var(--tui-text-01);
+  }
+}
+
+.filters-bar {
+  padding: 16px;
+  background: var(--tui-base-01);
+  border-bottom: 1px solid var(--tui-base-03);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dropdowns {
+  display: flex;
+  gap: 8px;
+
+  .filter-select {
+    flex: 1;
+  }
+}
+
+.search-box {
+  .tui-input {
+    width: 100%;
+    background: var(--tui-base-02);
+    border: 1px solid var(--tui-base-03);
+    border-radius: 4px;
+    padding: 8px 12px;
+    color: var(--tui-text-01);
+    outline: none;
+
+    &:focus {
+      border-color: var(--tui-primary);
+    }
+  }
+}
+
+.scroll-area {
+  flex: 1;
+  overflow-y: auto;
+  background: var(--tui-base-01);
+
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+  }
+}
+
+.group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.group-count {
+  background: var(--tui-base-03);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+}
+
+.streams-list {
+  padding: 8px 0;
+}
+
+.stream-item {
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  cursor: grab;
+  transition: background 0.2s;
+  margin: 0 8px;
+  border-radius: 4px;
+
+  &:hover {
+    background: var(--tui-base-02);
+  }
+
+  &:active {
+    cursor: grabbing;
+  }
+}
+
+.stream-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.stream-name {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.stream-details {
+  font-size: 11px;
+  opacity: 0.5;
+}
+
+.empty-state {
+  padding: 32px;
+  text-align: center;
+  opacity: 0.5;
+  font-size: 14px;
+}

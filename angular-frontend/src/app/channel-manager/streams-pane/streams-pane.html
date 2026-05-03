@@ -1,0 +1,76 @@
+<div class="pane-container">
+  <div class="pane-header">
+    <h3 class="tui-text_h6">Streams</h3>
+  </div>
+
+  <div class="filters-bar">
+    <tui-textfield class="search-box">
+      <input
+        tuiTextfield
+        type="text"
+        placeholder="Search streams..."
+        [(ngModel)]="searchQuery"
+        (ngModelChange)="onSearchChange($event)"
+      />
+    </tui-textfield>
+
+    <div class="dropdowns">
+      <tui-textfield class="filter-select">
+        <select
+          multiple
+          tuiMultiSelect
+          [formControl]="providerControl"
+          [items]="providers"
+          (ngModelChange)="fetchStreams()"
+        ></select>
+        Providers
+      </tui-textfield>
+
+      <tui-textfield class="filter-select">
+        <select
+          multiple
+          tuiMultiSelect
+          [formControl]="groupControl"
+          [items]="groups"
+          (ngModelChange)="fetchStreams()"
+        ></select>
+        Groups
+      </tui-textfield>
+    </div>
+  </div>
+
+  <tui-loader [overlay]="true" [loading]="loading">
+    <div class="scroll-area">
+      <tui-accordion [closeOthers]="false">
+        <ng-container *ngFor="let group of streamGroups">
+          <button tuiAccordion>
+            <div class="group-header">
+              <span>{{ group.name }}</span>
+              <span class="tui-text_caption group-count">{{ group.streams.length }}</span>
+            </div>
+          </button>
+
+          <div tuiItem>
+            <div class="streams-list">
+              <div
+                *ngFor="let stream of group.streams"
+                class="stream-item"
+              >
+                <div class="stream-info">
+                  <span class="stream-name">{{ stream.name }}</span>
+                  <span class="stream-details" *ngIf="stream.m3u_account_name">
+                    {{ stream.m3u_account_name }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </ng-container>
+      </tui-accordion>
+
+      <div *ngIf="!loading && streamGroups.length === 0" class="empty-state">
+        No streams found matching filters.
+      </div>
+    </div>
+  </tui-loader>
+</div>

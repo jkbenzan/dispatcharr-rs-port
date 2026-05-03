@@ -1,13 +1,11 @@
-<div class="channel-manager-layout">
-  <div class="pane left-pane">
-    <h3>Channels</h3>
-    <div *ngIf="groups.length === 0">Loading groups...</div>
-    <div *ngFor="let group of groups" class="group-item">
-      {{ group.name }} ({{ group.channel_count }})
+<div class="channel-manager-wrapper">
+  <div class="split-pane">
+    <div class="pane left">
+      <app-channels-pane></app-channels-pane>
     </div>
-  </div>
-  <div class="pane right-pane">
-    <h3>Streams</h3>
-    <div>(Taiga UI multi-select will go here)</div>
+    <div class="divider"></div>
+    <div class="pane right">
+      <app-streams-pane></app-streams-pane>
+    </div>
   </div>
 </div>

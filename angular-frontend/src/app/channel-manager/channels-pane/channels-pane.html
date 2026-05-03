@@ -1,0 +1,44 @@
+<div class="pane-container">
+  <div class="pane-header">
+    <h3 class="tui-text_h6">Channels</h3>
+  </div>
+
+  <tui-loader [overlay]="true" [loading]="loading">
+    <div class="scroll-area">
+      <tui-accordion [closeOthers]="false">
+        <ng-container *ngFor="let group of groups">
+          <button
+            tuiAccordion
+            (click)="onGroupExpand(group)"
+            class="group-btn"
+          >
+            <div class="group-header">
+              <span>{{ group.name }}</span>
+              <span class="tui-text_caption group-count">{{ group.channel_count }}</span>
+            </div>
+          </button>
+          
+          <div tuiItem>
+            <tui-loader [loading]="!!group.loading">
+              <div class="channels-list">
+                <div *ngIf="group.channels?.length === 0" class="empty-state">
+                  No channels in this group.
+                </div>
+                <div
+                  *ngFor="let channel of group.channels"
+                  class="channel-item"
+                  [title]="channel.name"
+                >
+                  <span class="channel-name">{{ channel.name }}</span>
+                  <span class="channel-number" *ngIf="channel.channel_number">
+                    #{{ channel.channel_number }}
+                  </span>
+                </div>
+              </div>
+            </tui-loader>
+          </div>
+        </ng-container>
+      </tui-accordion>
+    </div>
+  </tui-loader>
+</div>
