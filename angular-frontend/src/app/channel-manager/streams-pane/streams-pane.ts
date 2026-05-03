@@ -4,7 +4,6 @@ import { FormControl, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { ApiService } from '../../api.service';
 import { TuiAccordion, TuiMultiSelect } from '@taiga-ui/kit';
 import { TuiLoader, TuiTextfield } from '@taiga-ui/core';
-import { CdkDrag, CdkDropList } from '@angular/cdk/drag-drop';
 
 @Component({
   selector: 'app-streams-pane',
@@ -16,9 +15,7 @@ import { CdkDrag, CdkDropList } from '@angular/cdk/drag-drop';
     TuiAccordion,
     TuiLoader,
     TuiTextfield,
-    TuiMultiSelect,
-    CdkDrag,
-    CdkDropList
+    TuiMultiSelect
   ],
   templateUrl: './streams-pane.html',
   styleUrl: './streams-pane.less',
@@ -131,5 +128,25 @@ export class StreamsPaneComponent implements OnInit {
 
   onAssign() {
     this.assignClicked.emit();
+  }
+
+  handleDragStart(event: DragEvent, stream: any) {
+    if (event.dataTransfer) {
+      // If the dragged stream is part of the selection, drag all selected. Otherwise just drag this one.
+      const idsToDrag = this.selectedStreamIds.includes(stream.id) 
+        ? this.selectedStreamIds 
+        : [stream.id];
+        
+      event.dataTransfer.setData('streamIds', JSON.stringify(idsToDrag));
+      event.dataTransfer.effectAllowed = 'copy';
+      
+      // Optional: custom drag image
+      const dragEl = document.createElement('div');
+      dragEl.textContent = `${idsToDrag.length} stream(s)`;
+      dragEl.style.cssText = 'position: absolute; top: -1000px; background: #646cff; color: white; padding: 4px 8px; border-radius: 4px;';
+      document.body.appendChild(dragEl);
+      event.dataTransfer.setDragImage(dragEl, 0, 0);
+      setTimeout(() => document.body.removeChild(dragEl), 0);
+    }
   }
 }

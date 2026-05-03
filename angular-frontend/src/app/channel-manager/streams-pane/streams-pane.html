@@ -67,13 +67,13 @@
           </button>
 
           <div tuiItem>
-            <div class="streams-list" cdkDropList>
+            <div class="streams-list">
               <div
                 *ngFor="let stream of group.streams"
                 class="stream-item"
                 (click)="onToggleStream(stream.id, $event)"
-                cdkDrag
-                [cdkDragData]="stream"
+                draggable="true"
+                (dragstart)="handleDragStart($event, stream)"
               >
                 <input 
                   type="checkbox" 

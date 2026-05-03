@@ -1,6 +1,9 @@
 <div class="pane-container">
-  <div class="pane-header">
+  <div class="pane-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
     <h3 class="tui-text_h6">Channels</h3>
+    <button class="tui-button tui-button_size_s" (click)="showCreateDialog(createChannelTemplate)">
+      Create Channel
+    </button>
   </div>
 
   <tui-loader [overlay]="true" [loading]="loading">
@@ -24,20 +27,14 @@
                 <div *ngIf="group.channels?.length === 0" class="empty-state">
                   No channels in this group.
                 </div>
-                <div
+                <app-channel-list-item
                   *ngFor="let channel of group.channels"
-                  class="channel-item"
-                  [class.selected]="channel.id === selectedChannelId"
-                  [title]="channel.name"
-                  (click)="onChannelClick(channel)"
-                  cdkDropList
-                  (cdkDropListDropped)="handleDrop($event, channel)"
-                >
-                  <span class="channel-name">{{ channel.name }}</span>
-                  <span class="channel-number" *ngIf="channel.channel_number">
-                    #{{ channel.channel_number }}
-                  </span>
-                </div>
+                  [channel]="channel"
+                  [isSelected]="channel.id === selectedChannelId"
+                  (clicked)="onChannelClick(channel)"
+                  (itemDragOver)="handleDragOver($event)"
+                  (itemDrop)="handleDropNative($event, channel)"
+                ></app-channel-list-item>
               </div>
             </tui-loader>
           </div>
@@ -46,3 +43,37 @@
     </div>
   </tui-loader>
 </div>
+
+<ng-template #createChannelTemplate let-observer>
+  <form [formGroup]="createChannelForm" (ngSubmit)="submitCreateChannel(observer)">
+    <h2 class="tui-text_h5" style="margin-bottom: 16px;">Create Channel</h2>
+    
+    <div style="display: flex; flex-direction: column; gap: 16px;">
+      <tui-textfield>
+        <input tuiTextfield formControlName="name" placeholder="Channel Name" />
+      </tui-textfield>
+
+      <tui-textfield>
+        <input tuiTextfield type="number" formControlName="channel_number" placeholder="Channel Number" />
+      </tui-textfield>
+
+      <tui-select formControlName="group_id">
+        Channel Group
+        <tui-data-list-wrapper
+          *tuiDataList
+          [items]="groups"
+          itemContent="name"
+        ></tui-data-list-wrapper>
+      </tui-select>
+    </div>
+
+    <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px;">
+      <button tuiButton type="button" appearance="secondary" (click)="observer.complete()">
+        Cancel
+      </button>
+      <button tuiButton type="submit" [disabled]="createChannelForm.invalid">
+        Create
+      </button>
+    </div>
+  </form>
+</ng-template>

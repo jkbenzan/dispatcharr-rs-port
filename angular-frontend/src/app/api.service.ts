@@ -34,6 +34,10 @@ export class ApiService {
     return this.http.put(`/api/channels/${channelData.id}/`, channelData);
   }
 
+  createChannel(channelData: any): Observable<any> {
+    return this.http.post('/api/channels/', channelData);
+  }
+
   // Streams
   getPlaylists(): Observable<any> {
     return this.http.get('/api/m3u_accounts/');

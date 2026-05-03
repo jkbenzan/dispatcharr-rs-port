@@ -1,10 +1,12 @@
 import { ChangeDetectionStrategy, Component, EventEmitter, inject, Input, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormControl, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ApiService } from '../../api.service';
 import { WebSocketService } from '../../websocket.service';
-import { TuiAccordion } from '@taiga-ui/kit';
-import { TuiLoader } from '@taiga-ui/core';
-import { CdkDropList, CdkDragDrop } from '@angular/cdk/drag-drop';
+import { TuiAccordion, TuiDataListWrapper, TuiSelect } from '@taiga-ui/kit';
+import { TuiLoader, TuiButton, TuiDialogService, TuiDataList, TuiTextfield } from '@taiga-ui/core';
+import { PolymorpheusContent } from '@taiga-ui/polymorpheus';
+import { ChannelListItemComponent } from '../channel-list-item/channel-list-item';
 import { firstValueFrom } from 'rxjs';
 
 interface ChannelGroup {
@@ -18,7 +20,19 @@ interface ChannelGroup {
 @Component({
   selector: 'app-channels-pane',
   standalone: true,
-  imports: [CommonModule, TuiAccordion, TuiLoader, CdkDropList],
+  imports: [
+    CommonModule,
+    FormsModule,
+    ReactiveFormsModule,
+    TuiAccordion,
+    TuiLoader,
+    TuiButton,
+    TuiTextfield,
+    TuiSelect,
+    TuiDataList,
+    TuiDataListWrapper,
+    ChannelListItemComponent
+  ],
   templateUrl: './channels-pane.html',
   styleUrl: './channels-pane.less',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -26,12 +40,19 @@ interface ChannelGroup {
 export class ChannelsPaneComponent implements OnInit {
   private readonly api = inject(ApiService);
   private readonly ws = inject(WebSocketService);
+  private readonly dialogs = inject(TuiDialogService);
   
   @Input() selectedChannelId: number | null = null;
   @Output() channelSelected = new EventEmitter<number>();
 
   groups: ChannelGroup[] = [];
   loading = true;
+
+  createChannelForm = new FormGroup({
+    name: new FormControl('', Validators.required),
+    channel_number: new FormControl<number | null>(null),
+    group_id: new FormControl<number | null>(null),
+  });
 
   ngOnInit() {
     this.fetchGroups();
@@ -78,27 +99,70 @@ export class ChannelsPaneComponent implements OnInit {
     this.channelSelected.emit(channel.id);
   }
 
-  async handleDrop(event: CdkDragDrop<any>, channel: any) {
-    const stream = event.item.data;
-    if (!stream) return;
+  handleDragOver(event: DragEvent) {
+    if (event.dataTransfer?.types.includes('streamids') || event.dataTransfer?.types.includes('text/plain')) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'copy';
+    }
+  }
+
+  async handleDropNative(event: DragEvent, channel: any) {
+    event.preventDefault();
+    if (!event.dataTransfer) return;
 
     try {
+      const streamIdsStr = event.dataTransfer.getData('streamIds');
+      if (!streamIdsStr) return;
+      const streamIds: number[] = JSON.parse(streamIdsStr);
+
       const channelStreamsRes: any = await firstValueFrom(this.api.getChannelStreams(channel.id));
       const existingStreamIds = Array.isArray(channelStreamsRes) 
         ? channelStreamsRes.map((s: any) => s.stream_id ?? s.stream?.id ?? s.id) 
         : [];
 
-      if (!existingStreamIds.includes(stream.id)) {
+      // Combine and deduplicate
+      const newStreamIds = Array.from(new Set([...existingStreamIds, ...streamIds]));
+
+      if (newStreamIds.length > existingStreamIds.length) {
         await firstValueFrom(this.api.updateChannel({
           id: channel.id,
-          streams: [...existingStreamIds, stream.id],
+          streams: newStreamIds,
         }));
         
-        console.log(`Assigned stream ${stream.name} to channel ${channel.name}`);
+        console.log(`Assigned streams to channel ${channel.name}`);
         // TODO: Notification
       }
     } catch (err) {
       console.error('Drag assignment failed:', err);
+    }
+  }
+
+  showCreateDialog(content: PolymorpheusContent<any>): void {
+    this.createChannelForm.reset();
+    this.dialogs.open(content, { dismissible: true }).subscribe();
+  }
+
+  async submitCreateChannel(observer: any) {
+    if (this.createChannelForm.invalid) return;
+
+    try {
+      const vals = this.createChannelForm.value;
+      
+      const payload: any = { name: vals.name };
+      if (vals.channel_number != null) payload.channel_number = vals.channel_number;
+      
+      // If the group_id is actually a group object from the select
+      if (vals.group_id) {
+        const groupObj = vals.group_id as any;
+        payload.channel_group = groupObj.id ? groupObj.id : groupObj;
+      }
+
+      await firstValueFrom(this.api.createChannel(payload));
+      
+      observer.complete();
+      this.fetchGroups(); // Refresh list
+    } catch (err) {
+      console.error('Error creating channel', err);
     }
   }
 }

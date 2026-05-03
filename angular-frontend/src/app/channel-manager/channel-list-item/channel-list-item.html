@@ -1,0 +1,24 @@
+<div class="channel-item"
+     [class.selected]="isSelected"
+     (click)="clicked.emit()"
+     (dragover)="itemDragOver.emit($event)"
+     (drop)="itemDrop.emit($event)">
+  
+  <input type="checkbox" [checked]="isSelected" style="pointer-events: none;" />
+
+  <img *ngIf="channel.logo_url; else noLogo" [src]="channel.logo_url" class="channel-logo" loading="lazy">
+  <ng-template #noLogo>
+    <div class="channel-logo" style="display: flex; align-items: center; justify-content: center;">
+      <span class="material-icons" style="font-size: 20px; color: var(--tui-text-03);">tv</span>
+    </div>
+  </ng-template>
+
+  <div class="channel-info">
+    <div class="channel-name">{{ channel.name }}</div>
+    <div class="channel-meta">
+      <span *ngIf="channel.channel_number">#{{ channel.channel_number }}</span>
+      <span class="badge" *ngIf="channel.epg_id">EPG</span>
+      <span *ngIf="channel.streams?.length">{{ channel.streams.length }} streams</span>
+    </div>
+  </div>
+</div>
