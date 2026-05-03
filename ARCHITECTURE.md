@@ -137,7 +137,7 @@ The channels pane displays channels organized by group, matching the ECM layout.
 frontend/ → npm run build → dist/
 
 # Stage 1b: Angular channel manager (mini-app)
-angular-frontend/ → npx ng build → dist/channel-manager/
+angular-frontend/ → npx ng build → /app/dist/browser/ → /app/dist/channel-manager/
 
 # Stage 2: Rust binary
 cargo build --release
