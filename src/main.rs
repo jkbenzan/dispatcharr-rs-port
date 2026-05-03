@@ -2,7 +2,7 @@ mod epg_api;
 use axum::{
     extract::ws::{WebSocket, WebSocketUpgrade},
     response::IntoResponse,
-    routing::{get, patch, post, put},
+    routing::{delete, get, patch, post, put},
     Router,
 };
 use sea_orm::{ConnectOptions, Database, DatabaseConnection};
@@ -499,7 +499,11 @@ async fn main() {
         )
         // --- DASHBOARD MISSING DEPENDENCIES ---
         .route("/api/channels/logos/", get(api::get_logos))
+        .route("/api/channels/logos/:id/", get(api::get_logo).delete(api::delete_logo).put(api::update_logo))
+        .route("/api/channels/logos/:id", get(api::get_logo).delete(api::delete_logo).put(api::update_logo))
         .route("/api/channels/logos/upload/", post(api::upload_logo))
+        .route("/api/channels/logos/bulk-delete/", delete(api::bulk_delete_logos))
+        .route("/api/channels/logos/cleanup/", post(api::cleanup_unused_logos))
         .route("/api/channels/streams/ids/", get(api::get_stream_ids))
         .route(
             "/api/channels/streams/by-ids/",

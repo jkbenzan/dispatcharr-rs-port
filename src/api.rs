@@ -124,7 +124,18 @@ pub async fn get_logo(
 pub async fn delete_logo(
     axum::extract::State(state): axum::extract::State<std::sync::Arc<crate::AppState>>,
     axum::extract::Path(id): axum::extract::Path<i64>,
+    axum::extract::Query(params): axum::extract::Query<HashMap<String, String>>,
 ) -> Json<Value> {
+    let delete_file = params.get("delete_file").map(|v| v == "true").unwrap_or(false);
+
+    if delete_file {
+        if let Ok(Some(logo)) = crate::entities::logo::Entity::find_by_id(id).one(&state.db).await {
+            let filename = logo.url.trim_start_matches("/logos/");
+            let file_path = format!("/data/logos/{}", filename);
+            let _ = std::fs::remove_file(file_path);
+        }
+    }
+
     let _ = crate::entities::logo::Entity::delete_by_id(id)
         .exec(&state.db)
         .await;
@@ -159,22 +170,47 @@ pub async fn update_logo(
 #[derive(serde::Deserialize)]
 pub struct BulkDeleteLogosRequest {
     logo_ids: Vec<i64>,
+    #[serde(default)]
+    delete_files: bool,
 }
 pub async fn bulk_delete_logos(
     axum::extract::State(state): axum::extract::State<std::sync::Arc<crate::AppState>>,
     axum::Json(payload): axum::Json<BulkDeleteLogosRequest>,
 ) -> Json<Value> {
-    use sea_orm::{ColumnTrait, QueryFilter};
+    use sea_orm::{ColumnTrait, QueryFilter, EntityTrait};
+    
+    if payload.delete_files {
+        let logos = crate::entities::logo::Entity::find()
+            .filter(crate::entities::logo::Column::Id.is_in(payload.logo_ids.clone()))
+            .all(&state.db)
+            .await
+            .unwrap_or_default();
+            
+        for logo in logos {
+            let filename = logo.url.trim_start_matches("/logos/");
+            let file_path = format!("/data/logos/{}", filename);
+            let _ = std::fs::remove_file(file_path);
+        }
+    }
+
     let _ = crate::entities::logo::Entity::delete_many()
         .filter(crate::entities::logo::Column::Id.is_in(payload.logo_ids))
         .exec(&state.db)
         .await;
     Json(json!({"success": true}))
 }
+#[derive(serde::Deserialize, Default)]
+pub struct CleanupLogosRequest {
+    #[serde(default)]
+    delete_files: bool,
+}
 pub async fn cleanup_unused_logos(
     axum::extract::State(state): axum::extract::State<std::sync::Arc<crate::AppState>>,
+    payload: Option<axum::Json<CleanupLogosRequest>>,
 ) -> Json<Value> {
-    use sea_orm::{ColumnTrait, QueryFilter};
+    use sea_orm::{ColumnTrait, QueryFilter, EntityTrait};
+    let delete_files = payload.map(|p| p.delete_files).unwrap_or(false);
+
     let channels = crate::entities::channel::Entity::find()
         .all(&state.db)
         .await
@@ -185,11 +221,38 @@ pub async fn cleanup_unused_logos(
             used_logos.push(logo_id);
         }
     }
+    
+    let mut deleted_count = 0;
+    let mut local_files_deleted = 0;
+    
+    let unused_logos = crate::entities::logo::Entity::find()
+        .filter(crate::entities::logo::Column::Id.is_not_in(used_logos.clone()))
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+        
+    deleted_count = unused_logos.len();
+
+    if delete_files {
+        for logo in unused_logos {
+            let filename = logo.url.trim_start_matches("/logos/");
+            let file_path = format!("/data/logos/{}", filename);
+            if std::fs::remove_file(file_path).is_ok() {
+                local_files_deleted += 1;
+            }
+        }
+    }
+
     let _ = crate::entities::logo::Entity::delete_many()
         .filter(crate::entities::logo::Column::Id.is_not_in(used_logos))
         .exec(&state.db)
         .await;
-    Json(json!({"success": true}))
+        
+    Json(json!({
+        "success": true, 
+        "deleted_count": deleted_count, 
+        "local_files_deleted": local_files_deleted
+    }))
 }
 
 pub async fn get_timezones() -> Json<Value> {
