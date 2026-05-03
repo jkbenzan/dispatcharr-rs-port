@@ -15,7 +15,7 @@ import {
   IconSettings,
   IconVideo,
   IconDeviceTv,
-  IconCloudCompute,
+  IconCpu,
   IconNetwork,
   IconUser,
   IconDatabase,
@@ -160,7 +160,7 @@ const SettingsPage = () => {
                 <Tabs.Tab value="user-agents" leftSection={<IconTerminal2 size={18} />}>
                   User-Agents
                 </Tabs.Tab>
-                <Tabs.Tab value="stream-profiles" leftSection={<IconCloudCompute size={18} />}>
+                <Tabs.Tab value="stream-profiles" leftSection={<IconCpu size={18} />}>
                   Hardware Profiles
                 </Tabs.Tab>
                 <Tabs.Tab value="network-access" leftSection={<IconNetwork size={18} />}>
