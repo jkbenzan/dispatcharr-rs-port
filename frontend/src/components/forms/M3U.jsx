@@ -1,0 +1,585 @@
+// Modal.js
+import React, { useState, useEffect } from 'react';
+import usePlaylistsStore from '../../store/playlists';
+import API from '../../api';
+import useUserAgentsStore from '../../store/userAgents';
+import M3UProfiles from './M3UProfiles';
+import {
+  LoadingOverlay,
+  TextInput,
+  Button,
+  Checkbox,
+  Modal,
+  Flex,
+  Select,
+  FileInput,
+  NumberInput,
+  Divider,
+  Stack,
+  Group,
+  Switch,
+  Box,
+  PasswordInput,
+} from '@mantine/core';
+import M3UGroupFilter from './M3UGroupFilter';
+import useChannelsStore from '../../store/channels';
+import { notifications } from '@mantine/notifications';
+import { isNotEmpty, useForm } from '@mantine/form';
+import useEPGsStore from '../../store/epgs';
+import useVODStore from '../../store/useVODStore';
+import M3UFilters from './M3UFilters';
+import ScheduleInput from './ScheduleInput';
+import { DateTimePicker } from '@mantine/dates';
+
+const M3U = ({
+  m3uAccount = null,
+  isOpen,
+  onClose,
+  playlistCreated = false,
+}) => {
+  const userAgents = useUserAgentsStore((s) => s.userAgents);
+  const fetchChannelGroups = useChannelsStore((s) => s.fetchChannelGroups);
+  const fetchEPGs = useEPGsStore((s) => s.fetchEPGs);
+  const fetchCategories = useVODStore((s) => s.fetchCategories);
+
+  const [playlist, setPlaylist] = useState(null);
+  const [file, setFile] = useState(null);
+  const [expDate, setExpDate] = useState(null);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [groupFilterModalOpen, setGroupFilterModalOpen] = useState(false);
+  const [filterModalOpen, setFilterModalOpen] = useState(false);
+  const [loadingText, setLoadingText] = useState('');
+  const [isWaitingForGroups, setIsWaitingForGroups] = useState(false);
+  const [showCredentialFields, setShowCredentialFields] = useState(false);
+  const [scheduleType, setScheduleType] = useState('interval');
+
+  const refreshProgress = usePlaylistsStore((s) => s.refreshProgress);
+
+  const form = useForm({
+    mode: 'uncontrolled',
+    initialValues: {
+      name: '',
+      server_url: '',
+      user_agent: '0',
+      is_active: true,
+      max_streams: 0,
+      refresh_interval: 24,
+      cron_expression: '',
+      account_type: 'XC',
+      create_epg: false,
+      username: '',
+      password: '',
+      stale_stream_days: 7,
+      priority: 0,
+      enable_vod: false,
+    },
+
+    validate: {
+      name: isNotEmpty('Please select a name'),
+      user_agent: isNotEmpty('Please select a user-agent'),
+    },
+  });
+
+  useEffect(() => {
+    if (m3uAccount) {
+      setPlaylist(m3uAccount);
+      form.setValues({
+        name: m3uAccount.name,
+        server_url: m3uAccount.server_url,
+        max_streams: m3uAccount.max_streams,
+        user_agent: m3uAccount.user_agent ? `${m3uAccount.user_agent}` : '0',
+        is_active: m3uAccount.is_active,
+        refresh_interval: m3uAccount.refresh_interval,
+        cron_expression: m3uAccount.cron_expression || '',
+        account_type: m3uAccount.account_type,
+        username: m3uAccount.username ?? '',
+        password: '',
+        stale_stream_days:
+          m3uAccount.stale_stream_days !== undefined &&
+          m3uAccount.stale_stream_days !== null
+            ? m3uAccount.stale_stream_days
+            : 7,
+        priority:
+          m3uAccount.priority !== undefined && m3uAccount.priority !== null
+            ? m3uAccount.priority
+            : 0,
+        enable_vod: m3uAccount.enable_vod || false,
+      });
+      setExpDate(m3uAccount.exp_date ? new Date(m3uAccount.exp_date) : null);
+
+      // Determine schedule type from existing data
+      setScheduleType(
+        m3uAccount.cron_expression && m3uAccount.cron_expression.trim() !== ''
+          ? 'cron'
+          : 'interval'
+      );
+
+      if (m3uAccount.account_type == 'XC') {
+        setShowCredentialFields(true);
+      } else {
+        setShowCredentialFields(false);
+      }
+    } else {
+      setPlaylist(null);
+      form.reset();
+      setScheduleType('interval');
+      setExpDate(null);
+    }
+  }, [m3uAccount]);
+
+  useEffect(() => {
+    if (form.values.account_type == 'XC') {
+      setShowCredentialFields(true);
+    }
+  }, [form.values.account_type]);
+
+  // Watch for progress completion when waiting for groups on a new account
+  useEffect(() => {
+    console.log('[M3U Debug] Checking refreshProgress useEffect', {
+      isWaitingForGroups,
+      playlistId: playlist?.id,
+      progressEntry: playlist?.id ? refreshProgress[playlist.id] : null
+    });
+
+    if (isWaitingForGroups && playlist?.id) {
+      const progress = refreshProgress[playlist.id];
+      if (progress) {
+        console.log('[M3U Debug] Progress update received:', progress);
+        if (progress.status === 'pending_setup') {
+          console.log('[M3U Debug] Status is pending_setup! Transitioning to group filter...');
+          setIsWaitingForGroups(false);
+          setLoadingText('');
+          
+          // Fetch the fully updated playlist so we have the parsed groups
+          API.getPlaylist(playlist.id).then((updatedPlaylist) => {
+             console.log('[M3U Debug] Fetched updated playlist:', updatedPlaylist);
+             // If VOD is enabled, fetch VOD categories
+             if (updatedPlaylist.account_type === 'XC' && updatedPlaylist.enable_vod) {
+                console.log('[M3U Debug] XC VOD enabled, fetching categories...');
+                fetchCategories();
+             }
+             setPlaylist(updatedPlaylist);
+             setGroupFilterModalOpen(true);
+             console.log('[M3U Debug] Group Filter Modal should now be OPEN');
+          }).catch(e => {
+             console.error('[M3U Debug] Error fetching updated playlist:', e);
+          });
+        } else if (progress.status === 'error') {
+          console.log('[M3U Debug] Progress reported error:', progress.error);
+          setIsWaitingForGroups(false);
+          setLoadingText('');
+          notifications.show({
+            title: 'Error Fetching Groups',
+            message: progress.error || 'Failed to fetch groups.',
+            color: 'red',
+          });
+        } else {
+           // Update loading text with current progress
+           console.log('[M3U Debug] Updating loading text for action:', progress.action);
+           if (progress.action === 'downloading') {
+              setLoadingText(`Downloading... ${parseInt(progress.progress || 0)}%`);
+           } else if (progress.action === 'processing_groups') {
+              setLoadingText(`Processing Groups... ${parseInt(progress.progress || 0)}%`);
+           } else {
+              setLoadingText(`${progress.action || 'Processing'}... ${parseInt(progress.progress || 0)}%`);
+           }
+        }
+      } else {
+         console.log('[M3U Debug] No progress entry found yet for playlist ID:', playlist.id);
+      }
+    }
+  }, [refreshProgress, isWaitingForGroups, playlist?.id, fetchCategories]);
+
+  const onSubmit = async () => {
+    const { create_epg, ...values } = form.getValues();
+
+    // Convert exp_date (from controlled state) to ISO string for the API
+    if (values.account_type === 'XC') {
+      // XC accounts have exp_date auto-managed server-side; don't send it
+      delete values.exp_date;
+    } else if (expDate instanceof Date) {
+      values.exp_date = expDate.toISOString();
+    } else {
+      values.exp_date = null;
+    }
+
+    // Determine which schedule type is active based on field values
+    const hasCronExpression =
+      values.cron_expression && values.cron_expression.trim() !== '';
+
+    // Clear the field that isn't active based on actual field values
+    if (hasCronExpression) {
+      values.refresh_interval = 0;
+    } else {
+      values.cron_expression = '';
+    }
+
+    if (values.account_type == 'XC' && values.password == '') {
+      // If account XC and no password input, assuming no password change
+      // from previously stored value.
+      delete values.password;
+    }
+
+    if (values.user_agent == '0') {
+      values.user_agent = null;
+    }
+
+    let newPlaylist;
+    if (playlist?.id) {
+      console.log('[M3U Debug] Updating existing playlist:', playlist.id);
+      await API.updatePlaylist({
+        id: playlist.id,
+        ...values,
+        file,
+      });
+    } else {
+      console.log('[M3U Debug] Adding new playlist with values:', values);
+      newPlaylist = await API.addPlaylist({
+        ...values,
+        file,
+      });
+
+      console.log('[M3U Debug] addPlaylist returned:', newPlaylist);
+
+      if (create_epg) {
+        console.log('[M3U Debug] Creating EPG...');
+        API.addEPG({
+          name: values.name,
+          source_type: 'xmltv',
+          url: `${new URL(values.server_url).origin}/xmltv.php?username=${values.username}&password=${values.password}`,
+          api_key: '',
+          is_active: true,
+          refresh_interval: 24,
+        });
+      }
+
+      console.log('[M3U Debug] Setting playlist and entering waiting state');
+      setPlaylist(newPlaylist);
+      setIsWaitingForGroups(true);
+      setLoadingText('Initializing... Please wait.');
+      return;
+    }
+
+    console.log('[M3U Debug] Reached end of onSubmit, closing modal normally');
+    form.reset();
+    setFile(null);
+    onClose(newPlaylist);
+  };
+
+  const close = () => {
+    form.reset();
+    setFile(null);
+    setPlaylist(null);
+    onClose();
+  };
+
+  const closeGroupFilter = () => {
+    setGroupFilterModalOpen(false);
+    form.reset();
+    setFile(null);
+    setPlaylist(null);
+    onClose();
+  };
+
+  const closeFilter = () => {
+    setFilterModalOpen(false);
+  };
+
+  // Note: playlistCreated is no longer used to auto-open the group filter.
+  // The group filter is opened by the user clicking the Groups button on an existing account.
+  // useEffect(() => {
+  //   if (playlistCreated) {
+  //     setGroupFilterModalOpen(true);
+  //   }
+  // }, [playlist, playlistCreated]);
+
+  if (!isOpen) {
+    return <></>;
+  }
+
+  return (
+    <>
+      <Modal
+        size={700}
+        opened={isOpen}
+        onClose={close}
+        title="M3U Account"
+        scrollAreaComponent={Modal.NativeScrollArea}
+        lockScroll={false}
+        withinPortal={true}
+        trapFocus={false}
+        yOffset="2vh"
+      >
+        <LoadingOverlay
+          visible={form.submitting}
+          overlayBlur={2}
+          loaderProps={loadingText ? { children: loadingText } : {}}
+        />
+
+        <form onSubmit={form.onSubmit(onSubmit)}>
+          <Group justify="space-between" align="top">
+            <Stack gap="5" style={{ flex: 1 }}>
+              <TextInput
+                style={{ width: '100%' }}
+                id="name"
+                name="name"
+                label="Name"
+                description="Unique identifier for this M3U account"
+                {...form.getInputProps('name')}
+                key={form.key('name')}
+              />
+              <TextInput
+                style={{ width: '100%' }}
+                id="server_url"
+                name="server_url"
+                label="URL"
+                description="Direct URL to the M3U playlist or server"
+                {...form.getInputProps('server_url')}
+                key={form.key('server_url')}
+              />
+
+              <Select
+                id="account_type"
+                name="account_type"
+                label="Account Type"
+                description={
+                  <>
+                    Standard for direct M3U URLs, <br />
+                    Xtream Codes for panel-based services
+                  </>
+                }
+                data={[
+                  {
+                    value: 'STD',
+                    label: 'Standard',
+                  },
+                  {
+                    value: 'XC',
+                    label: 'Xtream Codes',
+                  },
+                ]}
+                key={form.key('account_type')}
+                {...form.getInputProps('account_type')}
+              />
+
+              {form.getValues().account_type == 'XC' && (
+                <Box>
+                  {!m3uAccount && (
+                    <Group justify="space-between">
+                      <Box>Create EPG</Box>
+                      <Switch
+                        id="create_epg"
+                        name="create_epg"
+                        description="Automatically create matching EPG source for this Xtream account"
+                        key={form.key('create_epg')}
+                        {...form.getInputProps('create_epg', {
+                          type: 'checkbox',
+                        })}
+                      />
+                    </Group>
+                  )}
+
+                  <Group justify="space-between">
+                    <Box>Enable VOD Scanning</Box>
+                    <Switch
+                      id="enable_vod"
+                      name="enable_vod"
+                      description="Scan and import VOD content (movies/series) from this Xtream account"
+                      key={form.key('enable_vod')}
+                      {...form.getInputProps('enable_vod', {
+                        type: 'checkbox',
+                      })}
+                    />
+                  </Group>
+
+                  <TextInput
+                    id="username"
+                    name="username"
+                    label="Username"
+                    description="Username for Xtream Codes authentication"
+                    {...form.getInputProps('username')}
+                  />
+
+                  <PasswordInput
+                    id="password"
+                    name="password"
+                    label="Password"
+                    description="Password for Xtream Codes authentication (leave empty to keep existing)"
+                    {...form.getInputProps('password')}
+                  />
+                </Box>
+              )}
+
+              {form.getValues().account_type != 'XC' && (
+                <>
+                  <FileInput
+                    id="file"
+                    label="Upload files"
+                    placeholder="Upload files"
+                    description="Upload a local M3U file instead of using URL"
+                    onChange={setFile}
+                  />
+
+                  <DateTimePicker
+                    label="Expiration Date"
+                    description="Set an expiration date to receive a warning notification"
+                    placeholder="No expiration"
+                    clearable
+                    valueFormat="MMM D, YYYY h:mm A"
+                    value={expDate}
+                    onChange={(v) => setExpDate(v ? new Date(v) : null)}
+                  />
+                </>
+              )}
+            </Stack>
+
+            <Divider size="sm" orientation="vertical" />
+
+            <Stack gap="5" style={{ flex: 1 }}>
+              <NumberInput
+                style={{ width: '100%' }}
+                id="max_streams"
+                name="max_streams"
+                label="Max Streams"
+                placeholder="0 = Unlimited"
+                description="Maximum number of concurrent streams (0 for unlimited)"
+                min={0}
+                {...form.getInputProps('max_streams')}
+                key={form.key('max_streams')}
+              />
+
+              <Select
+                id="user_agent"
+                name="user_agent"
+                label="User-Agent"
+                description="User-Agent header to use when accessing this M3U source"
+                {...form.getInputProps('user_agent')}
+                key={form.key('user_agent')}
+                data={[{ value: '0', label: '(Use Default)' }].concat(
+                  userAgents.map((ua) => ({
+                    label: ua.name,
+                    value: `${ua.id}`,
+                  }))
+                )}
+              />
+
+              <ScheduleInput
+                scheduleType={scheduleType}
+                onScheduleTypeChange={setScheduleType}
+                intervalValue={form.getValues().refresh_interval}
+                onIntervalChange={(v) =>
+                  form.setFieldValue('refresh_interval', v)
+                }
+                cronValue={form.getValues().cron_expression}
+                onCronChange={(expr) =>
+                  form.setFieldValue('cron_expression', expr)
+                }
+                intervalLabel="Refresh Interval (hours)"
+                intervalDescription={
+                  <>
+                    How often to automatically refresh M3U data
+                    <br />
+                    (0 to disable automatic refreshes)
+                  </>
+                }
+              />
+
+              <NumberInput
+                min={0}
+                max={365}
+                label="Stale Stream Retention (days)"
+                description="Streams not seen for this many days will be removed"
+                {...form.getInputProps('stale_stream_days')}
+              />
+
+              <NumberInput
+                min={0}
+                max={999}
+                label="VOD Priority"
+                description="Priority for VOD provider selection (higher numbers = higher priority). Used when multiple providers offer the same content."
+                {...form.getInputProps('priority')}
+                key={form.key('priority')}
+              />
+
+              <Checkbox
+                label="Is Active"
+                description="Enable or disable this M3U account"
+                {...form.getInputProps('is_active', { type: 'checkbox' })}
+                key={form.key('is_active')}
+              />
+            </Stack>
+          </Group>
+
+          <Flex mih={50} gap="xs" justify="flex-end" align="flex-end">
+            {playlist && (
+              <>
+                <Button
+                  variant="filled"
+                  size="sm"
+                  onClick={() => setFilterModalOpen(true)}
+                >
+                  Filters
+                </Button>
+                <Button
+                  variant="filled"
+                  // color={theme.custom.colors.buttonPrimary}
+                  size="sm"
+                  onClick={() => {
+                    // If this is an XC account with VOD enabled, fetch VOD categories
+                    if (
+                      m3uAccount?.account_type === 'XC' &&
+                      m3uAccount?.enable_vod
+                    ) {
+                      fetchCategories();
+                    }
+                    setGroupFilterModalOpen(true);
+                  }}
+                >
+                  Groups
+                </Button>
+                <Button
+                  variant="filled"
+                  // color={theme.custom.colors.buttonPrimary}
+                  size="sm"
+                  onClick={() => setProfileModalOpen(true)}
+                >
+                  Profiles
+                </Button>
+              </>
+            )}
+
+            <Button
+              type="submit"
+              variant="filled"
+              disabled={form.submitting}
+              size="sm"
+            >
+              Save
+            </Button>
+          </Flex>
+        </form>
+      </Modal>
+      {playlist && (
+        <>
+          <M3UProfiles
+            playlist={playlist}
+            isOpen={profileModalOpen}
+            onClose={() => setProfileModalOpen(false)}
+          />
+          <M3UGroupFilter
+            isOpen={groupFilterModalOpen}
+            playlist={playlist}
+            onClose={closeGroupFilter}
+          />
+          <M3UFilters
+            isOpen={filterModalOpen}
+            playlist={playlist}
+            onClose={closeFilter}
+          />
+        </>
+      )}
+    </>
+  );
+};
+
+export default M3U;

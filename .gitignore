@@ -3,6 +3,9 @@
 # Note: Cargo.lock is intentionally NOT ignored for binaries.
 # Committing it ensures reproducible Docker builds.
 
+# Frontend build output (built by `npm run build` in frontend/)
+/dist
+
 # Data & Secrets
 .env
 *.db
@@ -14,7 +17,15 @@
 *.dump
 *.sql
 
-# Files
+# Reference Projects (local copies, not part of this repo)
+Dispatcharr-main/
+enhancedchannelmanager-main/
+
+# Frontend build artifacts
+frontend/node_modules/
+frontend/dist/
+
+# Scratch / one-off files
 channels.json
 docker.log
 docker_tail.txt
@@ -25,4 +36,6 @@ read_log.py
 replace_group.txt
 scratch_notifications.txt
 server_logs.txt
+scratch/
+build_output.log
 
