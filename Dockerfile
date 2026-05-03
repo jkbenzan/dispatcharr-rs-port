@@ -1,4 +1,4 @@
-# STEP 1: Build the React Frontend
+# STEP 1a: Build the React Frontend
 FROM node:20-slim AS frontend-builder
 
 WORKDIR /app/frontend
@@ -6,6 +6,15 @@ COPY frontend/package*.json ./
 RUN npm ci
 COPY frontend/ ./
 RUN npm run build
+
+# STEP 1b: Build the Angular Channel Manager (mini-app)
+FROM node:20-slim AS angular-builder
+
+WORKDIR /app/angular-frontend
+COPY angular-frontend/package*.json ./
+RUN npm ci
+COPY angular-frontend/ ./
+RUN npx ng build
 
 # STEP 2: Build the Rust Binary
 FROM rust:bookworm AS backend-builder
@@ -35,8 +44,11 @@ WORKDIR /app
 # Copy the compiled binary from the Rust builder stage
 COPY --from=backend-builder /app/target/release/dispatcharr-rs /usr/local/bin/
 
-# Copy the compiled frontend from the Node builder stage
+# Copy the React frontend (main app)
 COPY --from=frontend-builder /app/frontend/dist /app/dist
+
+# Copy the Angular channel manager mini-app to /channel-manager/
+COPY --from=angular-builder /app/dist/browser /app/dist/channel-manager
 
 EXPOSE 8080
 
