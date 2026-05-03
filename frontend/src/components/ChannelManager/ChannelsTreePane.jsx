@@ -96,9 +96,23 @@ const ChannelsTreePane = ({ selectedChannelId, onSelectChannel }) => {
   useEffect(() => {
     const fetchGroups = async () => {
       try {
-        const response = await API.getChannelGroups();
-        const groups = Array.isArray(response) ? response : response?.results || [];
-        setChannelGroups(groups);
+        setLoading(true);
+        // Fetch groups and channels summary in parallel
+        const [groupsResponse, channelsResponse] = await Promise.all([
+          API.getChannelGroups(),
+          API.getChannelsSummary()
+        ]);
+        
+        const groups = Array.isArray(groupsResponse) ? groupsResponse : groupsResponse?.results || [];
+        const channels = Array.isArray(channelsResponse) ? channelsResponse : channelsResponse?.results || [];
+        
+        // Identify groups that have at least one channel
+        const activeGroupIds = new Set(channels.map(c => c.channel_group_id));
+        
+        // Only keep groups that have channels
+        const populatedGroups = groups.filter(g => activeGroupIds.has(g.id));
+        
+        setChannelGroups(populatedGroups);
       } catch (e) {
         console.error('[ChannelsTreePane] error fetching groups:', e);
       } finally {

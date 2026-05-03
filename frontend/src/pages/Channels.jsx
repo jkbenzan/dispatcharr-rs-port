@@ -69,9 +69,15 @@ const PageContent = () => {
           </Box>
         </Tabs.Panel>
 
-        <Tabs.Panel value="manager" style={{ flexGrow: 1, padding: 10, minHeight: 0 }}>
+        <Tabs.Panel value="manager" style={{ flexGrow: 1, padding: 0, minHeight: 0 }}>
           <Box h="100%">
-            {activeTab === 'manager' && <ChannelManager />}
+            {activeTab === 'manager' && (
+              <iframe
+                src="/channel-manager/"
+                style={{ width: '100%', height: '100%', border: 'none' }}
+                title="Angular Channel Manager"
+              />
+            )}
           </Box>
         </Tabs.Panel>
       </Tabs>

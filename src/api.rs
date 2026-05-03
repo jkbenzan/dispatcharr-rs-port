@@ -1278,6 +1278,27 @@ pub async fn get_dashboard_stats(State(state): State<Arc<AppState>>) -> Json<Val
     }))
 }
 
+pub async fn get_channels_summary(State(state): State<Arc<AppState>>) -> Json<Value> {
+    let results = channel::Entity::find()
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+    
+    let summary: Vec<Value> = results.into_iter().map(|c| {
+        json!({
+            "id": c.id,
+            "name": c.name,
+            "channel_number": c.channel_number,
+            "channel_group_id": c.channel_group_id,
+            "logo_id": c.logo_id,
+            "uuid": c.uuid,
+            "epg_data_id": c.epg_data_id,
+        })
+    }).collect();
+    
+    Json(json!(summary))
+}
+
 pub async fn get_channel_groups(State(state): State<Arc<AppState>>) -> Json<Value> {
     let results = channel_group::Entity::find()
         .all(&state.db)

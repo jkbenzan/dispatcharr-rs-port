@@ -164,3 +164,14 @@ These are local-only reference copies (gitignored):
 
 - **`Dispatcharr-main/`** — Original Python/Django Dispatcharr
 - **`enhancedchannelmanager-main/`** — ECM project (React) — the target for channel manager parity
+
+---
+
+## Testing and Deployment Workflow
+
+> **Note:** The user does not build and test locally.
+
+The standardized workflow for testing changes is:
+1. **Push** code changes to the Git repository.
+2. **Build and Publish** the Docker image to Docker Hub (typically via CI/CD or remote build server).
+3. **Update Image** on the Unraid server to pull the latest Docker Hub image and test the changes in the live environment.
