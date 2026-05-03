@@ -1,7 +1,7 @@
 import useSettingsStore from '../../../store/settings.jsx';
 import React, { useEffect, useState } from 'react';
 import { useForm } from '@mantine/form';
-import { updateSetting } from '../../../utils/pages/SettingsUtils.js';
+import { updateSetting, createSetting } from '../../../utils/pages/SettingsUtils.js';
 import {
   Alert,
   Button,
@@ -108,12 +108,27 @@ const MaintenanceSettingsForm = React.memo(({ active }) => {
   const onMaintenanceSettingsSubmit = async () => {
     setSaved(false);
     try {
-      const result = await updateSetting({
-        ...settings['maintenance_settings'],
-        value: maintenanceSettingsForm.getValues(),
-      });
+      const existing = settings['maintenance_settings'];
+      const value = maintenanceSettingsForm.getValues();
+      let result;
+
+      if (existing?.id) {
+        result = await updateSetting(existing.id, {
+          ...existing,
+          value,
+        });
+      } else {
+        result = await createSetting({
+          key: 'maintenance_settings',
+          name: 'Maintenance Settings',
+          value,
+        });
+      }
+
       if (result) {
         setSaved(true);
+        // Refresh settings store
+        useSettingsStore.getState().fetchSettings();
       }
     } catch (error) {
       console.error('Error saving maintenance settings:', error);
