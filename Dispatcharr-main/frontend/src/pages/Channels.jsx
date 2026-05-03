@@ -1,6 +1,6 @@
 import React, { useCallback, useRef, useState } from 'react';
 import ChannelsTable from '../components/tables/ChannelsTable';
-import ChannelManager from '../components/ChannelManager';
+import ChannelManager from '../components/ChannelManager/index.jsx';
 import { Box, Tabs, rem } from '@mantine/core';
 import { LayoutGrid, Settings2 } from 'lucide-react';
 import { USER_LEVELS } from '../constants';
