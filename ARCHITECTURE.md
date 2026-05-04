@@ -83,14 +83,16 @@ angular-frontend/src/app/
 ### Group Row
 - Expand arrow + group name + channel count badge
 - **Kebab menu** (⋮) with:
-  - **Test Channels**: Tests every stream in every channel within the group individually (sequential) via `POST /api/streams/:id/check/`. Shows per-stream and per-channel progress spinners. Auto-expands both the group and its channels.
+  - **Test Channels**: Collects all stream IDs across all channels in the group, submits to `POST /api/streams/bulk-check/`, and opens the Stream Checker SheetDialog (see below).
+- **Retrieval badge**: Pulsing icon appears when the SheetDialog is dismissed while a check is in progress. Click to re-open the sheet.
 
 ### Channel Row
 - Checkbox + expand arrow + logo (resized to fit) + channel number + channel name + stream count badge
 - **Channel logo resolution**: The channel entity stores `logo_id` (FK to `dispatcharr_channels_logo`). The `get_channel_json()` function resolves `logo_id` → `logo_url` by looking up the logo table, injecting the URL directly into the channel JSON for frontend display.
 - **Kebab menu** (⋮) with:
   - **Play Channel**: Opens in-app video player at `/stream/{channel_uuid}/`
-  - **Test Channel**: Bulk-checks all streams via `POST /api/streams/bulk-check/`, then sorts via `POST /api/channels/bulk-sort-streams/`
+  - **Test Channel**: Submits channel's streams to `POST /api/streams/bulk-check/` and opens the Stream Checker SheetDialog.
+- **Retrieval badge**: Same as group row — pulsing icon for dismissed sheets.
 
 ### Stream Row (sub-items under channel)
 - Checkbox + enumerated number (1, 2, 3...) + drag handle (≡) + logo + 3-row info cell + hover actions
@@ -109,10 +111,23 @@ angular-frontend/src/app/
 - Displays as a centered modal overlay with loading spinner and error states
 - Used for both "Play Channel" and "Preview Stream" actions
 
+### Stream Checker SheetDialog
+
+The stream checker is presented as a **Taiga UI SheetDialog** (from `@taiga-ui/addon-mobile`) that slides up from the bottom of the screen when any "Test" action is triggered. This replaces the previous approach of switching to the React Stream Checker tab.
+
+- **Two stop levels**: Collapsed (~6rem shows progress bar + label), expanded (~14rem shows stats + workers). Fully draggable to see the live activity log.
+- **Uses bulk-check backend**: All testing goes through `POST /api/streams/bulk-check/` which provides parallel testing by M3U provider, respects `stream_checker_parallel_providers` setting, and populates the shared `BulkCheckStatus` (visible in both Angular and React dashboards).
+- **Polls** `GET /api/streams/bulk-check/status/` every 1s while running.
+- **Auto-sort**: After check completes, auto-sorts channels via `POST /api/channels/bulk-sort-streams/`.
+- **Dismissible**: User can swipe/drag down to dismiss. A **pulsing retrieval badge** appears on the source row (group or channel) to re-open the sheet.
+- **Persistence**: Badge and sheet state persist until another check is started or the component is destroyed (page refresh/reboot).
+- **Edge case**: If a bulk check is already running (from React UI or another action), the sheet shows the existing check's progress instead of starting a new one.
+
 ### Taiga UI v5 Integration Notes
 
 Taiga UI v5 significantly overhauled its dependency injection and provider system compared to v3/v4. To prevent fatal `NG0201: No provider found` errors during bootstrap:
 - **`provideTaiga()`**: Must be included in the `providers` array in `app.config.ts` to supply core tokens like `TUI_OPTIONS`.
+- **`@taiga-ui/addon-mobile`**: Required for `TuiSheetDialog` component used in the Stream Checker SheetDialog.
 - **Form Inputs**: Certain complex structural components from older Taiga versions (like `<tui-textfield>`) require strict modular imports (`TuiTextfieldModule` or similar textfield providers) which can fail in a purely standalone component tree. As a workaround, standard native HTML `<input>` and `<select>` elements are used in place of `<tui-textfield>` wrappers. They integrate seamlessly with existing CSS classes (`search-input`, `filter-select`) while entirely bypassing the provider crash.
 
 ---

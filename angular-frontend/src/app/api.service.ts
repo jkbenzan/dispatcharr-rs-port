@@ -115,4 +115,30 @@ export class ApiService {
   reorderChannelStreams(channelId: number, streamIds: number[]): Observable<any> {
     return this.http.patch(`/api/channels/channels/${channelId}/`, { streams: streamIds });
   }
+
+  // =================== SETTINGS ===================
+
+  /**
+   * Fetch all application settings.
+   * GET /api/settings/
+   */
+  getSettings(): Observable<any> {
+    return this.http.get('/api/settings/');
+  }
+
+  /**
+   * Update a setting by ID.
+   * PUT /api/settings/:id/
+   */
+  updateSetting(id: number, data: any): Observable<any> {
+    return this.http.put(`/api/settings/${id}/`, data);
+  }
+
+  /**
+   * Create a new setting.
+   * POST /api/settings/
+   */
+  createSetting(data: any): Observable<any> {
+    return this.http.post('/api/settings/', data);
+  }
 }

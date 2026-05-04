@@ -1,12 +1,13 @@
 import {
   ChangeDetectionStrategy, ChangeDetectorRef, Component, EventEmitter,
-  inject, OnInit, Output
+  inject, OnInit, Output, ViewChild, TemplateRef
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../api.service';
 import { VideoPlayerComponent } from '../video-player/video-player.component';
-import { firstValueFrom } from 'rxjs';
+import { TuiSheetDialog } from '@taiga-ui/addon-mobile';
+import { StreamCheckerSheetComponent } from '../stream-checker-sheet/stream-checker-sheet';
 
 // =================== INTERFACES ===================
 
@@ -47,7 +48,7 @@ interface StreamView {
 @Component({
   selector: 'app-channels-pane',
   standalone: true,
-  imports: [CommonModule, FormsModule, VideoPlayerComponent],
+  imports: [CommonModule, FormsModule, VideoPlayerComponent, TuiSheetDialog, StreamCheckerSheetComponent],
   templateUrl: './channels-pane.html',
   styleUrl: './channels-pane.less',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -117,6 +118,24 @@ export class ChannelsPaneComponent implements OnInit {
   testingChannelIds: Set<number> = new Set();
   /** Group IDs currently being tested (all channels in group) */
   testingGroupIds: Set<number> = new Set();
+
+  // =================== SHEET DIALOG STATE ===================
+  /** Whether the stream checker sheet is open */
+  sheetOpen = false;
+  /** SheetDialog configuration — two stop levels for collapsed/expanded */
+  sheetOptions = { stops: ['6rem', '14rem'] };
+  /** Stream IDs to pass to the stream checker sheet */
+  sheetStreamIds: number[] = [];
+  /** Channel IDs to pass to the stream checker sheet for auto-sort */
+  sheetChannelIds: number[] = [];
+  /** Label shown in the sheet header */
+  sheetLabel = 'Stream Checker';
+  /**
+   * Tracks which row (group or channel) triggered the current check.
+   * Used to show a retrieval badge after the sheet is dismissed.
+   * Format: { type: 'group'|'channel', id: number, name: string }
+   */
+  activeCheckSource: { type: 'group' | 'channel'; id: number; name: string } | null = null;
 
   // =================== LIFECYCLE ===================
 
@@ -479,150 +498,98 @@ export class ChannelsPaneComponent implements OnInit {
   }
 
   /**
-   * Test all streams in a channel, then sort them based on sorting rules.
-   * Uses bulk check + bulk sort endpoints.
+   * Test all streams in a channel via the bulk check engine + SheetDialog.
+   * Opens a bottom sheet showing real-time progress.
    */
   testChannel(channel: ChannelView, event: Event) {
     event.stopPropagation();
     this.closeKebab();
     if (channel.streams.length === 0) return;
-    if (this.testingChannelIds.has(channel.id)) return;
-
-    this.testingChannelIds.add(channel.id);
-    this.cdr.markForCheck();
 
     const streamIds = channel.streams.map(s => s.id);
-
-    this.api.bulkCheckStreams(streamIds).subscribe({
-      next: () => {
-        // Poll for completion
-        this.pollBulkCheckAndSort(channel);
-      },
-      error: (err) => {
-        console.error('Bulk check start failed:', err);
-        this.testingChannelIds.delete(channel.id);
-        this.cdr.markForCheck();
-      }
-    });
+    this.openCheckerSheet(streamIds, [channel.id], `Testing: ${channel.name}`, 'channel', channel.id, channel.name);
   }
 
   /**
-   * Test all channels in a group — tests every stream in every channel
-   * individually (sequential). Shows per-stream and per-channel progress.
-   * Triggered from the group-level kebab menu.
+   * Test all channels in a group via the bulk check engine + SheetDialog.
+   * Collects all stream IDs across all channels and runs a single bulk check.
    */
-  async testGroupChannels(group: GroupView, event: Event) {
+  testGroupChannels(group: GroupView, event: Event) {
     event.stopPropagation();
     this.closeKebab();
-
-    // Guard: no channels or already testing this group
     if (group.channels.length === 0) return;
-    if (this.testingGroupIds.has(group.id)) return;
 
-    // Mark the group as in-progress
-    this.testingGroupIds.add(group.id);
-
-    // Auto-expand the group so the user can see channel-level progress
-    group.expanded = true;
-    this.cdr.markForCheck();
-
-    // Iterate through each channel in the group sequentially
-    for (const channel of group.channels) {
-      // Skip channels with no streams
-      if (channel.streams.length === 0) continue;
-
-      // Mark this channel as testing
-      this.testingChannelIds.add(channel.id);
-
-      // Mark all streams in this channel as testing so spinners appear
-      channel.streams.forEach(s => this.testingStreamIds.add(s.id));
-
-      // Auto-expand the channel so the user can see per-stream progress
-      channel.expanded = true;
-      this.cdr.markForCheck();
-
-      // Test each stream in this channel sequentially.
-      // Sequential testing avoids overwhelming the backend with concurrent ffprobe calls.
-      for (const stream of channel.streams) {
-        try {
-          const res: any = await firstValueFrom(this.api.testStream(stream.id));
-          // Update stream stats in-place on success
-          if (res?.success && res?.stream) {
-            stream.stream_stats = res.stream.stream_stats || res.stream.custom_properties?.stream_stats;
-            stream.stream_stats_updated_at = res.stream.stream_stats_updated_at;
-          }
-        } catch (err) {
-          console.error(`Test Group: stream ${stream.id} (${stream.name}) failed:`, err);
-        } finally {
-          // Remove per-stream spinner regardless of success/failure
-          this.testingStreamIds.delete(stream.id);
-          this.cdr.markForCheck();
-        }
+    // Collect all stream IDs and channel IDs in this group
+    const streamIds: number[] = [];
+    const channelIds: number[] = [];
+    for (const ch of group.channels) {
+      if (ch.streams.length > 0) {
+        channelIds.push(ch.id);
+        ch.streams.forEach(s => streamIds.push(s.id));
       }
-
-      // Channel done — remove channel-level testing state
-      this.testingChannelIds.delete(channel.id);
-      this.cdr.markForCheck();
     }
 
-    // All channels done — remove group-level testing state
-    this.testingGroupIds.delete(group.id);
+    if (streamIds.length === 0) return;
+
+    this.openCheckerSheet(streamIds, channelIds, `Testing: ${group.name}`, 'group', group.id, group.name);
+  }
+
+  /**
+   * Open the stream checker SheetDialog with the given stream/channel IDs.
+   * This is the shared entry point for both channel-level and group-level testing.
+   */
+  private openCheckerSheet(
+    streamIds: number[],
+    channelIds: number[],
+    label: string,
+    sourceType: 'group' | 'channel',
+    sourceId: number,
+    sourceName: string
+  ) {
+    this.sheetStreamIds = streamIds;
+    this.sheetChannelIds = channelIds;
+    this.sheetLabel = label;
+    this.activeCheckSource = { type: sourceType, id: sourceId, name: sourceName };
+    this.sheetOpen = true;
     this.cdr.markForCheck();
   }
 
   /**
-   * Poll bulk check status until done, then trigger sort + refresh.
+   * Handle sheet dismiss — the badge persists on the source row
+   * so the user can re-open the sheet to check progress.
    */
-  private pollBulkCheckAndSort(channel: ChannelView) {
-    const poll = setInterval(() => {
-      this.api.getBulkCheckStatus().subscribe({
-        next: (status: any) => {
-          if (!status.is_running) {
-            clearInterval(poll);
-            // Sort streams based on sorting rules
-            this.api.bulkSortStreams([channel.id]).subscribe({
-              next: () => {
-                // Refresh channel data to get updated order + stats
-                this.api.getChannelStreams(channel.id).subscribe({
-                  next: (updated: any) => {
-                    // Rebuild the channel's stream list
-                    const newStreams: StreamView[] = (updated.streams || []).map((s: any, idx: number) => ({
-                      id: s.id,
-                      channel_stream_id: s.channel_stream_id,
-                      order: s.order ?? idx,
-                      name: s.name,
-                      logo_url: s.logo_url || null,
-                      url: s.url || null,
-                      m3u_account_id: s.m3u_account_id || s.m3u_account || null,
-                      m3u_account_name: this.getM3uAccountName(s.m3u_account_id || s.m3u_account),
-                      stream_stats: s.stream_stats || null,
-                      stream_stats_updated_at: s.stream_stats_updated_at || null,
-                    }));
-                    newStreams.sort((a: StreamView, b: StreamView) => a.order - b.order);
-                    channel.streams = newStreams;
-                    this.testingChannelIds.delete(channel.id);
-                    this.cdr.markForCheck();
-                  },
-                  error: () => {
-                    this.testingChannelIds.delete(channel.id);
-                    this.cdr.markForCheck();
-                  }
-                });
-              },
-              error: () => {
-                this.testingChannelIds.delete(channel.id);
-                this.cdr.markForCheck();
-              }
-            });
-          }
-        },
-        error: () => {
-          clearInterval(poll);
-          this.testingChannelIds.delete(channel.id);
-          this.cdr.markForCheck();
-        }
-      });
-    }, 2000); // Poll every 2 seconds
+  onSheetDismiss(open: boolean) {
+    this.sheetOpen = open;
+    // activeCheckSource remains set so the badge stays visible
+    this.cdr.markForCheck();
+  }
+
+  /**
+   * Re-open the sheet from the badge on the group/channel row.
+   * Does NOT start a new check — just shows the existing sheet
+   * with the status polling panel.
+   */
+  reopenCheckerSheet(event: Event) {
+    event.stopPropagation();
+    // Re-open with empty streamIds (won't start a new check, just observe)
+    this.sheetStreamIds = [];
+    this.sheetOpen = true;
+    this.cdr.markForCheck();
+  }
+
+  /**
+   * Called by the stream checker sheet when the bulk check completes.
+   * Refreshes the channel data and clears testing state.
+   */
+  onCheckComplete() {
+    // Clear testing state
+    this.testingGroupIds.clear();
+    this.testingChannelIds.clear();
+    this.testingStreamIds.clear();
+    // Clear the badge since the check is done
+    this.activeCheckSource = null;
+    // Reload all channel data to get updated stats and ordering
+    this.loadData();
   }
 
   // =================== STREAM DRAG REORDER ===================

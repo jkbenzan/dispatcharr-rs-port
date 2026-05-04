@@ -61,9 +61,13 @@
         <span class="group-name">{{ group.name }}</span>
         <span class="group-channel-count">{{ group.channels.length }}</span>
 
-        <!-- Testing spinner for group-level testing -->
-        <span class="material-icons spin" *ngIf="testingGroupIds.has(group.id)"
-              style="font-size: 16px; color: #646cff;">sync</span>
+        <!-- Retrieval badge: shows when sheet was dismissed for this group -->
+        <button class="check-badge pulse"
+                *ngIf="activeCheckSource?.type === 'group' && activeCheckSource?.id === group.id && !sheetOpen"
+                (click)="reopenCheckerSheet($event)"
+                title="Re-open stream checker">
+          <span class="material-icons">pending</span>
+        </button>
 
         <!-- Group kebab menu trigger -->
         <button class="kebab-btn group-kebab-btn" (click)="toggleGroupKebab(group.id, $event)" title="Group actions">
@@ -88,6 +92,14 @@
           <div class="channel-row"
                [class.selected]="isChannelSelected(channel.id)"
                [class.testing]="testingChannelIds.has(channel.id)">
+
+            <!-- Retrieval badge: shows when sheet was dismissed for this channel -->
+            <button class="check-badge pulse"
+                    *ngIf="activeCheckSource?.type === 'channel' && activeCheckSource?.id === channel.id && !sheetOpen"
+                    (click)="reopenCheckerSheet($event)"
+                    title="Re-open stream checker">
+              <span class="material-icons">pending</span>
+            </button>
 
             <!-- Checkbox -->
             <input type="checkbox"
@@ -242,3 +254,20 @@
   [contentType]="playerContentType"
   (closed)="closePlayer()"
 ></app-video-player>
+
+<!-- ========== STREAM CHECKER SHEET DIALOG ========== -->
+<!-- Taiga UI SheetDialog: slides up from the bottom of the screen.
+     Two stop levels: ~6rem (collapsed summary) and ~14rem (expanded analytics).
+     Fully draggable to full height for complete activity log view. -->
+<ng-template
+  [tuiSheetDialogOptions]="sheetOptions"
+  [(tuiSheetDialog)]="sheetOpen"
+  (tuiSheetDialogChange)="onSheetDismiss($event)">
+  <app-stream-checker-sheet
+    [streamIds]="sheetStreamIds"
+    [channelIds]="sheetChannelIds"
+    [label]="sheetLabel"
+    [autoSort]="true"
+    (checkComplete)="onCheckComplete()">
+  </app-stream-checker-sheet>
+</ng-template>

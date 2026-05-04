@@ -554,3 +554,35 @@
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+// ========== CHECK RETRIEVAL BADGE ==========
+// Shown on the group/channel row when the SheetDialog is dismissed,
+// allowing the user to re-open the stream checker.
+.check-badge {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 4px;
+  flex-shrink: 0;
+
+  .material-icons {
+    font-size: 18px;
+    color: #646cff;
+  }
+
+  &:hover .material-icons {
+    color: #818cf8;
+  }
+}
+
+// Pulsing glow animation for the retrieval badge
+.pulse {
+  animation: badge-pulse 2s ease-in-out infinite;
+}
+
+@keyframes badge-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
