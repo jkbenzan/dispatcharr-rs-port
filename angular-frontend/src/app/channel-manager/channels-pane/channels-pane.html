@@ -261,7 +261,7 @@
      Fully draggable to full height for complete activity log view. -->
 <ng-template
   [tuiSheetDialogOptions]="sheetOptions"
-  [(tuiSheetDialog)]="sheetOpen"
+  [tuiSheetDialog]="sheetOpen"
   (tuiSheetDialogChange)="onSheetDismiss($event)">
   <app-stream-checker-sheet
     [streamIds]="sheetStreamIds"
