@@ -13,38 +13,33 @@
   </div>
 
   <div class="filters-bar">
-    <tui-textfield class="search-box">
-      <input
-        tuiTextfield
-        type="text"
-        placeholder="Search streams..."
-        [(ngModel)]="searchQuery"
-        (ngModelChange)="onSearchChange($event)"
-      />
-    </tui-textfield>
+    <input
+      type="text"
+      class="search-input"
+      style="flex: 1;"
+      placeholder="Search streams..."
+      [(ngModel)]="searchQuery"
+      (ngModelChange)="onSearchChange($event)"
+    />
 
-    <div class="dropdowns">
-      <tui-textfield class="filter-select">
-        <select
-          multiple
-          tuiMultiSelect
-          [formControl]="providerControl"
-          [items]="providers"
-          (ngModelChange)="fetchStreams()"
-        ></select>
-        Providers
-      </tui-textfield>
+    <div class="dropdowns" style="display: flex; gap: 8px;">
+      <select
+        class="filter-select"
+        [formControl]="providerControl"
+        (ngModelChange)="fetchStreams()"
+      >
+        <option value="">All Providers</option>
+        <option *ngFor="let p of providers" [value]="p">{{ p }}</option>
+      </select>
 
-      <tui-textfield class="filter-select">
-        <select
-          multiple
-          tuiMultiSelect
-          [formControl]="groupControl"
-          [items]="groups"
-          (ngModelChange)="fetchStreams()"
-        ></select>
-        Groups
-      </tui-textfield>
+      <select
+        class="filter-select"
+        [formControl]="groupControl"
+        (ngModelChange)="fetchStreams()"
+      >
+        <option value="">All Groups</option>
+        <option *ngFor="let g of groups" [value]="g">{{ g }}</option>
+      </select>
     </div>
   </div>
 

@@ -99,13 +99,19 @@
     <h2 style="margin-bottom: 16px; font-size: 1.1rem;">Create Channel</h2>
     
     <div style="display: flex; flex-direction: column; gap: 16px;">
-      <tui-textfield>
-        <input tuiTextfield formControlName="name" placeholder="Channel Name" />
-      </tui-textfield>
+      <input 
+        type="text" 
+        class="search-input" 
+        formControlName="name" 
+        placeholder="Channel Name" 
+      />
 
-      <tui-textfield>
-        <input tuiTextfield type="number" formControlName="channel_number" placeholder="Channel Number" />
-      </tui-textfield>
+      <input 
+        type="number" 
+        class="search-input" 
+        formControlName="channel_number" 
+        placeholder="Channel Number" 
+      />
     </div>
 
     <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px;">

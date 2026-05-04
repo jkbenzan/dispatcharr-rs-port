@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormControl, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ApiService } from '../../api.service';
 import { WebSocketService } from '../../websocket.service';
-import { TuiLoader, TuiButton, TuiDialogService, TuiTextfield } from '@taiga-ui/core';
+import { TuiLoader, TuiButton, TuiDialogService } from '@taiga-ui/core';
 import { PolymorpheusContent } from '@taiga-ui/polymorpheus';
 import { ChannelListItemComponent } from '../channel-list-item/channel-list-item';
 import { firstValueFrom, forkJoin } from 'rxjs';
@@ -25,7 +25,6 @@ interface ChannelGroupView {
     ReactiveFormsModule,
     TuiLoader,
     TuiButton,
-    TuiTextfield,
     ChannelListItemComponent
   ],
   templateUrl: './channels-pane.html',

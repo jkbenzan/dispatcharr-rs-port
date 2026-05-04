@@ -2,8 +2,8 @@ import { ChangeDetectionStrategy, ChangeDetectorRef, Component, EventEmitter, in
 import { CommonModule } from '@angular/common';
 import { FormControl, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { ApiService } from '../../api.service';
-import { TuiAccordion, TuiMultiSelect } from '@taiga-ui/kit';
-import { TuiLoader, TuiTextfield } from '@taiga-ui/core';
+import { TuiAccordion } from '@taiga-ui/kit';
+import { TuiLoader } from '@taiga-ui/core';
 
 @Component({
   selector: 'app-streams-pane',
@@ -13,9 +13,7 @@ import { TuiLoader, TuiTextfield } from '@taiga-ui/core';
     FormsModule,
     ReactiveFormsModule,
     TuiAccordion,
-    TuiLoader,
-    TuiTextfield,
-    TuiMultiSelect
+    TuiLoader
   ],
   templateUrl: './streams-pane.html',
   styleUrl: './streams-pane.less',
