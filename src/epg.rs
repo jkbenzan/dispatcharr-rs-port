@@ -6,7 +6,7 @@ use quick_xml::reader::Reader;
 use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
-use std::io::{BufRead, BufReader, Cursor, Read, Write};
+use std::io::{BufRead, BufReader, Cursor, Read};
 use std::path::PathBuf;
 
 const XMLTV_INSERT_BATCH_SIZE: usize = 1_000;

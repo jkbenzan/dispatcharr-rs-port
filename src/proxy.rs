@@ -5,15 +5,14 @@ use crate::{
 };
 use axum::{
     body::Body,
-    extract::{Path, State, Query, ConnectInfo},
+    extract::{Path, State, Query},
     http::StatusCode,
     response::Response,
 };
 use futures_util::StreamExt;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use serde::{Serialize, Deserialize};
-use std::collections::{HashMap, VecDeque};
-use std::net::SocketAddr;
+use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -416,7 +415,8 @@ pub async fn broadcaster_pumper(
         }
     }
     
-    state.broadcasters.remove(&channel_id);
+    // Unreachable due to infinite loop above
+    // state.broadcasters.remove(&channel_id);
 }
 
 pub async fn get_or_create_broadcaster(

@@ -151,7 +151,7 @@ pub async fn update_logo(
     axum::extract::Path(id): axum::extract::Path<i64>,
     axum::Json(payload): axum::Json<UpdateLogoRequest>,
 ) -> Json<Value> {
-    use sea_orm::{ActiveModelTrait, Set, TryIntoModel};
+    use sea_orm::{ActiveModelTrait, Set};
     if let Ok(Some(model)) = crate::entities::logo::Entity::find_by_id(id)
         .one(&state.db)
         .await
@@ -222,7 +222,6 @@ pub async fn cleanup_unused_logos(
         }
     }
     
-    let mut deleted_count = 0;
     let mut local_files_deleted = 0;
     
     let unused_logos = crate::entities::logo::Entity::find()
@@ -231,7 +230,7 @@ pub async fn cleanup_unused_logos(
         .await
         .unwrap_or_default();
         
-    deleted_count = unused_logos.len();
+    let deleted_count = unused_logos.len();
 
     if delete_files {
         for logo in unused_logos {
@@ -1276,27 +1275,6 @@ pub async fn get_dashboard_stats(State(state): State<Arc<AppState>>) -> Json<Val
         "cpu_usage": 0,
         "memory_usage": 0
     }))
-}
-
-pub async fn get_channels_summary(State(state): State<Arc<AppState>>) -> Json<Value> {
-    let results = channel::Entity::find()
-        .all(&state.db)
-        .await
-        .unwrap_or_default();
-    
-    let summary: Vec<Value> = results.into_iter().map(|c| {
-        json!({
-            "id": c.id,
-            "name": c.name,
-            "channel_number": c.channel_number,
-            "channel_group_id": c.channel_group_id,
-            "logo_id": c.logo_id,
-            "uuid": c.uuid,
-            "epg_data_id": c.epg_data_id,
-        })
-    }).collect();
-    
-    Json(json!(summary))
 }
 
 pub async fn get_channel_groups(State(state): State<Arc<AppState>>) -> Json<Value> {

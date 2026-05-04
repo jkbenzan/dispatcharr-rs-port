@@ -1,11 +1,11 @@
 use axum::{
-    extract::{ConnectInfo, Request, State},
+    extract::{Request, State},
     http::StatusCode,
     middleware::Next,
     response::Response,
 };
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
-use std::net::SocketAddr;
+// unused import: use std::net::SocketAddr;
 use std::sync::Arc;
 use ipnet::IpNet;
 
