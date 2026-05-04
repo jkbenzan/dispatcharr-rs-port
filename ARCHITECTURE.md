@@ -123,10 +123,10 @@ Angular CDK's `cdkDropList` is designed for list-to-list transfers within flat c
 
 The channels pane displays channels organized by group, matching the ECM layout.
 
-1. **Fetch in parallel:** `GET /api/channels/groups/` and `GET /api/channels/channels/?page_size=5000`
+1. **Fetch in parallel:** `GET /api/channels/groups/` and `GET /api/channels/channels/summary/`
 2. **Client-side grouping:** Channels are grouped by `channel_group_id`, matched against group names
-3. **Filter:** Only groups that contain at least one channel are displayed
-4. **Search:** Filters channels by name/number, only showing groups with matching channels
+3. **Filter:** Only groups that contain at least one channel are displayed (empty groups are hidden)
+4. **Search:** Full-text search across channels by name/number, displaying the matching channels and their corresponding groups.
 
 ---
 
