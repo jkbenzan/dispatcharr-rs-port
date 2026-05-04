@@ -4,7 +4,14 @@
      (dragover)="itemDragOver.emit($event)"
      (drop)="itemDrop.emit($event)">
   
-  <input type="checkbox" [checked]="isSelected" style="pointer-events: none;" />
+  <!-- Expand arrow (only if channel has streams) -->
+  <span class="material-icons expand-icon" 
+        *ngIf="channel.streams?.length"
+        (click)="toggleExpand($event)"
+        style="font-size: 16px; cursor: pointer;">
+    {{ expanded ? 'expand_more' : 'chevron_right' }}
+  </span>
+  <span *ngIf="!channel.streams?.length" style="width: 16px; display: inline-block;"></span>
 
   <img *ngIf="channel.logo_url; else noLogo" [src]="channel.logo_url" class="channel-logo" loading="lazy" referrerpolicy="no-referrer">
   <ng-template #noLogo>
@@ -18,7 +25,18 @@
     <div class="channel-meta">
       <span *ngIf="channel.channel_number">#{{ channel.channel_number }}</span>
       <span class="badge" *ngIf="channel.epg_id">EPG</span>
-      <span *ngIf="channel.streams?.length">{{ channel.streams.length }} streams</span>
+      <span class="stream-count" *ngIf="channel.streams?.length">{{ channel.streams.length }} stream{{ channel.streams.length === 1 ? '' : 's' }}</span>
+    </div>
+  </div>
+</div>
+
+<!-- Assigned streams sub-list -->
+<div class="assigned-streams" *ngIf="expanded && channel.streams?.length">
+  <div *ngFor="let stream of channel.streams" class="assigned-stream-item">
+    <span class="material-icons" style="font-size: 14px; color: var(--tui-success-fill);">check_circle</span>
+    <div class="assigned-stream-info">
+      <span class="assigned-stream-name">{{ stream.name }}</span>
+      <span class="assigned-stream-provider" *ngIf="stream.m3u_account_name">{{ stream.m3u_account_name }}</span>
     </div>
   </div>
 </div>

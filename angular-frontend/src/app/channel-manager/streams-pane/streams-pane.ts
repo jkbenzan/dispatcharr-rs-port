@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, EventEmitter, inject, Input, OnChanges, OnInit, Output, SimpleChanges } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, EventEmitter, inject, Input, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormControl, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { ApiService } from '../../api.service';
@@ -19,11 +19,10 @@ import { TuiLoader } from '@taiga-ui/core';
   styleUrl: './streams-pane.less',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class StreamsPaneComponent implements OnInit, OnChanges {
+export class StreamsPaneComponent implements OnInit {
   private readonly api = inject(ApiService);
   private readonly cdr = inject(ChangeDetectorRef);
 
-  @Input() selectedChannelId: number | null = null;
   @Input() selectedStreamIds: number[] = [];
   @Output() toggleStreamSelection = new EventEmitter<number>();
   @Output() selectAllInGroup = new EventEmitter<{streams: any[], isSelected: boolean}>();
@@ -36,22 +35,12 @@ export class StreamsPaneComponent implements OnInit, OnChanges {
   providers: string[] = [];
   groups: string[] = [];
   
-  // Assigned streams for selected channel
-  assignedStreams: any[] = [];
-  assignedLoading = false;
-
   streamGroups: any[] = [];
   loading = false;
 
   ngOnInit() {
     this.fetchFilterData();
     this.fetchStreams();
-  }
-
-  ngOnChanges(changes: SimpleChanges) {
-    if (changes['selectedChannelId'] && !changes['selectedChannelId'].firstChange) {
-      this.fetchAssignedStreams();
-    }
   }
 
   private fetchFilterData() {
@@ -65,32 +54,6 @@ export class StreamsPaneComponent implements OnInit, OnChanges {
       const results = Array.isArray(res) ? res : res?.results || [];
       this.groups = results.map((g: any) => g.name || g.group_name || String(g));
       this.cdr.markForCheck();
-    });
-  }
-
-  private fetchAssignedStreams() {
-    if (!this.selectedChannelId) {
-      this.assignedStreams = [];
-      this.cdr.markForCheck();
-      return;
-    }
-
-    this.assignedLoading = true;
-    this.cdr.markForCheck();
-
-    this.api.getChannelStreams(this.selectedChannelId).subscribe({
-      next: (res: any) => {
-        const channelData = res?.results?.[0] || res;
-        this.assignedStreams = channelData?.streams || [];
-        this.assignedLoading = false;
-        this.cdr.markForCheck();
-      },
-      error: (err) => {
-        console.error('Error fetching assigned streams', err);
-        this.assignedStreams = [];
-        this.assignedLoading = false;
-        this.cdr.markForCheck();
-      }
     });
   }
 
@@ -172,16 +135,13 @@ export class StreamsPaneComponent implements OnInit, OnChanges {
 
   handleDragStart(event: DragEvent, stream: any) {
     if (event.dataTransfer) {
-      // If the dragged stream is part of the selection, drag all selected. Otherwise just drag this one.
       const idsToDrag = this.selectedStreamIds.includes(stream.id) 
         ? this.selectedStreamIds 
         : [stream.id];
         
-      // Use 'application/json' as the data type — browser normalizes custom types to lowercase
       event.dataTransfer.setData('application/json', JSON.stringify(idsToDrag));
       event.dataTransfer.effectAllowed = 'copy';
       
-      // Custom drag image showing count
       const dragEl = document.createElement('div');
       dragEl.textContent = `${idsToDrag.length} stream(s)`;
       dragEl.style.cssText = 'position: absolute; top: -1000px; background: #646cff; color: white; padding: 4px 12px; border-radius: 6px; font-size: 13px; font-weight: 500;';

@@ -12,7 +12,6 @@
     </div>
     <div class="pane right" [style.width.%]="100 - leftPaneWidth">
       <app-streams-pane
-        [selectedChannelId]="selectedChannelId"
         [selectedStreamIds]="selectedStreamIds"
         (toggleStreamSelection)="onToggleStreamSelection($event)"
         (selectAllInGroup)="onSelectAllInGroup($event)"
