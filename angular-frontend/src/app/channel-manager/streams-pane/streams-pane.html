@@ -173,7 +173,7 @@
 <!-- Video Player Overlay -->
 <app-video-player
   *ngIf="playerUrl"
-  [url]="playerUrl"
+  [streamUrl]="playerUrl"
   [title]="playerTitle"
-  (close)="playerUrl = null"
+  (closed)="playerUrl = null"
 ></app-video-player>
