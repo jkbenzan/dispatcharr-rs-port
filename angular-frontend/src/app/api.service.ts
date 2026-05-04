@@ -47,6 +47,11 @@ export class ApiService {
     return this.http.get('/api/m3u/accounts/');
   }
 
+  refreshM3UAccount(id: number): Observable<any> {
+    return this.http.post(`/api/m3u/refresh/${id}/`, {});
+  }
+
+
   getStreamGroups(): Observable<any> {
     return this.http.get('/api/channels/groups/');
   }

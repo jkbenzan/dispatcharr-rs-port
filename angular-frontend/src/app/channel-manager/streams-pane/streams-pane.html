@@ -1,94 +1,179 @@
-<div class="pane-container">
+<div class="pane-container" (click)="onDocumentClick()">
+  <!-- ========== HEADER ========== -->
   <div class="pane-header">
-    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-      <h3>STREAMS</h3>
-      <button 
-        class="assign-btn" 
-        [disabled]="selectedStreamIds.length === 0"
-        (click)="onAssign()"
-      >
-        Assign ({{ selectedStreamIds.length }})
-      </button>
+    <div class="header-row">
+      <h3>STREAMS <span class="badge">{{ selectedStreamIds.length }} selected</span></h3>
+      <div class="header-actions">
+        <button 
+          class="assign-btn" 
+          [disabled]="selectedStreamIds.length === 0"
+          (click)="onAssign()"
+        >
+          Assign Selected
+        </button>
+      </div>
     </div>
   </div>
 
+  <!-- ========== FILTERS ========== -->
   <div class="filters-bar">
+    <!-- Search -->
     <input
       type="text"
       class="search-input"
       placeholder="Search streams..."
       [(ngModel)]="searchQuery"
-      (ngModelChange)="onSearchChange($event)"
     />
 
-    <div class="dropdowns">
-      <select
-        class="filter-select"
-        [formControl]="providerControl"
-        (change)="fetchStreams()"
-      >
-        <option value="">All Providers</option>
-        <option *ngFor="let p of providers" [value]="p">{{ p }}</option>
-      </select>
+    <!-- Provider filter -->
+    <div class="dropdown-wrapper">
+      <button class="filter-select"
+              (click)="showProviderDropdown = !showProviderDropdown; showGroupDropdown = false; $event.stopPropagation()">
+        {{ providerFilterLabel }}
+        <span class="material-icons" style="font-size: 16px;">arrow_drop_down</span>
+      </button>
 
-      <select
-        class="filter-select"
-        [formControl]="groupControl"
-        (change)="fetchStreams()"
-      >
-        <option value="">All Groups</option>
-        <option *ngFor="let g of groups" [value]="g">{{ g }}</option>
-      </select>
+      <div class="dropdown-menu" *ngIf="showProviderDropdown" (click)="$event.stopPropagation()">
+        <input type="text" class="dropdown-search" placeholder="Search providers..." [(ngModel)]="providerSearch" />
+        <button class="dropdown-clear" (click)="clearProviderFilters()">Clear all</button>
+        <div class="dropdown-list">
+          <label *ngFor="let m of filteredProviders" class="dropdown-item">
+            <input type="checkbox"
+                   [checked]="selectedProviderFilters.has(m.id)"
+                   (change)="toggleProviderFilter(m.id)" />
+            {{ m.name }}
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Group filter -->
+    <div class="dropdown-wrapper">
+      <button class="filter-select"
+              (click)="showGroupDropdown = !showGroupDropdown; showProviderDropdown = false; $event.stopPropagation()">
+        {{ groupFilterLabel }}
+        <span class="material-icons" style="font-size: 16px;">arrow_drop_down</span>
+      </button>
+
+      <div class="dropdown-menu" *ngIf="showGroupDropdown" (click)="$event.stopPropagation()">
+        <input type="text" class="dropdown-search" placeholder="Search groups..." [(ngModel)]="groupSearch" />
+        <button class="dropdown-clear" (click)="clearGroupFilters()">Clear all</button>
+        <div class="dropdown-list">
+          <label *ngFor="let g of filteredGroups" class="dropdown-item">
+            <input type="checkbox"
+                   [checked]="selectedGroupFilters.has(g)"
+                   (change)="toggleGroupFilter(g)" />
+            {{ g }}
+          </label>
+        </div>
+      </div>
     </div>
   </div>
 
+  <!-- ========== TREE ========== -->
   <tui-loader [overlay]="true" [loading]="loading">
     <div class="scroll-area">
-      <tui-accordion [closeOthers]="false">
-        <ng-container *ngFor="let group of streamGroups">
-          <button tuiAccordion>
-            <div class="group-header">
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <input 
-                  type="checkbox" 
-                  [checked]="isGroupFullySelected(group)"
-                  (click)="onToggleGroup(group, $event)"
-                />
-                <span>{{ group.name }}</span>
-              </div>
-              <span class="group-count">{{ group.streams.length }}</span>
-            </div>
-          </button>
+      <ng-container *ngFor="let m3u of filteredM3UViews; trackBy: trackByM3UId">
+        
+        <!-- M3U ROW -->
+        <div class="m3u-row" (click)="toggleM3UExpand(m3u)">
+          <span class="material-icons expand-arrow">
+            {{ m3u.expanded ? 'expand_more' : 'chevron_right' }}
+          </span>
+          <span class="m3u-name">{{ m3u.name }}</span>
+          
+          <div class="m3u-meta">
+            <span class="m3u-status" [attr.data-status]="m3u.status">{{ m3u.status }}</span>
+            <span class="m3u-last-update" *ngIf="m3u.last_refreshed">
+              {{ m3u.last_refreshed | date:'short' }}
+            </span>
+          </div>
 
-          <div tuiItem>
-            <div class="streams-list">
-              <div
-                *ngFor="let stream of group.streams"
-                class="stream-item"
-                (click)="onToggleStream(stream.id, $event)"
-                draggable="true"
-                (dragstart)="handleDragStart($event, stream)"
-              >
-                <input 
-                  type="checkbox" 
-                  [checked]="isStreamSelected(stream.id)"
-                  style="margin-right: 12px; pointer-events: none;"
-                />
-                <div class="stream-info">
-                  <span class="stream-name">{{ stream.name }}</span>
-                  <span class="stream-details" *ngIf="stream.m3u_account_name">
-                    {{ stream.m3u_account_name }}
+          <div class="m3u-actions">
+            <span class="m3u-count">{{ m3u.total_streams }}</span>
+            <button class="icon-btn refresh-btn" 
+                    [class.spinning]="refreshingIds.has(m3u.id)"
+                    (click)="refreshM3U(m3u.id, $event)" 
+                    title="Refresh M3U">
+              <span class="material-icons">refresh</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- M3U GROUPS -->
+        <ng-container *ngIf="m3u.expanded">
+          <div class="m3u-content">
+            <ng-container *ngFor="let group of m3u.groups; trackBy: trackByGroupName">
+              
+              <!-- GROUP ROW -->
+              <div class="m3u-group-row" (click)="toggleGroupExpand(group, $event)">
+                <div class="group-left">
+                  <span class="material-icons expand-arrow mini">
+                    {{ group.expanded ? 'expand_more' : 'chevron_right' }}
                   </span>
+                  <input 
+                    type="checkbox" 
+                    [checked]="group.streams.every(s => isStreamSelected(s.id))"
+                    (click)="onToggleM3UGroup(group, $event)"
+                  />
+                  <span class="group-name">{{ group.name }}</span>
+                </div>
+                <span class="group-count">{{ group.streams.length }}</span>
+              </div>
+
+              <!-- STREAMS IN GROUP -->
+              <div class="streams-list" *ngIf="group.expanded">
+                <div
+                  *ngFor="let stream of group.streams; trackBy: trackByStreamId"
+                  class="stream-item"
+                  [class.selected]="isStreamSelected(stream.id)"
+                  (click)="onToggleStream(stream.id, $event)"
+                  draggable="true"
+                  (dragstart)="handleDragStart($event, stream)"
+                >
+                  <input 
+                    type="checkbox" 
+                    [checked]="isStreamSelected(stream.id)"
+                    style="pointer-events: none;"
+                  />
+                  
+                  <!-- Logo or Icon -->
+                  <div class="stream-logo">
+                    <img *ngIf="stream.logo_url" [src]="stream.logo_url" alt="" />
+                    <span *ngIf="!stream.logo_url" class="material-icons">tv</span>
+                  </div>
+
+                  <!-- 3-Row Info Cell -->
+                  <div class="stream-info">
+                    <div class="row-1">{{ stream.name }}</div>
+                    <div class="row-2"></div>
+                    <div class="row-3">{{ stream.m3u_account_name }}</div>
+                  </div>
+
+                  <!-- Actions -->
+                  <div class="stream-actions">
+                    <button class="icon-btn" (click)="previewStream(stream, $event)" title="Preview stream">
+                      <span class="material-icons">visibility</span>
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
+            </ng-container>
           </div>
         </ng-container>
-      </tui-accordion>
+      </ng-container>
 
-      <div *ngIf="!loading && streamGroups.length === 0" class="empty-state">
+      <div *ngIf="!loading && filteredM3UViews.length === 0" class="empty-state">
         No streams found matching filters.
       </div>
     </div>
   </tui-loader>
 </div>
+
+<!-- Video Player Overlay -->
+<app-video-player
+  *ngIf="playerUrl"
+  [url]="playerUrl"
+  [title]="playerTitle"
+  (close)="playerUrl = null"
+></app-video-player>

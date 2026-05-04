@@ -106,6 +106,13 @@ angular-frontend/src/app/
 - Shift-click range selection on channels
 - Group filter acts as a datagrid filter (not selection)
 
+### Stream Pane (Source View)
+- **Hierarchy**: M3U Provider → M3U Group → Stream Name.
+- **M3U Row**: Displays provider name, fetching status, last updated timestamp, and a manual "Refresh Now" button.
+- **Provider/Group Filter**: Searchable multi-select dropdowns that filter the tree.
+- **Stream Preview**: Integrated "Preview Stream" button opens the in-app player.
+- **3-Row Info Cell**: Displays Stream Name, (Reserved), and M3U Account Name.
+
 ### In-App Video Player
 - Angular-native component using `mpegts.js` for live MPEG-TS stream playback
 - Native HTML5 `<video>` for VOD content

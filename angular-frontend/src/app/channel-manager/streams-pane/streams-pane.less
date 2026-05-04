@@ -1,20 +1,47 @@
+/* ======================================================================
+   Streams Pane — Nested M3U → Group → Stream tree
+   ====================================================================== */
+
 .pane-container {
   display: flex;
   flex-direction: column;
   height: 100%;
+  background: var(--tui-base-01);
+  color: var(--tui-text-01);
+  position: relative;
 }
 
+// ========== HEADER ==========
 .pane-header {
-  padding: 12px 16px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--tui-base-03);
-  background: var(--tui-base-01);
+  background: #16213e; // Same as channels-pane
+  height: 44px; // Explicit height for alignment
+  box-sizing: border-box;
+
+  .header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 100%;
+  }
 
   h3 {
     margin: 0;
-    color: var(--tui-text-01);
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 700;
     letter-spacing: 0.5px;
+    color: #e0e0e0;
+  }
+
+  .badge {
+    background: #646cff;
+    color: #fff;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 600;
+    margin-left: 8px;
   }
 }
 
@@ -22,9 +49,9 @@
   background: #646cff;
   color: white;
   border: none;
-  padding: 6px 14px;
+  padding: 4px 12px;
   border-radius: 4px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   cursor: pointer;
   transition: opacity 0.2s;
@@ -35,51 +62,27 @@
   }
 
   &:hover:not(:disabled) {
-    opacity: 0.85;
+    background: #535bf2;
   }
 }
 
-// --- Filters ---
+// ========== FILTERS ==========
 .filters-bar {
-  padding: 12px 16px;
-  background: var(--tui-base-01);
+  padding: 8px 12px;
   border-bottom: 1px solid var(--tui-base-03);
   display: flex;
-  flex-direction: column;
   gap: 8px;
+  background: var(--tui-base-01);
+  position: relative;
+  z-index: 100;
 }
 
 .search-input {
-  width: 100%;
+  flex: 2;
   background: var(--tui-base-02);
   border: 1px solid var(--tui-base-03);
   border-radius: 4px;
-  padding: 8px 12px;
-  color: var(--tui-text-01);
-  font-size: 13px;
-  outline: none;
-  box-sizing: border-box;
-
-  &:focus {
-    border-color: var(--tui-primary);
-  }
-
-  &::placeholder {
-    color: var(--tui-text-03);
-  }
-}
-
-.dropdowns {
-  display: flex;
-  gap: 8px;
-}
-
-.filter-select {
-  flex: 1;
-  background: var(--tui-base-02);
-  border: 1px solid var(--tui-base-03);
-  border-radius: 4px;
-  padding: 6px 8px;
+  padding: 6px 10px;
   color: var(--tui-text-01);
   font-size: 12px;
   outline: none;
@@ -89,17 +92,105 @@
   }
 }
 
-// --- Stream list ---
+.dropdown-wrapper {
+  flex: 1;
+  position: relative;
+}
+
+.filter-select {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--tui-base-02);
+  border: 1px solid var(--tui-base-03);
+  border-radius: 4px;
+  padding: 6px 10px;
+  color: var(--tui-text-01);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  &:hover {
+    border-color: var(--tui-primary);
+  }
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  background: #1a1a2e;
+  border: 1px solid var(--tui-base-03);
+  border-radius: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  max-height: 300px;
+  z-index: 200;
+}
+
+.dropdown-search {
+  padding: 8px;
+  background: #0f0f1a;
+  border: none;
+  border-bottom: 1px solid var(--tui-base-03);
+  color: #fff;
+  font-size: 11px;
+  outline: none;
+}
+
+.dropdown-clear {
+  padding: 6px;
+  background: none;
+  border: none;
+  color: var(--tui-primary);
+  font-size: 11px;
+  cursor: pointer;
+  text-align: left;
+  font-weight: 600;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.dropdown-list {
+  overflow-y: auto;
+  flex: 1;
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.1s;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  input {
+    cursor: pointer;
+  }
+}
+
+// ========== SCROLL AREA ==========
 .scroll-area {
   flex: 1;
   overflow-y: auto;
-  background: var(--tui-base-01);
+  padding-bottom: 20px;
 
   &::-webkit-scrollbar {
     width: 6px;
-  }
-  &::-webkit-scrollbar-track {
-    background: transparent;
   }
   &::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.1);
@@ -107,57 +198,228 @@
   }
 }
 
-.group-header {
+// ========== TREE ROWS ==========
+
+.m3u-row {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  width: 100%;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  user-select: none;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.04);
+  }
 }
 
-.group-count {
-  background: var(--tui-base-03);
-  padding: 2px 8px;
+.expand-arrow {
+  color: rgba(255, 255, 255, 0.3);
+  margin-right: 8px;
+  font-size: 20px;
+
+  &.mini {
+    font-size: 16px;
+  }
+}
+
+.m3u-name {
+  font-weight: 700;
+  font-size: 13px;
+  color: #fff;
+  flex: 1;
+}
+
+.m3u-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  margin-right: 12px;
+}
+
+.m3u-status {
+  font-size: 9px;
+  text-transform: uppercase;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  
+  &[data-status="fetching"] { color: #60a5fa; background: rgba(96, 165, 250, 0.1); }
+  &[data-status="idle"] { color: #9ca3af; background: rgba(156, 163, 175, 0.1); }
+  &[data-status="error"] { color: #f87171; background: rgba(248, 113, 113, 0.1); }
+}
+
+.m3u-last-update {
+  font-size: 10px;
+  opacity: 0.4;
+  margin-top: 2px;
+}
+
+.m3u-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.m3u-count {
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 6px;
   border-radius: 10px;
-  font-size: 11px;
 }
 
-.streams-list {
-  padding: 8px 0;
+.m3u-group-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px 8px 24px;
+  background: rgba(0, 0, 0, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  .group-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .group-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.7);
+  }
+
+  .group-count {
+    font-size: 10px;
+    opacity: 0.5;
+  }
 }
+
+// ========== STREAM ITEM ==========
 
 .stream-item {
   display: flex;
   align-items: center;
-  padding: 10px 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 8px 16px 8px 48px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
   cursor: pointer;
-  transition: background 0.2s;
-  margin: 0 8px;
-  border-radius: 4px;
+  transition: background 0.15s;
 
   &:hover {
-    background: var(--tui-base-02);
+    background: rgba(255, 255, 255, 0.03);
+    
+    .stream-actions {
+      opacity: 1;
+    }
+  }
+
+  &.selected {
+    background: rgba(100, 108, 255, 0.1);
+  }
+
+  input[type="checkbox"] {
+    margin-right: 12px;
+  }
+}
+
+.stream-logo {
+  width: 32px;
+  height: 24px;
+  margin-right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  overflow: hidden;
+  flex-shrink: 0;
+
+  img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+  }
+
+  .material-icons {
+    font-size: 16px;
+    opacity: 0.3;
   }
 }
 
 .stream-info {
+  flex: 1;
   display: flex;
   flex-direction: column;
+  min-width: 0;
+
+  .row-1 {
+    font-size: 12px;
+    font-weight: 600;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .row-2 {
+    height: 14px; // Placeholder
+  }
+
+  .row-3 {
+    font-size: 10px;
+    color: var(--tui-text-03);
+    font-weight: 500;
+  }
 }
 
-.stream-name {
-  font-size: 13px;
-  font-weight: 500;
+.stream-actions {
+  opacity: 0;
+  transition: opacity 0.2s;
+  display: flex;
+  gap: 4px;
 }
 
-.stream-details {
-  font-size: 11px;
-  opacity: 0.5;
+.icon-btn {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.4);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .material-icons {
+    font-size: 18px;
+  }
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .empty-state {
-  padding: 32px;
+  padding: 48px 24px;
   text-align: center;
-  opacity: 0.5;
-  font-size: 14px;
+  color: var(--tui-text-03);
+  font-size: 13px;
 }

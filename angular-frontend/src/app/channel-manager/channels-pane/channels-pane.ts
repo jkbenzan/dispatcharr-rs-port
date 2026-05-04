@@ -326,13 +326,13 @@ export class ChannelsPaneComponent implements OnInit {
   }
 
   get groupFilterLabel(): string {
-    if (this.selectedGroupFilters.size === 0) return 'All groups';
+    if (this.selectedGroupFilters.size === 0) return 'All Groups';
     if (this.selectedGroupFilters.size === 1) {
       const id = [...this.selectedGroupFilters][0];
       const g = this.allGroupsWithChannels.find(g => g.id === id);
-      return g ? g.name : 'All groups';
+      return g ? g.name : 'All Groups';
     }
-    return `${this.selectedGroupFilters.size} groups`;
+    return `${this.selectedGroupFilters.size} Groups`;
   }
 
   // =================== EXPAND / COLLAPSE ===================
