@@ -143,7 +143,7 @@ The channels pane displays channels organized by group, matching the ECM layout.
 frontend/ → npm run build → dist/
 
 # Stage 1b: Angular channel manager (mini-app)
-angular-frontend/ → npx ng build → /app/dist/browser/ → /app/dist/channel-manager/
+angular-frontend/ → npx ng build --base-href /channel-manager/ → /app/dist/browser/ → /app/dist/channel-manager/
 
 # Stage 2: Rust binary
 cargo build --release
@@ -151,6 +151,8 @@ cargo build --release
 # Stage 3: Production image
 debian:bookworm-slim + binary + both dist/ outputs
 ```
+
+> ⚠️ **Critical:** The `--base-href /channel-manager/` flag is **required** in the Docker build. Without it, the Angular `index.html` emits `<script src="/main-XXX.js">` (root-relative), which the Rust server resolves to the React SPA fallback, returning HTML instead of JavaScript. The browser then rejects it with a MIME type error and the app shows a black screen.
 
 ---
 

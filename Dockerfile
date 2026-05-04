@@ -14,7 +14,7 @@ WORKDIR /app/angular-frontend
 COPY angular-frontend/package*.json ./
 RUN npm ci
 COPY angular-frontend/ ./
-RUN npx ng build
+RUN npx ng build --base-href /channel-manager/
 
 # STEP 2: Build the Rust Binary
 FROM rust:bookworm AS backend-builder
