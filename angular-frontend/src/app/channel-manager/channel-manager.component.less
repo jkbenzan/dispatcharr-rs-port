@@ -23,21 +23,43 @@
   min-width: 200px;
 }
 
-.divider {
+// ========== TOOLBAR DIVIDER ==========
+
+.toolbar-divider {
+  display: flex;
+  background: var(--tui-base-02);
+  border-left: 1px solid var(--tui-base-03);
+  border-right: 1px solid var(--tui-base-03);
+  position: relative;
+  transition: width 0.3s ease;
+  z-index: 10;
+  
+  &:not(.expanded) {
+    width: 24px;
+    justify-content: center;
+  }
+}
+
+.drag-handle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
   width: 6px;
-  min-width: 6px;
-  background: var(--tui-base-03);
-  height: 100%;
   cursor: col-resize;
   display: flex;
   align-items: center;
   justify-content: center;
+  background: transparent;
   transition: background 0.15s;
-  position: relative;
 
-  &:hover,
-  &:active {
+  &:hover, &:active {
     background: var(--tui-primary);
+  }
+
+  &.collapsed-handle {
+    width: 100%; // when collapsed, the whole width of the divider is draggable except for the button
+    z-index: 1;
   }
 }
 
@@ -46,6 +68,110 @@
   height: 32px;
   background: rgba(255, 255, 255, 0.3);
   border-radius: 2px;
+}
+
+// ========== TOGGLE BUTTONS ==========
+
+.toggle-btn {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 50%;
+  color: var(--tui-text-02);
+  transition: background 0.2s, color 0.2s;
+  z-index: 5;
+
+  &:hover {
+    background: var(--tui-primary);
+    color: #fff;
+  }
+
+  .material-icons {
+    font-size: 16px;
+  }
+
+  &.collapsed-btn {
+    width: 20px;
+    height: 20px;
+    position: absolute;
+    top: 12px;
+  }
+
+  &.expanded-btn {
+    width: 24px;
+    height: 24px;
+  }
+}
+
+// ========== TOOLBAR CONTENT ==========
+
+.toolbar-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  min-width: 0;
+  overflow: hidden;
+  margin-left: 6px; // Space for drag handle
+}
+
+.toolbar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+.toolbar-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--tui-text-01);
+  white-space: nowrap;
+}
+
+.toolbar-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+// Custom Taiga-style Action Button
+.action-btn {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: var(--tui-text-01);
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.15);
+    transform: translateY(-1px);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+
+  .material-icons {
+    font-size: 20px;
+    color: var(--tui-primary);
+  }
+
+  .action-label {
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
 }
 
 // During resize, prevent iframe/pointer issues

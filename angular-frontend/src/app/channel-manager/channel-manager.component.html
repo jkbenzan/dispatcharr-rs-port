@@ -5,13 +5,42 @@
     <app-channels-pane></app-channels-pane>
   </div>
 
-  <!-- Draggable divider -->
-  <div class="divider" (mousedown)="onDividerMouseDown($event)">
-    <div class="divider-handle"></div>
+  <!-- TOOLBAR / DIVIDER -->
+  <div class="toolbar-divider" 
+       [class.expanded]="toolbarExpanded"
+       [style.width.%]="toolbarExpanded ? 10 : null">
+    
+    <!-- Drag handle (acts as divider when collapsed, left border when expanded) -->
+    <div class="drag-handle" (mousedown)="onDividerMouseDown($event)" [class.collapsed-handle]="!toolbarExpanded">
+      <div class="divider-handle" *ngIf="!toolbarExpanded"></div>
+    </div>
+
+    <!-- Collapsed state (Expand Button) -->
+    <button class="toggle-btn collapsed-btn" *ngIf="!toolbarExpanded" (click)="toggleToolbar()">
+      <span class="material-icons">chevron_right</span>
+    </button>
+
+    <!-- Expanded state -->
+    <div class="toolbar-content" *ngIf="toolbarExpanded">
+      <div class="toolbar-header">
+        <span class="toolbar-title">Actions</span>
+        <button class="toggle-btn expanded-btn" (click)="toggleToolbar()">
+          <span class="material-icons">chevron_left</span>
+        </button>
+      </div>
+
+      <div class="toolbar-actions">
+        <button class="action-btn">
+          <span class="material-icons">add_box</span>
+          <span class="action-label">Create Channel</span>
+        </button>
+        <!-- Additional stubs can go here -->
+      </div>
+    </div>
   </div>
 
   <!-- RIGHT: Streams pane (independent catalog) -->
-  <div class="pane right" [style.width.%]="100 - leftPaneWidth">
+  <div class="pane right" [style.width.%]="100 - leftPaneWidth - (toolbarExpanded ? 10 : 0)">
     <app-streams-pane
       [selectedStreamIds]="[]"
     ></app-streams-pane>

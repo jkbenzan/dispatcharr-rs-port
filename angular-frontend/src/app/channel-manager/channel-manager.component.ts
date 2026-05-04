@@ -18,9 +18,18 @@ import { StreamsPaneComponent } from './streams-pane/streams-pane';
   changeDetection: ChangeDetectionStrategy.Default,
 })
 export class ChannelManagerComponent {
-  // Resizable pane state — default 40% left, 60% right
+  // Resizable pane state — default 40% left
   leftPaneWidth = 40;
   private isResizing = false;
+
+  // Toolbar state
+  toolbarExpanded = false;
+
+  // --- Toolbar logic ---
+
+  toggleToolbar() {
+    this.toolbarExpanded = !this.toolbarExpanded;
+  }
 
   // --- Resize logic ---
 

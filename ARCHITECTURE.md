@@ -74,7 +74,8 @@ angular-frontend/src/app/
 
 ### Layout & Interaction
 
-- **Resizable panes**: Draggable divider. Default **40% channels / 60% streams**. Clamped 15–75%.
+- **Resizable panes**: Three-pane architecture. Left (Channels), Middle (Toolbar/Divider), Right (Streams). Default left pane width is 40%, clamped between 15% and 75%.
+- **Collapsible Toolbar**: The divider between panes doubles as a collapsible action toolbar. When collapsed, it acts as a standard drag handle. When expanded, it takes up 10% of the screen and displays channel management buttons (e.g., Create Channel).
 - **Nested tree**: Left pane renders **Group → Channel → Stream**. Only groups with channels are shown.
 - **Expand/collapse**: Per-group and per-channel expand arrows. Global expand all / collapse all buttons in header.
 - **Search**: Type-ahead search filters channels by name or number.
