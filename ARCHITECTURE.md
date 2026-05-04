@@ -80,13 +80,17 @@ angular-frontend/src/app/
 - **Search**: Type-ahead search filters channels by name or number.
 - **Group filter**: Multi-select dropdown showing only groups with channels. Acts as a datagrid filter.
 
+### Group Row
+- Expand arrow + group name + channel count badge
+- **Kebab menu** (⋮) with:
+  - **Test Channels**: Tests every stream in every channel within the group individually (sequential) via `POST /api/streams/:id/check/`. Shows per-stream and per-channel progress spinners. Auto-expands both the group and its channels.
+
 ### Channel Row
 - Checkbox + expand arrow + logo (resized to fit) + channel number + channel name + stream count badge
 - **Channel logo resolution**: The channel entity stores `logo_id` (FK to `dispatcharr_channels_logo`). The `get_channel_json()` function resolves `logo_id` → `logo_url` by looking up the logo table, injecting the URL directly into the channel JSON for frontend display.
 - **Kebab menu** (⋮) with:
   - **Play Channel**: Opens in-app video player at `/stream/{channel_uuid}/`
   - **Test Channel**: Bulk-checks all streams via `POST /api/streams/bulk-check/`, then sorts via `POST /api/channels/bulk-sort-streams/`
-  - **Test All Streams**: Tests each stream individually (sequential) via `POST /api/streams/:id/check/`. Shows per-stream progress spinners and updates stats in-place as each completes. Auto-expands the channel to show progress.
 
 ### Stream Row (sub-items under channel)
 - Checkbox + enumerated number (1, 2, 3...) + drag handle (≡) + logo + 3-row info cell + hover actions

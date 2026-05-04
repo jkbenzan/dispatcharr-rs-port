@@ -89,6 +89,8 @@ export class ChannelsPaneComponent implements OnInit {
 
   /** Currently open kebab menu for a channel (channel ID, or null) */
   openKebabChannelId: number | null = null;
+  /** Currently open kebab menu for a group (group ID, or null) */
+  openKebabGroupId: number | null = null;
 
   // =================== IN-APP VIDEO PLAYER ===================
 
@@ -113,6 +115,8 @@ export class ChannelsPaneComponent implements OnInit {
   testingStreamIds: Set<number> = new Set();
   /** Channel IDs currently being bulk-tested */
   testingChannelIds: Set<number> = new Set();
+  /** Group IDs currently being tested (all channels in group) */
+  testingGroupIds: Set<number> = new Set();
 
   // =================== LIFECYCLE ===================
 
@@ -387,14 +391,25 @@ export class ChannelsPaneComponent implements OnInit {
 
   // =================== KEBAB MENU ===================
 
+  /** Toggle the channel-level kebab menu */
   toggleKebab(channelId: number, event: Event) {
     event.stopPropagation();
+    this.openKebabGroupId = null; // Close group kebab if open
     this.openKebabChannelId = this.openKebabChannelId === channelId ? null : channelId;
+    this.cdr.markForCheck();
+  }
+
+  /** Toggle the group-level kebab menu */
+  toggleGroupKebab(groupId: number, event: Event) {
+    event.stopPropagation();
+    this.openKebabChannelId = null; // Close channel kebab if open
+    this.openKebabGroupId = this.openKebabGroupId === groupId ? null : groupId;
     this.cdr.markForCheck();
   }
 
   closeKebab() {
     this.openKebabChannelId = null;
+    this.openKebabGroupId = null;
     this.cdr.markForCheck();
   }
 
@@ -492,50 +507,66 @@ export class ChannelsPaneComponent implements OnInit {
   }
 
   /**
-   * Test all streams in a channel individually (sequential, one-by-one).
-   * Unlike testChannel() which uses the bulk-check endpoint, this tests each
-   * stream separately via POST /api/streams/:id/check/ and updates stats
-   * in-place as each completes — giving the user per-stream progress feedback.
+   * Test all channels in a group — tests every stream in every channel
+   * individually (sequential). Shows per-stream and per-channel progress.
+   * Triggered from the group-level kebab menu.
    */
-  async testAllStreams(channel: ChannelView, event: Event) {
+  async testGroupChannels(group: GroupView, event: Event) {
     event.stopPropagation();
     this.closeKebab();
 
-    // Guard: no streams or already testing
-    if (channel.streams.length === 0) return;
-    if (this.testingChannelIds.has(channel.id)) return;
+    // Guard: no channels or already testing this group
+    if (group.channels.length === 0) return;
+    if (this.testingGroupIds.has(group.id)) return;
 
-    // Mark the entire channel as in-progress
-    this.testingChannelIds.add(channel.id);
+    // Mark the group as in-progress
+    this.testingGroupIds.add(group.id);
 
-    // Mark all streams as testing so spinners appear on each row
-    channel.streams.forEach(s => this.testingStreamIds.add(s.id));
-
-    // Auto-expand the channel so the user can see per-stream progress
-    channel.expanded = true;
+    // Auto-expand the group so the user can see channel-level progress
+    group.expanded = true;
     this.cdr.markForCheck();
 
-    // Test each stream sequentially — we use firstValueFrom to await each HTTP call.
-    // Sequential testing avoids overwhelming the backend with concurrent ffprobe calls.
-    for (const stream of channel.streams) {
-      try {
-        const res: any = await firstValueFrom(this.api.testStream(stream.id));
-        // Update stream stats in-place on success
-        if (res?.success && res?.stream) {
-          stream.stream_stats = res.stream.stream_stats || res.stream.custom_properties?.stream_stats;
-          stream.stream_stats_updated_at = res.stream.stream_stats_updated_at;
+    // Iterate through each channel in the group sequentially
+    for (const channel of group.channels) {
+      // Skip channels with no streams
+      if (channel.streams.length === 0) continue;
+
+      // Mark this channel as testing
+      this.testingChannelIds.add(channel.id);
+
+      // Mark all streams in this channel as testing so spinners appear
+      channel.streams.forEach(s => this.testingStreamIds.add(s.id));
+
+      // Auto-expand the channel so the user can see per-stream progress
+      channel.expanded = true;
+      this.cdr.markForCheck();
+
+      // Test each stream in this channel sequentially.
+      // Sequential testing avoids overwhelming the backend with concurrent ffprobe calls.
+      for (const stream of channel.streams) {
+        try {
+          const res: any = await firstValueFrom(this.api.testStream(stream.id));
+          // Update stream stats in-place on success
+          if (res?.success && res?.stream) {
+            stream.stream_stats = res.stream.stream_stats || res.stream.custom_properties?.stream_stats;
+            stream.stream_stats_updated_at = res.stream.stream_stats_updated_at;
+          }
+        } catch (err) {
+          console.error(`Test Group: stream ${stream.id} (${stream.name}) failed:`, err);
+        } finally {
+          // Remove per-stream spinner regardless of success/failure
+          this.testingStreamIds.delete(stream.id);
+          this.cdr.markForCheck();
         }
-      } catch (err) {
-        console.error(`Test All Streams: stream ${stream.id} (${stream.name}) failed:`, err);
-      } finally {
-        // Remove per-stream spinner regardless of success/failure
-        this.testingStreamIds.delete(stream.id);
-        this.cdr.markForCheck();
       }
+
+      // Channel done — remove channel-level testing state
+      this.testingChannelIds.delete(channel.id);
+      this.cdr.markForCheck();
     }
 
-    // All streams done — remove channel-level testing state
-    this.testingChannelIds.delete(channel.id);
+    // All channels done — remove group-level testing state
+    this.testingGroupIds.delete(group.id);
     this.cdr.markForCheck();
   }
 
@@ -688,9 +719,9 @@ export class ChannelsPaneComponent implements OnInit {
   trackByChannelId(_: number, ch: ChannelView) { return ch.id; }
   trackByStreamId(_: number, s: StreamView) { return s.id; }
 
-  /** Close kebab when clicking outside */
+  /** Close kebab menus when clicking outside */
   onDocumentClick(event: Event) {
-    if (this.openKebabChannelId !== null) {
+    if (this.openKebabChannelId !== null || this.openKebabGroupId !== null) {
       this.closeKebab();
     }
     if (this.showGroupFilterDropdown) {

@@ -52,12 +52,32 @@
     <ng-container *ngFor="let group of filteredGroupViews; trackBy: trackByGroupId">
 
       <!-- GROUP ROW -->
-      <div class="group-row" (click)="toggleGroupExpand(group)">
+      <div class="group-row"
+           [class.testing]="testingGroupIds.has(group.id)"
+           (click)="toggleGroupExpand(group)">
         <span class="material-icons expand-arrow">
           {{ group.expanded ? 'expand_more' : 'chevron_right' }}
         </span>
         <span class="group-name">{{ group.name }}</span>
         <span class="group-channel-count">{{ group.channels.length }}</span>
+
+        <!-- Testing spinner for group-level testing -->
+        <span class="material-icons spin" *ngIf="testingGroupIds.has(group.id)"
+              style="font-size: 16px; color: #646cff;">sync</span>
+
+        <!-- Group kebab menu trigger -->
+        <button class="kebab-btn group-kebab-btn" (click)="toggleGroupKebab(group.id, $event)" title="Group actions">
+          <span class="material-icons">more_vert</span>
+        </button>
+
+        <!-- Group kebab dropdown -->
+        <div class="kebab-menu group-kebab-menu" *ngIf="openKebabGroupId === group.id" (click)="$event.stopPropagation()">
+          <button class="kebab-item" (click)="testGroupChannels(group, $event)"
+                  [disabled]="testingGroupIds.has(group.id) || group.channels.length === 0">
+            <span class="material-icons">checklist</span>
+            Test Channels
+          </button>
+        </div>
       </div>
 
       <!-- CHANNELS IN GROUP -->
@@ -126,12 +146,7 @@
                 <span class="material-icons">speed</span>
                 Test Channel
               </button>
-              <!-- Test All Streams: tests each stream individually with per-stream progress -->
-              <button class="kebab-item" (click)="testAllStreams(channel, $event)"
-                      [disabled]="testingChannelIds.has(channel.id) || channel.streams.length === 0">
-                <span class="material-icons">checklist</span>
-                Test All Streams
-              </button>
+
             </div>
           </div>
 
