@@ -73,7 +73,7 @@ angular-frontend/src/app/
 ### Layout & Interaction
 
 - **Resizable panes**: The two-pane layout uses a draggable divider. Default split is **40% channels / 60% streams**. The divider can be dragged between 15% and 75%.
-- **Assigned streams**: When a channel is selected in the left pane, the right pane's top section shows the streams currently assigned to that channel (fetched via `GET /api/channels/channels/:id/`).
+- **Assigned streams**: Each channel in the left pane has an expand arrow. Clicking it reveals the streams currently assigned to that channel as sub-items below the channel row. The streams pane (right) is fully independent and always shows the full available stream catalog.
 - **Group filter**: The group dropdown in the channels pane only shows groups that have at least one channel assigned. Empty groups are excluded to reduce noise.
 
 ### Taiga UI v5 Integration Notes
