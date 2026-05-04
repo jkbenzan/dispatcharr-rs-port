@@ -57,18 +57,24 @@ dispatcharr-rs-port/
 ```
 angular-frontend/src/app/
 ├── channel-manager/
-│   ├── channel-manager.component.*    # Orchestrator (two-pane layout)
+│   ├── channel-manager.component.*    # Orchestrator (resizable two-pane layout)
 │   ├── channels-pane/                 # Left pane: grouped channel list
-│   │   ├── channels-pane.ts           # Fetches groups + channels, builds grouped views
-│   │   ├── channels-pane.html         # Search, group filter, expandable groups
+│   │   ├── channels-pane.ts           # Fetches groups + full channels (with streams), builds grouped views
+│   │   ├── channels-pane.html         # Search, filtered group dropdown, expandable groups
 │   │   └── channels-pane.less         # ECM-matching styles
-│   ├── streams-pane/                  # Right pane: stream list with drag support
-│   │   ├── streams-pane.ts            # Fetches streams, handles selection & drag
-│   │   └── streams-pane.html          # Grouped stream list with checkboxes
+│   ├── streams-pane/                  # Right pane: assigned + available streams
+│   │   ├── streams-pane.ts            # Shows assigned streams for selected channel, fetches available streams
+│   │   └── streams-pane.html          # Assigned streams section + grouped available stream list with checkboxes
 │   └── channel-list-item/             # Reusable channel row component
 ├── api.service.ts                     # HTTP client for all backend API calls
 └── websocket.service.ts               # WebSocket client for real-time updates
 ```
+
+### Layout & Interaction
+
+- **Resizable panes**: The two-pane layout uses a draggable divider. Default split is **40% channels / 60% streams**. The divider can be dragged between 15% and 75%.
+- **Assigned streams**: When a channel is selected in the left pane, the right pane's top section shows the streams currently assigned to that channel (fetched via `GET /api/channels/channels/:id/`).
+- **Group filter**: The group dropdown in the channels pane only shows groups that have at least one channel assigned. Empty groups are excluded to reduce noise.
 
 ### Taiga UI v5 Integration Notes
 
