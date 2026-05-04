@@ -1,9 +1,9 @@
 <div class="pane-container">
   <div class="pane-header">
     <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-      <h3 class="tui-text_h6">Streams</h3>
+      <h3>STREAMS</h3>
       <button 
-        class="tui-button tui-button_size_s" 
+        class="assign-btn" 
         [disabled]="selectedStreamIds.length === 0"
         (click)="onAssign()"
       >
@@ -12,21 +12,45 @@
     </div>
   </div>
 
+  <!-- Assigned Streams Section -->
+  <div class="assigned-section" *ngIf="selectedChannelId">
+    <div class="assigned-header">
+      <span class="material-icons" style="font-size: 16px;">link</span>
+      <span>Assigned Streams</span>
+      <span class="assigned-count">{{ assignedStreams.length }}</span>
+    </div>
+    <tui-loader [overlay]="true" [loading]="assignedLoading" [style.min-height.px]="assignedLoading ? 40 : 0">
+      <div class="assigned-list" *ngIf="assignedStreams.length > 0">
+        <div *ngFor="let stream of assignedStreams" class="assigned-item">
+          <span class="material-icons" style="font-size: 14px; color: var(--tui-success-fill);">check_circle</span>
+          <span class="stream-name">{{ stream.name }}</span>
+          <span class="stream-details" *ngIf="stream.m3u_account_name">{{ stream.m3u_account_name }}</span>
+        </div>
+      </div>
+      <div *ngIf="!assignedLoading && assignedStreams.length === 0" class="assigned-empty">
+        No streams assigned to this channel.
+      </div>
+    </tui-loader>
+  </div>
+
+  <div class="available-header" *ngIf="selectedChannelId">
+    <span>Available Streams</span>
+  </div>
+
   <div class="filters-bar">
     <input
       type="text"
       class="search-input"
-      style="flex: 1;"
       placeholder="Search streams..."
       [(ngModel)]="searchQuery"
       (ngModelChange)="onSearchChange($event)"
     />
 
-    <div class="dropdowns" style="display: flex; gap: 8px;">
+    <div class="dropdowns">
       <select
         class="filter-select"
         [formControl]="providerControl"
-        (ngModelChange)="fetchStreams()"
+        (change)="fetchStreams()"
       >
         <option value="">All Providers</option>
         <option *ngFor="let p of providers" [value]="p">{{ p }}</option>
@@ -35,7 +59,7 @@
       <select
         class="filter-select"
         [formControl]="groupControl"
-        (ngModelChange)="fetchStreams()"
+        (change)="fetchStreams()"
       >
         <option value="">All Groups</option>
         <option *ngFor="let g of groups" [value]="g">{{ g }}</option>
@@ -57,7 +81,7 @@
                 />
                 <span>{{ group.name }}</span>
               </div>
-              <span class="tui-text_caption group-count">{{ group.streams.length }}</span>
+              <span class="group-count">{{ group.streams.length }}</span>
             </div>
           </button>
 

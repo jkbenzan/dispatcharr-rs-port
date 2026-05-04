@@ -46,7 +46,7 @@
             <span class="group-option-name">Uncategorized</span>
           </label>
           <!-- Named groups -->
-          <label class="group-filter-option" *ngFor="let g of allGroups" (click)="$event.stopPropagation()">
+          <label class="group-filter-option" *ngFor="let g of groupsWithChannels" (click)="$event.stopPropagation()">
             <input type="checkbox" [checked]="isGroupSelected(g.id)" (change)="toggleGroupSelection(g.id)" />
             <span class="group-option-name">{{ g.name }}</span>
           </label>

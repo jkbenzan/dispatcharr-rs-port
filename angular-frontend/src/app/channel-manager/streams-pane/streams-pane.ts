@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, EventEmitter, inject, Input, OnInit, Output } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, EventEmitter, inject, Input, OnChanges, OnInit, Output, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormControl, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { ApiService } from '../../api.service';
@@ -19,28 +19,39 @@ import { TuiLoader } from '@taiga-ui/core';
   styleUrl: './streams-pane.less',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class StreamsPaneComponent implements OnInit {
+export class StreamsPaneComponent implements OnInit, OnChanges {
   private readonly api = inject(ApiService);
   private readonly cdr = inject(ChangeDetectorRef);
 
+  @Input() selectedChannelId: number | null = null;
   @Input() selectedStreamIds: number[] = [];
   @Output() toggleStreamSelection = new EventEmitter<number>();
   @Output() selectAllInGroup = new EventEmitter<{streams: any[], isSelected: boolean}>();
   @Output() assignClicked = new EventEmitter<void>();
 
-  readonly providerControl = new FormControl<string[]>([]);
-  readonly groupControl = new FormControl<string[]>([]);
+  readonly providerControl = new FormControl<string>('');
+  readonly groupControl = new FormControl<string>('');
   searchQuery = '';
 
   providers: string[] = [];
   groups: string[] = [];
   
+  // Assigned streams for selected channel
+  assignedStreams: any[] = [];
+  assignedLoading = false;
+
   streamGroups: any[] = [];
   loading = false;
 
   ngOnInit() {
     this.fetchFilterData();
     this.fetchStreams();
+  }
+
+  ngOnChanges(changes: SimpleChanges) {
+    if (changes['selectedChannelId'] && !changes['selectedChannelId'].firstChange) {
+      this.fetchAssignedStreams();
+    }
   }
 
   private fetchFilterData() {
@@ -57,18 +68,44 @@ export class StreamsPaneComponent implements OnInit {
     });
   }
 
+  private fetchAssignedStreams() {
+    if (!this.selectedChannelId) {
+      this.assignedStreams = [];
+      this.cdr.markForCheck();
+      return;
+    }
+
+    this.assignedLoading = true;
+    this.cdr.markForCheck();
+
+    this.api.getChannelStreams(this.selectedChannelId).subscribe({
+      next: (res: any) => {
+        const channelData = res?.results?.[0] || res;
+        this.assignedStreams = channelData?.streams || [];
+        this.assignedLoading = false;
+        this.cdr.markForCheck();
+      },
+      error: (err) => {
+        console.error('Error fetching assigned streams', err);
+        this.assignedStreams = [];
+        this.assignedLoading = false;
+        this.cdr.markForCheck();
+      }
+    });
+  }
+
   fetchStreams() {
     this.loading = true;
     this.cdr.markForCheck();
     
     const params: any = {};
 
-    if (this.providerControl.value?.length) {
-      params.m3u_account = this.providerControl.value.join('::');
+    if (this.providerControl.value) {
+      params.m3u_account = this.providerControl.value;
     }
     
-    if (this.groupControl.value?.length) {
-      params.channel_group = this.groupControl.value.join('::');
+    if (this.groupControl.value) {
+      params.channel_group = this.groupControl.value;
     }
 
     if (this.searchQuery) {

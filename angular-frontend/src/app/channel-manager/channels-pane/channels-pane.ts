@@ -42,6 +42,8 @@ export class ChannelsPaneComponent implements OnInit {
 
   allChannels: any[] = [];
   allGroups: any[] = [];
+  /** Groups that actually have channels assigned — used for the filter dropdown */
+  groupsWithChannels: any[] = [];
   groupViews: ChannelGroupView[] = [];
   loading = true;
   searchQuery = '';
@@ -70,7 +72,7 @@ export class ChannelsPaneComponent implements OnInit {
     this.loading = true;
     this.cdr.markForCheck();
 
-    // Fetch groups and ALL channels in parallel
+    // Fetch groups and FULL channels (with streams) in parallel
     forkJoin({
       groups: this.api.getChannelGroups(),
       channels: this.api.getChannels({ page_size: 5000 }),
@@ -79,11 +81,27 @@ export class ChannelsPaneComponent implements OnInit {
         this.allGroups = Array.isArray(groups) ? groups : groups?.results || [];
         this.allChannels = channels?.results || [];
         this.totalChannels = this.allChannels.length;
+
+        // Build the set of group IDs that actually have channels
+        const groupIdsWithChannels = new Set<number>();
+        let hasUncategorized = false;
+        this.allChannels.forEach((ch: any) => {
+          if (ch.channel_group_id != null) {
+            groupIdsWithChannels.add(ch.channel_group_id);
+          } else {
+            hasUncategorized = true;
+          }
+        });
+
+        // Filter the dropdown to only groups with channels
+        this.groupsWithChannels = this.allGroups.filter((g: any) => groupIdsWithChannels.has(g.id));
         
-        // Initialize group filter: select all groups
+        // Initialize group filter: select all groups that have channels
         if (this.selectedGroupIds.size === 0) {
-          this.allGroups.forEach((g: any) => this.selectedGroupIds.add(g.id));
-          this.selectedGroupIds.add(-1); // "Uncategorized" pseudo-group
+          this.groupsWithChannels.forEach((g: any) => this.selectedGroupIds.add(g.id));
+          if (hasUncategorized) {
+            this.selectedGroupIds.add(-1); // "Uncategorized" pseudo-group
+          }
         }
 
         this.buildGroupViews();
@@ -121,14 +139,16 @@ export class ChannelsPaneComponent implements OnInit {
     // Build group views
     const views: ChannelGroupView[] = [];
 
-    // Named groups
-    for (const g of this.allGroups) {
+    // Named groups — only those with channels
+    for (const g of this.groupsWithChannels) {
       if (!this.selectedGroupIds.has(g.id)) continue;
       
       const channels = (channelsByGroup.get(g.id) || []).sort(
         (a: any, b: any) => (a.channel_number ?? 9999) - (b.channel_number ?? 9999)
       );
       const nums = channels.map((c: any) => c.channel_number).filter((n: any) => n != null);
+
+      if (channels.length === 0) continue; // Skip empty after search filtering
 
       views.push({
         id: g.id,
@@ -147,7 +167,7 @@ export class ChannelsPaneComponent implements OnInit {
       const uncategorized = (channelsByGroup.get(null) || []).sort(
         (a: any, b: any) => (a.channel_number ?? 9999) - (b.channel_number ?? 9999)
       );
-      if (uncategorized.length > 0 || !search) {
+      if (uncategorized.length > 0) {
         views.unshift({
           id: null,
           name: 'Uncategorized',
@@ -158,8 +178,7 @@ export class ChannelsPaneComponent implements OnInit {
       }
     }
 
-    // Only show groups that have channels
-    this.groupViews = views.filter(v => v.channels.length > 0);
+    this.groupViews = views;
   }
 
   toggleGroup(group: ChannelGroupView) {
@@ -198,8 +217,11 @@ export class ChannelsPaneComponent implements OnInit {
   }
 
   selectAllGroups() {
-    this.allGroups.forEach((g: any) => this.selectedGroupIds.add(g.id));
-    this.selectedGroupIds.add(-1);
+    this.groupsWithChannels.forEach((g: any) => this.selectedGroupIds.add(g.id));
+    // Add uncategorized only if there are uncategorized channels
+    if (this.allChannels.some((ch: any) => ch.channel_group_id == null)) {
+      this.selectedGroupIds.add(-1);
+    }
     this.buildGroupViews();
     this.cdr.markForCheck();
   }
@@ -211,7 +233,7 @@ export class ChannelsPaneComponent implements OnInit {
   }
 
   get groupFilterLabel(): string {
-    const total = this.allGroups.length + 1; // +1 for uncategorized
+    const total = this.groupsWithChannels.length + (this.allChannels.some((ch: any) => ch.channel_group_id == null) ? 1 : 0);
     if (this.selectedGroupIds.size === total) return `All groups`;
     if (this.selectedGroupIds.size === 0) return `No groups`;
     return `${this.selectedGroupIds.size} groups selected`;

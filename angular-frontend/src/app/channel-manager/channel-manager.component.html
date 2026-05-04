@@ -1,14 +1,18 @@
 <div class="channel-manager-wrapper">
   <div class="split-pane">
-    <div class="pane left">
+    <div class="pane left" [style.width.%]="leftPaneWidth">
       <app-channels-pane
         [selectedChannelId]="selectedChannelId"
         (channelSelected)="onChannelSelected($event)"
       ></app-channels-pane>
     </div>
-    <div class="divider"></div>
-    <div class="pane right">
+    <div class="divider"
+         (mousedown)="onDividerMouseDown($event)">
+      <div class="divider-handle"></div>
+    </div>
+    <div class="pane right" [style.width.%]="100 - leftPaneWidth">
       <app-streams-pane
+        [selectedChannelId]="selectedChannelId"
         [selectedStreamIds]="selectedStreamIds"
         (toggleStreamSelection)="onToggleStreamSelection($event)"
         (selectAllInGroup)="onSelectAllInGroup($event)"

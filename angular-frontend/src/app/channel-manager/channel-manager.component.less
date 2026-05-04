@@ -4,6 +4,7 @@
   overflow: hidden;
   display: flex;
   background: var(--tui-base-01);
+  user-select: none;
 }
 
 .split-pane {
@@ -17,19 +18,39 @@
   flex-direction: column;
   height: 100%;
   overflow: hidden;
-
-  &.left {
-    width: 350px;
-    min-width: 250px;
-  }
-
-  &.right {
-    flex: 1;
-  }
+  min-width: 200px;
 }
 
 .divider {
-  width: 1px;
+  width: 6px;
+  min-width: 6px;
   background: var(--tui-base-03);
   height: 100%;
+  cursor: col-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+  position: relative;
+
+  &:hover,
+  &:active {
+    background: var(--tui-primary);
+  }
+}
+
+.divider-handle {
+  width: 2px;
+  height: 32px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
+}
+
+// During resize, prevent iframe/pointer issues
+:host-context(.resizing) {
+  cursor: col-resize !important;
+
+  .pane {
+    pointer-events: none;
+  }
 }
