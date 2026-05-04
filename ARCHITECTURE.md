@@ -118,6 +118,7 @@ The stream checker is presented as a **Taiga UI SheetDialog** (from `@taiga-ui/a
 - **Two stop levels**: Collapsed (~6rem shows progress bar + label), expanded (~14rem shows stats + workers). Fully draggable to see the live activity log.
 - **Uses bulk-check backend**: All testing goes through `POST /api/streams/bulk-check/` which provides parallel testing by M3U provider, respects `stream_checker_parallel_providers` setting, and populates the shared `BulkCheckStatus` (visible in both Angular and React dashboards).
 - **Polls** `GET /api/streams/bulk-check/status/` every 1s while running.
+- **Cancel button**: Red stop button in the sheet header, visible while a check is running. Calls `POST /api/streams/bulk-check/cancel/` which sets a cooperative `AtomicBool` flag on the backend. Workers check this flag before each stream — the current in-progress ffprobe/ffmpeg call completes, but no new streams start. Shows a "Cancelling..." badge until workers finish.
 - **Auto-sort**: After check completes, auto-sorts channels via `POST /api/channels/bulk-sort-streams/`.
 - **Dismissible**: User can swipe/drag down to dismiss. A **pulsing retrieval badge** appears on the source row (group or channel) to re-open the sheet.
 - **Persistence**: Badge and sheet state persist until another check is started or the component is destroyed (page refresh/reboot).
@@ -166,6 +167,7 @@ Taiga UI v5 significantly overhauled its dependency injection and provider syste
 | POST | `/api/streams/:id/check/` | `test_stream` | Test a single stream (ffprobe + ffmpeg). Returns updated `stream_stats`. |
 | POST | `/api/streams/bulk-check/` | `start_bulk_check` | Start checking multiple streams. Body: `{ stream_ids: [] }` |
 | GET | `/api/streams/bulk-check/status/` | `get_bulk_check_status` | Poll bulk check progress (is_running, completed, total, workers) |
+| POST | `/api/streams/bulk-check/cancel/` | `cancel_bulk_check` | Cooperative cancel — sets `AtomicBool` flag, workers stop before next stream |
 | POST | `/api/channels/bulk-sort-streams/` | `bulk_sort_streams` | Sort streams by scoring rules. Body: `{ channel_ids: [] }` |
 | GET | `/api/stream-checker/sorting-rules/` | `list_sorting_rules` | List all sorting rules |
 | POST | `/api/stream-checker/sorting-rules/` | `create_sorting_rule` | Create a sorting rule |
