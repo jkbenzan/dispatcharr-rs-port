@@ -96,6 +96,14 @@ export class ApiService {
     return this.http.get('/api/streams/bulk-check/status/');
   }
 
+  /**
+   * Cancel a running bulk check.
+   * POST /api/streams/bulk-check/cancel/
+   */
+  cancelBulkCheck(): Observable<any> {
+    return this.http.post('/api/streams/bulk-check/cancel/', {});
+  }
+
   // =================== STREAM SORTING ===================
 
   /**

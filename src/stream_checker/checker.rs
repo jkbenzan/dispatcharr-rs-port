@@ -625,6 +625,9 @@ pub async fn start_bulk_check(
         account_names.insert(acc.id, acc.name);
     }
 
+    // Clear the cancellation flag before starting a new check
+    state.bulk_check_cancelled.store(false, std::sync::atomic::Ordering::SeqCst);
+
     *status = BulkCheckStatus {
         is_running: true,
         total: total_streams,
@@ -667,6 +670,12 @@ pub async fn start_bulk_check(
                     }
 
                     for (idx, stream_obj) in streams.into_iter().enumerate() {
+                        // Check cancellation flag before each stream test
+                        if state_c.bulk_check_cancelled.load(std::sync::atomic::Ordering::SeqCst) {
+                            info!("🛑 Bulk check cancelled — stopping worker for provider {}", acc_name);
+                            break;
+                        }
+
                         {
                             let mut st = state_c.bulk_check_status.write().await;
                             if let Some(w) = st
@@ -740,6 +749,30 @@ pub async fn start_bulk_check(
 pub async fn get_bulk_check_status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let status = state.bulk_check_status.read().await;
     (StatusCode::OK, Json(status.clone()))
+}
+
+/// Cancel a running bulk check.
+/// Sets the cooperative cancellation flag so workers stop before the next stream.
+/// The current in-progress ffprobe/ffmpeg call will complete, but no new streams
+/// will be started.
+pub async fn cancel_bulk_check(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let status = state.bulk_check_status.read().await;
+    if !status.is_running {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"success": false, "message": "No bulk check is currently running"})),
+        );
+    }
+    drop(status);
+
+    // Set the cancellation flag — workers will see this before testing the next stream
+    state.bulk_check_cancelled.store(true, std::sync::atomic::Ordering::SeqCst);
+    info!("🛑 Bulk check cancellation requested");
+
+    (
+        StatusCode::OK,
+        Json(json!({"success": true, "message": "Bulk check cancellation requested"})),
+    )
 }
 
 // ================= SORTING RULES =================

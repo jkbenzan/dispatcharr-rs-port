@@ -14,8 +14,24 @@
       <span class="material-icons header-icon">checklist</span>
       <span class="header-label">{{ label }}</span>
     </div>
-    <div class="header-status">
-      <span class="status-badge" [class.running]="status.is_running" [class.done]="!status.is_running && status.total > 0">
+    <div class="header-actions">
+      <!-- Cancel button: only visible while a check is running -->
+      <button class="cancel-btn"
+              *ngIf="status.is_running && !cancelling"
+              (click)="cancelCheck()"
+              title="Cancel test">
+        <span class="material-icons">stop_circle</span>
+        Cancel
+      </button>
+      <!-- Cancelling indicator -->
+      <span class="status-badge cancelling" *ngIf="cancelling">
+        Cancelling...
+      </span>
+      <!-- Status badge -->
+      <span class="status-badge"
+            *ngIf="!cancelling"
+            [class.running]="status.is_running"
+            [class.done]="!status.is_running && status.total > 0">
         {{ status.is_running ? 'Running' : (status.total > 0 ? 'Complete' : 'Idle') }}
       </span>
     </div>

@@ -123,6 +123,9 @@ pub struct AppState {
     pub broadcasters: Arc<dashmap::DashMap<String, Arc<crate::proxy::Broadcaster>>>,
     pub bulk_check_status:
         Arc<tokio::sync::RwLock<crate::stream_checker::checker::BulkCheckStatus>>,
+    /// Cooperative cancellation flag for the bulk check worker loop.
+    /// Set to true by the cancel endpoint; workers check this before each stream.
+    pub bulk_check_cancelled: Arc<std::sync::atomic::AtomicBool>,
     pub background_telemetry: crate::background::Telemetry,
     pub last_activity_at: std::sync::Arc<std::sync::atomic::AtomicU64>,
 }
@@ -248,6 +251,7 @@ async fn main() {
         active_streams: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         broadcasters: Arc::new(dashmap::DashMap::new()),
         bulk_check_status: Arc::new(tokio::sync::RwLock::new(Default::default())),
+        bulk_check_cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         background_telemetry: Arc::new(tokio::sync::RwLock::new(crate::background::BackgroundTelemetry::default())),
         last_activity_at: Arc::new(std::sync::atomic::AtomicU64::new(
             std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs()
@@ -520,6 +524,10 @@ async fn main() {
         .route(
             "/api/streams/bulk-check/status/",
             get(stream_checker::checker::get_bulk_check_status),
+        )
+        .route(
+            "/api/streams/bulk-check/cancel/",
+            post(stream_checker::checker::cancel_bulk_check),
         )
         // --- SORTING RULES ---
         .route(

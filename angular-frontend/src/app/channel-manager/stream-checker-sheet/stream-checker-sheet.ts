@@ -118,6 +118,9 @@ export class StreamCheckerSheetComponent implements OnInit, OnDestroy {
   /** Error message if bulk check fails to start */
   errorMessage: string | null = null;
 
+  /** Whether a cancel request has been sent (show "Cancelling..." indicator) */
+  cancelling = false;
+
   ngOnInit() {
     // Start polling immediately to pick up any existing check
     this.startPolling();
@@ -214,6 +217,9 @@ export class StreamCheckerSheetComponent implements OnInit, OnDestroy {
     // Stop frequent polling — check is done
     this.stopPolling();
 
+    // Clear cancelling state if it was set
+    this.cancelling = false;
+
     // Auto-sort the channels if we started the check and have channel IDs
     if (this.autoSort && this.channelIds.length > 0 && !this.sortTriggered) {
       this.sortTriggered = true;
@@ -230,6 +236,30 @@ export class StreamCheckerSheetComponent implements OnInit, OnDestroy {
     } else {
       this.checkComplete.emit();
     }
+  }
+
+  // =================== CANCELLATION ===================
+
+  /**
+   * Request cancellation of the running bulk check.
+   * Sets a cooperative flag on the backend; the current stream test
+   * will complete but no new streams will be started.
+   */
+  cancelCheck() {
+    this.cancelling = true;
+    this.cdr.markForCheck();
+
+    this.api.cancelBulkCheck().subscribe({
+      next: () => {
+        console.log('Bulk check cancel requested');
+        // The poll loop will detect is_running → false and trigger onCheckComplete
+      },
+      error: (err) => {
+        console.error('Cancel request failed:', err);
+        this.cancelling = false;
+        this.cdr.markForCheck();
+      },
+    });
   }
 
   // =================== TEMPLATE HELPERS ===================
