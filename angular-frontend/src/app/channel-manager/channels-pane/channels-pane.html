@@ -1,126 +1,223 @@
-<div class="channels-pane">
-  <!-- Header -->
+<!-- Channels Pane: Nested Group → Channel → Stream tree -->
+<div class="pane-container" (click)="onDocumentClick($event)">
+
+  <!-- ========== HEADER ========== -->
   <div class="pane-header">
-    <div class="pane-header-title">
-      <h2>CHANNELS</h2>
-      <span class="channel-count-badge">{{ totalChannels }}</span>
-    </div>
-    <div class="pane-header-actions">
-      <button class="create-channel-btn" (click)="showCreateDialog(createChannelTemplate)">
-        <span class="material-icons" style="font-size: 16px;">add</span>
-      </button>
-    </div>
-  </div>
-
-  <!-- Filters -->
-  <div class="pane-filters">
-    <!-- Search row -->
-    <div class="search-row">
-      <input
-        type="text"
-        class="search-input"
-        placeholder="Search channels..."
-        [(ngModel)]="searchQuery"
-        (ngModelChange)="onSearchChange($event)"
-      />
-      <button *ngIf="searchQuery" class="search-clear-btn" (click)="clearSearch()">
-        <span class="material-icons" style="font-size: 16px;">close</span>
-      </button>
-    </div>
-
-    <!-- Group filter -->
-    <div class="group-filter-dropdown">
-      <button class="group-filter-button" (click)="toggleGroupFilter()">
-        <span>{{ groupFilterLabel }}</span>
-        <span class="material-icons dropdown-arrow" style="font-size: 16px;">arrow_drop_down</span>
-      </button>
-      <div class="group-filter-menu" *ngIf="groupFilterOpen">
-        <div class="group-filter-actions">
-          <button class="group-filter-action" (click)="selectAllGroups()">All</button>
-          <button class="group-filter-action" (click)="deselectAllGroups()">None</button>
-        </div>
-        <div class="group-filter-options">
-          <!-- Uncategorized -->
-          <label class="group-filter-option" (click)="$event.stopPropagation()">
-            <input type="checkbox" [checked]="isGroupSelected(-1)" (change)="toggleGroupSelection(-1)" />
-            <span class="group-option-name">Uncategorized</span>
-          </label>
-          <!-- Named groups -->
-          <label class="group-filter-option" *ngFor="let g of groupsWithChannels" (click)="$event.stopPropagation()">
-            <input type="checkbox" [checked]="isGroupSelected(g.id)" (change)="toggleGroupSelection(g.id)" />
-            <span class="group-option-name">{{ g.name }}</span>
-          </label>
-        </div>
+    <div class="header-row">
+      <h3>CHANNELS <span class="badge">{{ totalChannelCount }}</span></h3>
+      <div class="header-actions">
+        <!-- Expand / Collapse All -->
+        <button class="icon-btn" (click)="expandAll()" title="Expand all">
+          <span class="material-icons">unfold_more</span>
+        </button>
+        <button class="icon-btn" (click)="collapseAll()" title="Collapse all">
+          <span class="material-icons">unfold_less</span>
+        </button>
       </div>
     </div>
   </div>
 
-  <!-- Content -->
-  <tui-loader [overlay]="true" [loading]="loading">
-    <div class="pane-content">
-      <div *ngFor="let group of groupViews" class="channel-group">
-        <!-- Group Header -->
-        <div class="group-header" (click)="toggleGroup(group)">
-          <span class="material-icons expand-icon" style="font-size: 18px;">
-            {{ group.expanded ? 'expand_more' : 'chevron_right' }}
-          </span>
-          <span class="group-name">{{ group.name }}</span>
-          <div class="group-meta">
-            <span class="group-count-badge">{{ group.channels.length }}</span>
-            <span class="group-range" *ngIf="group.channelRange.min != null">
-              #{{ group.channelRange.min }}<span *ngIf="group.channelRange.max !== group.channelRange.min">–{{ group.channelRange.max }}</span>
+  <!-- ========== FILTERS ========== -->
+  <div class="filters-bar">
+    <!-- Search -->
+    <input
+      type="text"
+      class="search-input"
+      placeholder="Search channels..."
+      [(ngModel)]="searchQuery"
+    />
+
+    <!-- Group filter (multi-select dropdown) -->
+    <div class="group-filter-wrapper">
+      <button class="filter-select"
+              (click)="showGroupFilterDropdown = !showGroupFilterDropdown; $event.stopPropagation()">
+        {{ groupFilterLabel }}
+        <span class="material-icons" style="font-size: 16px;">arrow_drop_down</span>
+      </button>
+
+      <div class="group-filter-dropdown" *ngIf="showGroupFilterDropdown" (click)="$event.stopPropagation()">
+        <button class="dropdown-clear" (click)="clearGroupFilters()">Clear all</button>
+        <label *ngFor="let g of allGroupsWithChannels" class="dropdown-item">
+          <input type="checkbox"
+                 [checked]="isGroupFilterSelected(g.id)"
+                 (change)="toggleGroupFilter(g.id)" />
+          {{ g.name }}
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== TREE ========== -->
+  <div class="scroll-area">
+    <ng-container *ngFor="let group of filteredGroupViews; trackBy: trackByGroupId">
+
+      <!-- GROUP ROW -->
+      <div class="group-row" (click)="toggleGroupExpand(group)">
+        <span class="material-icons expand-arrow">
+          {{ group.expanded ? 'expand_more' : 'chevron_right' }}
+        </span>
+        <span class="group-name">{{ group.name }}</span>
+        <span class="group-channel-count">{{ group.channels.length }}</span>
+      </div>
+
+      <!-- CHANNELS IN GROUP -->
+      <ng-container *ngIf="group.expanded">
+        <ng-container *ngFor="let channel of group.channels; trackBy: trackByChannelId">
+
+          <!-- CHANNEL ROW -->
+          <div class="channel-row"
+               [class.selected]="isChannelSelected(channel.id)"
+               [class.testing]="testingChannelIds.has(channel.id)">
+
+            <!-- Checkbox -->
+            <input type="checkbox"
+                   class="row-checkbox"
+                   [checked]="isChannelSelected(channel.id)"
+                   (click)="toggleChannelSelect(channel.id, $event); $event.stopPropagation()" />
+
+            <!-- Expand arrow (for assigned streams) -->
+            <span class="material-icons expand-arrow channel-expand"
+                  (click)="toggleChannelExpand(channel, $event)">
+              {{ channel.expanded ? 'expand_more' : 'chevron_right' }}
             </span>
+
+            <!-- Channel logo -->
+            <img *ngIf="channel.logo_url; else noChannelLogo"
+                 [src]="channel.logo_url"
+                 class="channel-logo"
+                 loading="lazy"
+                 referrerpolicy="no-referrer" />
+            <ng-template #noChannelLogo>
+              <div class="channel-logo placeholder-logo">
+                <span class="material-icons" style="font-size: 18px; opacity: 0.4;">tv</span>
+              </div>
+            </ng-template>
+
+            <!-- Channel number -->
+            <span class="channel-number" *ngIf="channel.channel_number">
+              #{{ channel.channel_number }}
+            </span>
+
+            <!-- Channel name -->
+            <span class="channel-name">{{ channel.name }}</span>
+
+            <!-- Stream count badge -->
+            <span class="stream-count-badge" *ngIf="channel.streams.length">
+              {{ channel.streams.length }}
+            </span>
+
+            <!-- Testing spinner for entire channel -->
+            <span class="material-icons spin" *ngIf="testingChannelIds.has(channel.id)"
+                  style="font-size: 16px; color: #646cff;">sync</span>
+
+            <!-- Kebab menu trigger -->
+            <button class="kebab-btn" (click)="toggleKebab(channel.id, $event)" title="Actions">
+              <span class="material-icons">more_vert</span>
+            </button>
+
+            <!-- Kebab dropdown -->
+            <div class="kebab-menu" *ngIf="openKebabChannelId === channel.id" (click)="$event.stopPropagation()">
+              <button class="kebab-item" (click)="playChannel(channel, $event)">
+                <span class="material-icons">visibility</span>
+                Play Channel
+              </button>
+              <button class="kebab-item" (click)="testChannel(channel, $event)"
+                      [disabled]="testingChannelIds.has(channel.id) || channel.streams.length === 0">
+                <span class="material-icons">speed</span>
+                Test Channel
+              </button>
+            </div>
           </div>
-        </div>
 
-        <!-- Channel List (expanded) -->
-        <div class="channel-list" *ngIf="group.expanded">
-          <app-channel-list-item
-            *ngFor="let channel of group.channels"
-            [channel]="channel"
-            [isSelected]="channel.id === selectedChannelId"
-            (clicked)="onChannelClick(channel)"
-            (itemDragOver)="handleDragOver($event)"
-            (itemDrop)="handleDropNative($event, channel)"
-          ></app-channel-list-item>
-        </div>
-      </div>
+          <!-- STREAM ROWS (when channel expanded) -->
+          <ng-container *ngIf="channel.expanded">
+            <div *ngFor="let stream of channel.streams; let i = index; trackBy: trackByStreamId"
+                 class="stream-row"
+                 [class.dragging]="draggedStreamId === stream.id"
+                 [class.drag-target]="isDragTarget(channel.id, i)"
+                 [class.testing]="testingStreamIds.has(stream.id)"
+                 draggable="true"
+                 (dragstart)="onStreamDragStart($event, channel, i)"
+                 (dragover)="onStreamDragOver($event, channel, i)"
+                 (drop)="onStreamDrop($event, channel, i)"
+                 (dragend)="onStreamDragEnd()">
 
-      <div *ngIf="!loading && groupViews.length === 0" class="empty-state">
-        No channels found.
-      </div>
+              <!-- Checkbox -->
+              <input type="checkbox"
+                     class="row-checkbox"
+                     [checked]="isStreamSelected(stream.id)"
+                     (click)="toggleStreamSelect(stream.id, $event)" />
+
+              <!-- Stream number (1-based) -->
+              <span class="stream-number">{{ i + 1 }}</span>
+
+              <!-- Drag handle -->
+              <span class="material-icons drag-handle">drag_indicator</span>
+
+              <!-- Stream logo -->
+              <img *ngIf="stream.logo_url; else noStreamLogo"
+                   [src]="stream.logo_url"
+                   class="stream-logo"
+                   loading="lazy"
+                   referrerpolicy="no-referrer" />
+              <ng-template #noStreamLogo>
+                <div class="stream-logo placeholder-logo">
+                  <span class="material-icons" style="font-size: 14px; opacity: 0.3;">play_circle</span>
+                </div>
+              </ng-template>
+
+              <!-- 3-row info subcell -->
+              <div class="stream-info-cell">
+                <span class="stream-name">{{ stream.name }}</span>
+                <span class="stream-stats">{{ formatStreamStats(stream.stream_stats) }}</span>
+                <span class="stream-m3u">{{ stream.m3u_account_name }}</span>
+              </div>
+
+              <!-- Testing spinner -->
+              <span class="material-icons spin" *ngIf="testingStreamIds.has(stream.id)"
+                    style="font-size: 14px; color: #646cff;">sync</span>
+
+              <!-- Hover action buttons -->
+              <div class="stream-actions">
+                <button class="stream-action-btn" (click)="previewStream(stream, $event)" title="Preview stream"
+                        *ngIf="stream.url">
+                  <span class="material-icons">visibility</span>
+                </button>
+                <button class="stream-action-btn" (click)="testStream(stream, channel, $event)" title="Test stream"
+                        [disabled]="testingStreamIds.has(stream.id)">
+                  <span class="material-icons">speed</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Empty state for channels with no streams -->
+            <div class="no-streams" *ngIf="channel.streams.length === 0">
+              No streams assigned
+            </div>
+          </ng-container>
+
+        </ng-container>
+      </ng-container>
+
+    </ng-container>
+
+    <!-- Global empty state -->
+    <div class="empty-state" *ngIf="!loading && filteredGroupViews.length === 0">
+      No channels found.
     </div>
-  </tui-loader>
+
+    <!-- Loading state -->
+    <div class="empty-state" *ngIf="loading">
+      <span class="material-icons spin" style="font-size: 24px;">sync</span>
+      Loading channels...
+    </div>
+  </div>
 </div>
 
-<!-- Create Channel Dialog -->
-<ng-template #createChannelTemplate let-observer>
-  <form [formGroup]="createChannelForm" (ngSubmit)="submitCreateChannel(observer)">
-    <h2 style="margin-bottom: 16px; font-size: 1.1rem;">Create Channel</h2>
-    
-    <div style="display: flex; flex-direction: column; gap: 16px;">
-      <input 
-        type="text" 
-        class="search-input" 
-        formControlName="name" 
-        placeholder="Channel Name" 
-      />
-
-      <input 
-        type="number" 
-        class="search-input" 
-        formControlName="channel_number" 
-        placeholder="Channel Number" 
-      />
-    </div>
-
-    <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px;">
-      <button tuiButton type="button" appearance="secondary" (click)="observer.complete()">
-        Cancel
-      </button>
-      <button tuiButton type="submit" [disabled]="createChannelForm.invalid">
-        Create
-      </button>
-    </div>
-  </form>
-</ng-template>
+<!-- In-app video player (modal overlay) -->
+<app-video-player
+  [streamUrl]="playerUrl"
+  [title]="playerTitle"
+  [contentType]="playerContentType"
+  (closed)="closePlayer()"
+></app-video-player>

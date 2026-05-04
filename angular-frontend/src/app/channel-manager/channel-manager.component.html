@@ -1,22 +1,19 @@
-<div class="channel-manager-wrapper">
-  <div class="split-pane">
-    <div class="pane left" [style.width.%]="leftPaneWidth">
-      <app-channels-pane
-        [selectedChannelId]="selectedChannelId"
-        (channelSelected)="onChannelSelected($event)"
-      ></app-channels-pane>
-    </div>
-    <div class="divider"
-         (mousedown)="onDividerMouseDown($event)">
-      <div class="divider-handle"></div>
-    </div>
-    <div class="pane right" [style.width.%]="100 - leftPaneWidth">
-      <app-streams-pane
-        [selectedStreamIds]="selectedStreamIds"
-        (toggleStreamSelection)="onToggleStreamSelection($event)"
-        (selectAllInGroup)="onSelectAllInGroup($event)"
-        (assignClicked)="onAssign()"
-      ></app-streams-pane>
-    </div>
+<!-- Channel Manager: Resizable two-pane layout -->
+<div class="split-pane">
+  <!-- LEFT: Channels pane (self-contained) -->
+  <div class="pane left" [style.width.%]="leftPaneWidth">
+    <app-channels-pane></app-channels-pane>
+  </div>
+
+  <!-- Draggable divider -->
+  <div class="divider" (mousedown)="onDividerMouseDown($event)">
+    <div class="divider-handle"></div>
+  </div>
+
+  <!-- RIGHT: Streams pane (independent catalog) -->
+  <div class="pane right" [style.width.%]="100 - leftPaneWidth">
+    <app-streams-pane
+      [selectedStreamIds]="[]"
+    ></app-streams-pane>
   </div>
 </div>

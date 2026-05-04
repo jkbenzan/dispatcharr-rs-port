@@ -8,7 +8,8 @@ import { Observable } from 'rxjs';
 export class ApiService {
   private http = inject(HttpClient);
 
-  // Channels
+  // =================== CHANNELS ===================
+
   getChannelGroups(): Observable<any> {
     return this.http.get('/api/channels/groups/');
   }
@@ -40,7 +41,8 @@ export class ApiService {
     return this.http.post('/api/channels/channels/', channelData);
   }
 
-  // Streams
+  // =================== STREAMS ===================
+
   getPlaylists(): Observable<any> {
     return this.http.get('/api/m3u/accounts/');
   }
@@ -64,5 +66,53 @@ export class ApiService {
 
   getStreamFilterOptions(): Observable<any> {
     return this.http.get('/api/channels/streams/filter-options/');
+  }
+
+  // =================== STREAM CHECKER ===================
+
+  /**
+   * Test a single stream using ffprobe + ffmpeg.
+   * POST /api/streams/:id/check/
+   * Returns { success, stream } with updated stream_stats.
+   */
+  testStream(streamId: number): Observable<any> {
+    return this.http.post(`/api/streams/${streamId}/check/`, {});
+  }
+
+  /**
+   * Start a bulk check of multiple streams.
+   * POST /api/streams/bulk-check/
+   * Body: { stream_ids: number[] }
+   */
+  bulkCheckStreams(streamIds: number[]): Observable<any> {
+    return this.http.post('/api/streams/bulk-check/', { stream_ids: streamIds });
+  }
+
+  /**
+   * Poll the status of a running bulk check.
+   * GET /api/streams/bulk-check/status/
+   */
+  getBulkCheckStatus(): Observable<any> {
+    return this.http.get('/api/streams/bulk-check/status/');
+  }
+
+  // =================== STREAM SORTING ===================
+
+  /**
+   * Trigger automated sorting on one or more channels based on sorting rules.
+   * POST /api/channels/bulk-sort-streams/
+   * Body: { channel_ids: number[] }
+   */
+  bulkSortStreams(channelIds: number[]): Observable<any> {
+    return this.http.post('/api/channels/bulk-sort-streams/', { channel_ids: channelIds });
+  }
+
+  /**
+   * Reorder streams within a channel by sending the full ordered stream ID list.
+   * PATCH /api/channels/channels/:id/
+   * Body: { streams: number[] }
+   */
+  reorderChannelStreams(channelId: number, streamIds: number[]): Observable<any> {
+    return this.http.patch(`/api/channels/channels/${channelId}/`, { streams: streamIds });
   }
 }

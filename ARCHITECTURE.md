@@ -57,24 +57,51 @@ dispatcharr-rs-port/
 ```
 angular-frontend/src/app/
 ├── channel-manager/
-│   ├── channel-manager.component.*    # Orchestrator (resizable two-pane layout)
-│   ├── channels-pane/                 # Left pane: grouped channel list
-│   │   ├── channels-pane.ts           # Fetches groups + full channels (with streams), builds grouped views
-│   │   ├── channels-pane.html         # Search, filtered group dropdown, expandable groups
-│   │   └── channels-pane.less         # ECM-matching styles
-│   ├── streams-pane/                  # Right pane: assigned + available streams
-│   │   ├── streams-pane.ts            # Shows assigned streams for selected channel, fetches available streams
-│   │   └── streams-pane.html          # Assigned streams section + grouped available stream list with checkboxes
-│   └── channel-list-item/             # Reusable channel row component
+│   ├── channel-manager.component.*    # Orchestrator (resizable two-pane layout only)
+│   ├── channels-pane/                 # Left pane: nested Group → Channel → Stream tree
+│   │   ├── channels-pane.ts           # Self-contained: data fetching, selection, actions, drag reorder
+│   │   ├── channels-pane.html         # Full nested tree template with checkboxes, kebab menus, drag handles
+│   │   └── channels-pane.less         # Styles for tree, kebab, drag indicators, hover actions
+│   ├── streams-pane/                  # Right pane: independent available stream catalog
+│   │   ├── streams-pane.ts            # Fetches all streams, handles selection & drag
+│   │   └── streams-pane.html          # Grouped stream list with checkboxes
+│   ├── video-player/                  # In-app floating video player
+│   │   └── video-player.component.ts  # Angular-native mpegts.js player (live) + HTML5 (VOD)
+│   └── channel-list-item/             # Legacy: absorbed into channels-pane template
 ├── api.service.ts                     # HTTP client for all backend API calls
 └── websocket.service.ts               # WebSocket client for real-time updates
 ```
 
 ### Layout & Interaction
 
-- **Resizable panes**: The two-pane layout uses a draggable divider. Default split is **40% channels / 60% streams**. The divider can be dragged between 15% and 75%.
-- **Assigned streams**: Each channel in the left pane has an expand arrow. Clicking it reveals the streams currently assigned to that channel as sub-items below the channel row. The streams pane (right) is fully independent and always shows the full available stream catalog.
-- **Group filter**: The group dropdown in the channels pane only shows groups that have at least one channel assigned. Empty groups are excluded to reduce noise.
+- **Resizable panes**: Draggable divider. Default **40% channels / 60% streams**. Clamped 15–75%.
+- **Nested tree**: Left pane renders **Group → Channel → Stream**. Only groups with channels are shown.
+- **Expand/collapse**: Per-group and per-channel expand arrows. Global expand all / collapse all buttons in header.
+- **Search**: Type-ahead search filters channels by name or number.
+- **Group filter**: Multi-select dropdown showing only groups with channels. Acts as a datagrid filter.
+
+### Channel Row
+- Checkbox + expand arrow + logo (resized to fit) + channel number + channel name + stream count badge
+- **Kebab menu** (⋮) with:
+  - **Play Channel**: Opens in-app video player at `/stream/{channel_uuid}/`
+  - **Test Channel**: Bulk-checks all streams via `POST /api/streams/bulk-check/`, then sorts via `POST /api/channels/bulk-sort-streams/`
+
+### Stream Row (sub-items under channel)
+- Checkbox + enumerated number (1, 2, 3...) + drag handle (≡) + logo + 3-row info cell + hover actions
+- **3-row info cell**: Stream name / Stats summary (resolution · codec · bitrate · status) / M3U account name
+- **Drag reorder**: Drag handle allows reordering streams within a channel. New order is persisted via `PATCH /api/channels/channels/:id/`
+- **Hover actions**: Preview stream (👁 opens in-app player) + Test stream (🔍 via `POST /api/streams/:id/check/`)
+
+### Selection System
+- Checkboxes on all channels and streams
+- Shift-click range selection on channels
+- Group filter acts as a datagrid filter (not selection)
+
+### In-App Video Player
+- Angular-native component using `mpegts.js` for live MPEG-TS stream playback
+- Native HTML5 `<video>` for VOD content
+- Displays as a centered modal overlay with loading spinner and error states
+- Used for both "Play Channel" and "Preview Stream" actions
 
 ### Taiga UI v5 Integration Notes
 
@@ -111,7 +138,18 @@ Taiga UI v5 significantly overhauled its dependency injection and provider syste
 | GET | `/api/m3u/accounts/` | `get_m3u_accounts` | M3U provider accounts |
 | GET | `/api/channels/logos/` | `get_logos` | Channel logos |
 
-> ⚠️ **Common pitfall:** The original Django API used `/api/channels/` for channels. The Rust port uses `/api/channels/channels/` (double "channels"). Streams are at `/api/channels/streams/` not `/api/streams/`.
+### Stream Checker & Sorting Endpoints
+
+| Method | Path | Handler | Notes |
+|--------|------|---------|-------|
+| POST | `/api/streams/:id/check/` | `test_stream` | Test a single stream (ffprobe + ffmpeg). Returns updated `stream_stats`. |
+| POST | `/api/streams/bulk-check/` | `start_bulk_check` | Start checking multiple streams. Body: `{ stream_ids: [] }` |
+| GET | `/api/streams/bulk-check/status/` | `get_bulk_check_status` | Poll bulk check progress (is_running, completed, total, workers) |
+| POST | `/api/channels/bulk-sort-streams/` | `bulk_sort_streams` | Sort streams by scoring rules. Body: `{ channel_ids: [] }` |
+| GET | `/api/stream-checker/sorting-rules/` | `list_sorting_rules` | List all sorting rules |
+| POST | `/api/stream-checker/sorting-rules/` | `create_sorting_rule` | Create a sorting rule |
+
+> ⚠️ **Common pitfall:** The original Django API used `/api/channels/` for channels. The Rust port uses `/api/channels/channels/` (double "channels"). Streams are at `/api/channels/streams/` not `/api/streams/`. Stream _checking_ routes are at `/api/streams/` (single).
 
 ---
 
