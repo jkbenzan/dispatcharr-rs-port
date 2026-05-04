@@ -73,7 +73,7 @@ const PageContent = () => {
           <Box h="100%">
             {activeTab === 'manager' && (
               <iframe
-                src="/channel-manager/"
+                src="/channel-manager/index.html"
                 style={{ width: '100%', height: '100%', border: 'none' }}
                 title="Angular Channel Manager"
               />

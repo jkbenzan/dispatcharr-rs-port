@@ -6,7 +6,7 @@
   
   <input type="checkbox" [checked]="isSelected" style="pointer-events: none;" />
 
-  <img *ngIf="channel.logo_url; else noLogo" [src]="channel.logo_url" class="channel-logo" loading="lazy">
+  <img *ngIf="channel.logo_url; else noLogo" [src]="channel.logo_url" class="channel-logo" loading="lazy" referrerpolicy="no-referrer">
   <ng-template #noLogo>
     <div class="channel-logo" style="display: flex; align-items: center; justify-content: center;">
       <span class="material-icons" style="font-size: 20px; color: var(--tui-text-03);">tv</span>
