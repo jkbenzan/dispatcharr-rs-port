@@ -493,6 +493,18 @@ async fn get_channel_json(
     let mut ch_json = serde_json::to_value(&channel).unwrap();
     let id = channel.id;
 
+    // Resolve logo_id → logo_url from the logos table.
+    // The channel entity stores a foreign key (logo_id) to dispatcharr_channels_logo,
+    // but the frontend expects a direct logo_url string for display.
+    if let Some(logo_id) = channel.logo_id {
+        if let Ok(Some(logo)) = crate::entities::logo::Entity::find_by_id(logo_id)
+            .one(db)
+            .await
+        {
+            ch_json["logo_url"] = serde_json::json!(logo.url);
+        }
+    }
+
     // Fetch groups
     let groups = db
         .query_all(sea_orm::Statement::from_sql_and_values(
@@ -623,7 +635,12 @@ pub async fn get_channels(
     Query(params): Query<HashMap<String, String>>,
 ) -> Json<Value> {
     let page: u64 = params.get("page").and_then(|p| p.parse().ok()).unwrap_or(1);
-    let page_size: u64 = 50;
+    // Allow client to specify page_size, default to 50, cap at 5000 to prevent abuse.
+    // The Angular channel manager requests page_size=5000 to load all channels at once.
+    let page_size: u64 = params.get("page_size")
+        .and_then(|p| p.parse::<u64>().ok())
+        .unwrap_or(50)
+        .min(5000);
 
     println!("get_channels PARAMS: {:?}", params);
     let offset = (page.saturating_sub(1)) * page_size;

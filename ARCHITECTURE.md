@@ -1,7 +1,7 @@
 # Dispatcharr-RS Architecture
 
 > **Living Document** — Update this file whenever a significant design decision is made.
-> Last updated: 2026-05-03
+> Last updated: 2026-05-04
 
 ---
 
@@ -82,9 +82,11 @@ angular-frontend/src/app/
 
 ### Channel Row
 - Checkbox + expand arrow + logo (resized to fit) + channel number + channel name + stream count badge
+- **Channel logo resolution**: The channel entity stores `logo_id` (FK to `dispatcharr_channels_logo`). The `get_channel_json()` function resolves `logo_id` → `logo_url` by looking up the logo table, injecting the URL directly into the channel JSON for frontend display.
 - **Kebab menu** (⋮) with:
   - **Play Channel**: Opens in-app video player at `/stream/{channel_uuid}/`
   - **Test Channel**: Bulk-checks all streams via `POST /api/streams/bulk-check/`, then sorts via `POST /api/channels/bulk-sort-streams/`
+  - **Test All Streams**: Tests each stream individually (sequential) via `POST /api/streams/:id/check/`. Shows per-stream progress spinners and updates stats in-place as each completes. Auto-expands the channel to show progress.
 
 ### Stream Row (sub-items under channel)
 - Checkbox + enumerated number (1, 2, 3...) + drag handle (≡) + logo + 3-row info cell + hover actions
@@ -119,7 +121,7 @@ Taiga UI v5 significantly overhauled its dependency injection and provider syste
 
 | Method | Path | Handler | Notes |
 |--------|------|---------|-------|
-| GET | `/api/channels/channels/` | `get_channels` | Paginated, includes `streams` array. Supports `?search=`, `?channel_group=`, `?ordering=` |
+| GET | `/api/channels/channels/` | `get_channels` | Paginated, includes `streams` array. Supports `?search=`, `?channel_group=`, `?ordering=`, `?page_size=` (default 50, max 5000) |
 | GET | `/api/channels/channels/summary/` | `get_channels_summary` | Lightweight: id, name, logo_id, channel_number only |
 | PATCH/PUT | `/api/channels/channels/:id/` | `update_channel` | Update channel fields including `streams` array |
 | GET | `/api/channels/groups/` | `get_channel_groups` | Returns flat array of `{id, name}` |

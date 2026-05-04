@@ -6,6 +6,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../api.service';
 import { VideoPlayerComponent } from '../video-player/video-player.component';
+import { firstValueFrom } from 'rxjs';
 
 // =================== INTERFACES ===================
 
@@ -488,6 +489,54 @@ export class ChannelsPaneComponent implements OnInit {
         this.cdr.markForCheck();
       }
     });
+  }
+
+  /**
+   * Test all streams in a channel individually (sequential, one-by-one).
+   * Unlike testChannel() which uses the bulk-check endpoint, this tests each
+   * stream separately via POST /api/streams/:id/check/ and updates stats
+   * in-place as each completes — giving the user per-stream progress feedback.
+   */
+  async testAllStreams(channel: ChannelView, event: Event) {
+    event.stopPropagation();
+    this.closeKebab();
+
+    // Guard: no streams or already testing
+    if (channel.streams.length === 0) return;
+    if (this.testingChannelIds.has(channel.id)) return;
+
+    // Mark the entire channel as in-progress
+    this.testingChannelIds.add(channel.id);
+
+    // Mark all streams as testing so spinners appear on each row
+    channel.streams.forEach(s => this.testingStreamIds.add(s.id));
+
+    // Auto-expand the channel so the user can see per-stream progress
+    channel.expanded = true;
+    this.cdr.markForCheck();
+
+    // Test each stream sequentially — we use firstValueFrom to await each HTTP call.
+    // Sequential testing avoids overwhelming the backend with concurrent ffprobe calls.
+    for (const stream of channel.streams) {
+      try {
+        const res: any = await firstValueFrom(this.api.testStream(stream.id));
+        // Update stream stats in-place on success
+        if (res?.success && res?.stream) {
+          stream.stream_stats = res.stream.stream_stats || res.stream.custom_properties?.stream_stats;
+          stream.stream_stats_updated_at = res.stream.stream_stats_updated_at;
+        }
+      } catch (err) {
+        console.error(`Test All Streams: stream ${stream.id} (${stream.name}) failed:`, err);
+      } finally {
+        // Remove per-stream spinner regardless of success/failure
+        this.testingStreamIds.delete(stream.id);
+        this.cdr.markForCheck();
+      }
+    }
+
+    // All streams done — remove channel-level testing state
+    this.testingChannelIds.delete(channel.id);
+    this.cdr.markForCheck();
   }
 
   /**

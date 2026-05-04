@@ -126,6 +126,12 @@
                 <span class="material-icons">speed</span>
                 Test Channel
               </button>
+              <!-- Test All Streams: tests each stream individually with per-stream progress -->
+              <button class="kebab-item" (click)="testAllStreams(channel, $event)"
+                      [disabled]="testingChannelIds.has(channel.id) || channel.streams.length === 0">
+                <span class="material-icons">checklist</span>
+                Test All Streams
+              </button>
             </div>
           </div>
 

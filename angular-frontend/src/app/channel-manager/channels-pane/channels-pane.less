@@ -9,6 +9,8 @@
   height: 100%;
   background: var(--tui-base-01);
   color: var(--tui-text-01);
+  // overflow is intentionally NOT set here — the scroll-area handles its own
+  // overflow-y, and we need child dropdowns (group filter) to extend beyond.
 }
 
 // ========== HEADER ==========
@@ -73,6 +75,9 @@
   display: flex;
   gap: 8px;
   background: var(--tui-base-01);
+  // Ensure dropdowns from this bar render above the scroll-area below.
+  position: relative;
+  z-index: 10;
 }
 
 .search-input {

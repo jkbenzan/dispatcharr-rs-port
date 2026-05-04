@@ -17,7 +17,9 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  overflow: hidden;
+  // Use overflow: visible so child dropdowns (e.g., group filter) are not clipped.
+  // The scroll-area inside each pane handles its own overflow-y independently.
+  overflow: visible;
   min-width: 200px;
 }
 
