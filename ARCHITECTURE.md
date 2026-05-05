@@ -238,6 +238,10 @@ debian:bookworm-slim + binary + both dist/ outputs
 - [ ] **Bundle size** — Angular bundle exceeds the 500kB warning. Consider lazy loading or chunk splitting.
 - [ ] **Toast notifications** — Replace `console.log` confirmations with Taiga UI notification service.
 - [ ] **Advanced ECM features** — Bulk CSV import/export, EPG assignment modals, undo/redo history.
+- [ ] **HLS DVR Segmentation** — Transition from single-file TS recording to FFmpeg HLS segmentation to enable "Watch While Recording" (parity with Dispatcharr 0.24.0).
+- [ ] **Delta Stats Refresh** — Implement a lightweight "since" cursor endpoint for stream stats to reduce payload size and frontend re-renders (parity with Dispatcharr 0.24.0).
+- [ ] **Richer EPG Metadata** — Extract Season/Episode (SxxExx) and program subtitles from XMLTV sources (parity with Dispatcharr 0.21.0).
+- [ ] **API Key Authentication** — Add support for permanent API keys to allow programmatic access without JWT tokens (parity with Dispatcharr 0.20.0).
 
 ---
 
