@@ -416,6 +416,54 @@ export class ChannelsPaneComponent implements OnInit {
     return this.selectedChannelIds.has(id);
   }
 
+  /** Select all visible channels */
+  selectAllChannels() {
+    this.flatChannelIds.forEach(id => this.selectedChannelIds.add(id));
+    this.cdr.markForCheck();
+  }
+
+  /** Deselect all channels */
+  deselectAllChannels() {
+    this.selectedChannelIds.clear();
+    this.lastClickedChannelIdx = -1;
+    this.cdr.markForCheck();
+  }
+
+  /** Returns true if every visible channel is selected */
+  get allChannelsSelected(): boolean {
+    return this.flatChannelIds.length > 0 &&
+           this.flatChannelIds.every(id => this.selectedChannelIds.has(id));
+  }
+
+  // --- Group-level inline select-all (checkbox in group row) ---
+
+  /** True if ALL channels in this group are selected */
+  isGroupAllSelected(group: GroupView): boolean {
+    return group.channels.length > 0 &&
+           group.channels.every(ch => this.selectedChannelIds.has(ch.id));
+  }
+
+  /** True if SOME (but not all) channels in this group are selected */
+  isGroupPartiallySelected(group: GroupView): boolean {
+    if (group.channels.length === 0) return false;
+    const selectedCount = group.channels.filter(ch => this.selectedChannelIds.has(ch.id)).length;
+    return selectedCount > 0 && selectedCount < group.channels.length;
+  }
+
+  /** Toggle all channels in this group on/off */
+  toggleGroupSelectAll(group: GroupView, event: Event) {
+    event.stopPropagation();
+    const allSelected = this.isGroupAllSelected(group);
+    group.channels.forEach(ch => {
+      if (allSelected) {
+        this.selectedChannelIds.delete(ch.id);
+      } else {
+        this.selectedChannelIds.add(ch.id);
+      }
+    });
+    this.cdr.markForCheck();
+  }
+
   /** Toggle a stream checkbox */
   toggleStreamSelect(streamId: number, event?: Event) {
     event?.stopPropagation();

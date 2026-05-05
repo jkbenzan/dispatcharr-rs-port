@@ -40,11 +40,6 @@ export class StreamsPaneComponent implements OnInit, OnDestroy {
   private readonly api = inject(ApiService);
   private readonly cdr = inject(ChangeDetectorRef);
 
-  @Input() selectedStreamIds: number[] = [];
-  @Output() toggleStreamSelection = new EventEmitter<number>();
-  @Output() selectAllInGroup = new EventEmitter<{streams: any[], isSelected: boolean}>();
-  @Output() assignClicked = new EventEmitter<void>();
-
   // =================== DATA ===================
   
   m3uViews: M3UView[] = [];
@@ -54,14 +49,30 @@ export class StreamsPaneComponent implements OnInit, OnDestroy {
   /** Lookup: channel_group_id → group name (resolved from /api/channels/groups/) */
   private channelGroupNames: Map<number, string> = new Map();
 
+  /** Set of stream IDs that are already assigned to at least one channel */
+  assignedStreamIds: Set<number> = new Set();
+
   loading = false;
   refreshingIds: Set<number> = new Set();
+
+  // =================== SELECTION (self-managed) ===================
+
+  /** Internally managed set of selected stream IDs */
+  selectedStreamIds: Set<number> = new Set();
+
+  /** Flat ordered list of all visible stream IDs for shift-click range selection */
+  private flatStreamIds: number[] = [];
+  /** Index of the last clicked stream for shift-click computation */
+  private lastClickedStreamIdx = -1;
 
   // =================== FILTERS ===================
 
   searchQuery = '';
   selectedProviderFilters: Set<number> = new Set();
   selectedGroupFilters: Set<string> = new Set();
+
+  /** When true, streams already assigned to a channel are hidden */
+  hideAssigned = false;
 
   showProviderDropdown = false;
   showGroupDropdown = false;
@@ -86,39 +97,46 @@ export class StreamsPaneComponent implements OnInit, OnDestroy {
     this.loading = true;
     this.cdr.markForCheck();
 
-    // Step 1: Fetch channel groups first so we can resolve IDs → names
+    // Step 1: Fetch channel groups so we can resolve IDs → names
     this.api.getChannelGroups().subscribe((groupsRes: any) => {
       const groups = Array.isArray(groupsRes) ? groupsRes : groupsRes?.results || [];
       this.channelGroupNames.clear();
       groups.forEach((g: any) => this.channelGroupNames.set(g.id, g.name));
 
-      // Step 2: Fetch playlists (providers)
-      this.api.getPlaylists().subscribe((m3us: any) => {
-        this.allM3Us = Array.isArray(m3us) ? m3us : m3us?.results || [];
-        
-        // Step 3: Fetch all streams to build the tree
-        // Using a large page_size to get enough data for the tree view
-        this.api.getStreams({ page_size: 10000 }).subscribe({
-          next: (streamsRes: any) => {
-            const streams = Array.isArray(streamsRes) ? streamsRes : streamsRes?.results || [];
-            this.buildTree(this.allM3Us, streams);
-            this.loading = false;
-            this.cdr.markForCheck();
-          },
-          error: (err) => {
-            console.error('Failed to fetch streams:', err);
-            this.loading = false;
-            this.cdr.markForCheck();
-          }
+      // Step 2: Fetch channels to build the set of assigned stream IDs
+      this.api.getChannels({ page_size: 5000 }).subscribe((channelsRes: any) => {
+        const channels = Array.isArray(channelsRes) ? channelsRes : channelsRes?.results || [];
+        this.assignedStreamIds.clear();
+        channels.forEach((ch: any) => {
+          const streams = ch.streams || [];
+          streams.forEach((s: any) => this.assignedStreamIds.add(s.id));
+        });
+
+        // Step 3: Fetch playlists (providers)
+        this.api.getPlaylists().subscribe((m3us: any) => {
+          this.allM3Us = Array.isArray(m3us) ? m3us : m3us?.results || [];
+          
+          // Step 4: Fetch all streams to build the tree
+          this.api.getStreams({ page_size: 10000 }).subscribe({
+            next: (streamsRes: any) => {
+              const streams = Array.isArray(streamsRes) ? streamsRes : streamsRes?.results || [];
+              this.buildTree(this.allM3Us, streams);
+              this.loading = false;
+              this.cdr.markForCheck();
+            },
+            error: (err) => {
+              console.error('Failed to fetch streams:', err);
+              this.loading = false;
+              this.cdr.markForCheck();
+            }
+          });
         });
       });
     });
   }
 
   private buildTree(m3us: any[], streams: any[]) {
-    // Collect all unique group names for the filter dropdown.
-    // channel_group is a numeric ID — resolve it to a human-readable name
-    // using the channelGroupNames lookup populated from /api/channels/groups/.
+    // Collect all unique group names for the filter dropdown
     const groupsSet = new Set<string>();
     streams.forEach(s => {
       const groupName = this.resolveGroupName(s.channel_group);
@@ -176,23 +194,33 @@ export class StreamsPaneComponent implements OnInit, OnDestroy {
         total_streams: totalStreams
       };
     });
-    // No longer filtering out empty providers — all M3U accounts are always shown
+
+    // Rebuild flat stream ID list for shift-click
+    this.rebuildFlatStreamIds();
   }
 
   /**
    * Resolve a channel_group value to a human-readable group name.
-   * The API returns channel_group as a numeric ID referencing the
-   * dispatcharr_channels_channelgroup table. We resolve it using
-   * the channelGroupNames map populated from GET /api/channels/groups/.
    */
   private resolveGroupName(channelGroup: any): string {
     if (channelGroup === null || channelGroup === undefined) return '';
-    // If it's a number, look up the group name from our map
     if (typeof channelGroup === 'number') {
       return this.channelGroupNames.get(channelGroup) || `Group #${channelGroup}`;
     }
-    // If it's already a string (shouldn't happen with current API, but defensive)
     return String(channelGroup);
+  }
+
+  /**
+   * Rebuild the flat ordered list of stream IDs from the current filtered view.
+   * Used for shift-click range selection.
+   */
+  private rebuildFlatStreamIds() {
+    this.flatStreamIds = [];
+    this.filteredM3UViews.forEach(m => {
+      m.groups.forEach(g => {
+        g.streams.forEach(s => this.flatStreamIds.push(s.id));
+      });
+    });
   }
 
   // =================== FILTERS ===================
@@ -204,42 +232,63 @@ export class StreamsPaneComponent implements OnInit, OnDestroy {
         return false;
       }
 
-      // If we have group filters or search query, we need to check nested items
       const hasGroupFilters = this.selectedGroupFilters.size > 0;
       const hasSearch = !!this.searchQuery;
 
-      if (!hasGroupFilters && !hasSearch) return true;
+      if (!hasGroupFilters && !hasSearch && !this.hideAssigned) return true;
 
       // Check if any group matches
       const matchingGroups = m.groups.filter(g => {
         if (hasGroupFilters && !this.selectedGroupFilters.has(g.name)) return false;
         
-        if (hasSearch) {
-          return g.streams.some(s => s.name.toLowerCase().includes(this.searchQuery.toLowerCase()));
+        // Filter out assigned streams if toggle is on
+        let filteredStreams = g.streams;
+        if (this.hideAssigned) {
+          filteredStreams = filteredStreams.filter(s => !this.assignedStreamIds.has(s.id));
         }
-        return true;
+
+        if (hasSearch) {
+          filteredStreams = filteredStreams.filter(s => 
+            s.name.toLowerCase().includes(this.searchQuery.toLowerCase())
+          );
+        }
+        return filteredStreams.length > 0;
       });
 
       return matchingGroups.length > 0;
     }).map(m => {
-      // If searching or filtering groups, we only show matching groups/streams
       const hasGroupFilters = this.selectedGroupFilters.size > 0;
       const hasSearch = !!this.searchQuery;
 
-      if (!hasGroupFilters && !hasSearch) return m;
+      if (!hasGroupFilters && !hasSearch && !this.hideAssigned) return m;
 
       const filteredGroups = m.groups.filter(g => {
         if (hasGroupFilters && !this.selectedGroupFilters.has(g.name)) return false;
-        if (hasSearch) {
-          return g.streams.some(s => s.name.toLowerCase().includes(this.searchQuery.toLowerCase()));
+        
+        let filteredStreams = g.streams;
+        if (this.hideAssigned) {
+          filteredStreams = filteredStreams.filter(s => !this.assignedStreamIds.has(s.id));
         }
-        return true;
+        if (hasSearch) {
+          filteredStreams = filteredStreams.filter(s => 
+            s.name.toLowerCase().includes(this.searchQuery.toLowerCase())
+          );
+        }
+        return filteredStreams.length > 0;
       }).map(g => {
-        if (!hasSearch) return g;
+        let filteredStreams = g.streams;
+        if (this.hideAssigned) {
+          filteredStreams = filteredStreams.filter(s => !this.assignedStreamIds.has(s.id));
+        }
+        if (hasSearch) {
+          filteredStreams = filteredStreams.filter(s => 
+            s.name.toLowerCase().includes(this.searchQuery.toLowerCase())
+          );
+        }
         return {
           ...g,
-          expanded: true, // Auto-expand when searching
-          streams: g.streams.filter(s => s.name.toLowerCase().includes(this.searchQuery.toLowerCase()))
+          expanded: hasSearch ? true : g.expanded,
+          streams: filteredStreams
         };
       });
 
@@ -249,6 +298,12 @@ export class StreamsPaneComponent implements OnInit, OnDestroy {
         groups: filteredGroups
       };
     });
+  }
+
+  /** Total stream count across all visible groups/providers */
+  get totalVisibleStreamCount(): number {
+    return this.filteredM3UViews.reduce((sum, m) =>
+      sum + m.groups.reduce((gs, g) => gs + g.streams.length, 0), 0);
   }
 
   get providerFilterLabel(): string {
@@ -294,6 +349,11 @@ export class StreamsPaneComponent implements OnInit, OnDestroy {
     this.cdr.markForCheck();
   }
 
+  toggleHideAssigned() {
+    this.hideAssigned = !this.hideAssigned;
+    this.cdr.markForCheck();
+  }
+
   get filteredProviders() {
     return this.allM3Us.filter(m => 
       m.name.toLowerCase().includes(this.providerSearch.toLowerCase())
@@ -317,7 +377,6 @@ export class StreamsPaneComponent implements OnInit, OnDestroy {
 
     this.api.refreshM3UAccount(m3uId).subscribe({
       next: () => {
-        // We'll wait a bit then reload data
         setTimeout(() => {
           this.refreshingIds.delete(m3uId);
           this.loadData();
@@ -338,28 +397,64 @@ export class StreamsPaneComponent implements OnInit, OnDestroy {
     this.cdr.markForCheck();
   }
 
-  onAssign() {
-    this.assignClicked.emit();
-  }
-
   // =================== SELECTION ===================
 
   isStreamSelected(id: number): boolean {
-    return this.selectedStreamIds.includes(id);
+    return this.selectedStreamIds.has(id);
   }
 
-  onToggleStream(id: number, event: Event) {
+  /**
+   * Toggle a single stream's selection. Supports shift-click range selection.
+   */
+  onToggleStream(id: number, event: MouseEvent) {
     event.stopPropagation();
-    this.toggleStreamSelection.emit(id);
+
+    // Rebuild flat IDs on every click to match current filter state
+    this.rebuildFlatStreamIds();
+    const idx = this.flatStreamIds.indexOf(id);
+
+    if (event.shiftKey && this.lastClickedStreamIdx >= 0) {
+      // Shift-click: select/deselect the range between last click and this one
+      const start = Math.min(this.lastClickedStreamIdx, idx);
+      const end = Math.max(this.lastClickedStreamIdx, idx);
+      for (let i = start; i <= end; i++) {
+        this.selectedStreamIds.add(this.flatStreamIds[i]);
+      }
+    } else {
+      // Normal click: toggle single stream
+      if (this.selectedStreamIds.has(id)) {
+        this.selectedStreamIds.delete(id);
+      } else {
+        this.selectedStreamIds.add(id);
+      }
+    }
+
+    this.lastClickedStreamIdx = idx;
+    this.cdr.markForCheck();
   }
 
-  onToggleM3UGroup(group: M3UGroupView, event: Event) {
-    event.stopPropagation();
-    const isSelected = !group.streams.every(s => this.isStreamSelected(s.id));
-    this.selectAllInGroup.emit({ streams: group.streams, isSelected });
+  /** Select all visible streams */
+  selectAllStreams() {
+    this.rebuildFlatStreamIds();
+    this.flatStreamIds.forEach(id => this.selectedStreamIds.add(id));
+    this.cdr.markForCheck();
   }
 
-  // =================== HELPERS ===================
+  /** Deselect all streams */
+  deselectAllStreams() {
+    this.selectedStreamIds.clear();
+    this.lastClickedStreamIdx = -1;
+    this.cdr.markForCheck();
+  }
+
+  /** Returns true if all visible streams are currently selected */
+  get allVisibleSelected(): boolean {
+    if (this.totalVisibleStreamCount === 0) return false;
+    this.rebuildFlatStreamIds();
+    return this.flatStreamIds.every(id => this.selectedStreamIds.has(id));
+  }
+
+  // =================== EXPAND / COLLAPSE ===================
 
   toggleM3UExpand(m3u: M3UView) {
     m3u.expanded = !m3u.expanded;
@@ -372,6 +467,24 @@ export class StreamsPaneComponent implements OnInit, OnDestroy {
     this.cdr.markForCheck();
   }
 
+  expandAll() {
+    this.filteredM3UViews.forEach(m => {
+      m.expanded = true;
+      m.groups.forEach(g => g.expanded = true);
+    });
+    this.cdr.markForCheck();
+  }
+
+  collapseAll() {
+    this.filteredM3UViews.forEach(m => {
+      m.expanded = false;
+      m.groups.forEach(g => g.expanded = false);
+    });
+    this.cdr.markForCheck();
+  }
+
+  // =================== HELPERS ===================
+
   onDocumentClick() {
     this.showProviderDropdown = false;
     this.showGroupDropdown = false;
@@ -380,8 +493,10 @@ export class StreamsPaneComponent implements OnInit, OnDestroy {
 
   handleDragStart(event: DragEvent, stream: any) {
     if (event.dataTransfer) {
-      const idsToDrag = this.selectedStreamIds.includes(stream.id) 
-        ? this.selectedStreamIds 
+      // If the dragged stream is selected, drag ALL selected streams.
+      // Otherwise, drag just the single stream.
+      const idsToDrag = this.selectedStreamIds.has(stream.id) 
+        ? Array.from(this.selectedStreamIds)
         : [stream.id];
         
       event.dataTransfer.setData('application/json', JSON.stringify(idsToDrag));

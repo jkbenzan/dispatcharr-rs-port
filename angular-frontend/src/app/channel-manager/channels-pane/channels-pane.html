@@ -6,6 +6,11 @@
     <div class="header-row">
       <h3>CHANNELS <span class="badge">{{ totalChannelCount }}</span></h3>
       <div class="header-actions">
+        <!-- Select All / Deselect All -->
+        <button class="icon-btn" (click)="allChannelsSelected ? deselectAllChannels() : selectAllChannels()"
+                [title]="allChannelsSelected ? 'Deselect all' : 'Select all'">
+          <span class="material-icons">{{ allChannelsSelected ? 'deselect' : 'select_all' }}</span>
+        </button>
         <!-- Expand / Collapse All -->
         <button class="icon-btn" (click)="expandAll()" title="Expand all">
           <span class="material-icons">unfold_more</span>
@@ -55,6 +60,13 @@
       <div class="group-row"
            [class.testing]="testingGroupIds.has(group.id)"
            (click)="toggleGroupExpand(group)">
+        <!-- Inline group select-all checkbox: selects/deselects all channels in this group -->
+        <input type="checkbox"
+               class="row-checkbox group-select-all"
+               [checked]="isGroupAllSelected(group)"
+               [indeterminate]="isGroupPartiallySelected(group)"
+               (click)="toggleGroupSelectAll(group, $event)" />
+
         <span class="material-icons expand-arrow">
           {{ group.expanded ? 'expand_more' : 'chevron_right' }}
         </span>

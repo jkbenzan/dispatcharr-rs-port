@@ -83,7 +83,7 @@
 .search-input {
   flex: 1;
   background: var(--tui-base-02);
-  border: 1px solid var(--tui-base-03);
+  border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 4px;
   padding: 6px 10px;
   color: var(--tui-text-01);
@@ -92,7 +92,8 @@
   box-sizing: border-box;
 
   &:focus {
-    border-color: var(--tui-primary);
+    border-color: #646cff;
+    box-shadow: 0 0 0 1px rgba(100, 108, 255, 0.3);
   }
   &::placeholder {
     color: var(--tui-text-03);
@@ -105,7 +106,7 @@
 
 .filter-select {
   background: var(--tui-base-02);
-  border: 1px solid var(--tui-base-03);
+  border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 4px;
   padding: 6px 8px;
   color: var(--tui-text-01);
@@ -118,7 +119,7 @@
   min-width: 100px;
 
   &:hover {
-    border-color: var(--tui-primary);
+    border-color: rgba(255, 255, 255, 0.3);
   }
 }
 
@@ -129,7 +130,7 @@
   right: 0;
   min-width: 180px;
   background: #1a1a2e;
-  border: 1px solid var(--tui-base-03);
+  border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 4px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   z-index: 100;
@@ -213,6 +214,13 @@
   &.testing {
     opacity: 0.7;
   }
+}
+
+// Group-level select-all checkbox — appears as first element in the group row
+.group-select-all {
+  cursor: pointer;
+  accent-color: #646cff;
+  margin-right: 2px;
 }
 
 // Group kebab button — hidden by default, shown on group row hover

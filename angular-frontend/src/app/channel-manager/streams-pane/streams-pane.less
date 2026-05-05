@@ -16,7 +16,6 @@
   padding: 10px 12px;
   border-bottom: 1px solid var(--tui-base-03);
   background: #16213e; // Same as channels-pane
-  height: 44px; // Explicit height for alignment
   box-sizing: border-box;
 
   .header-row {
@@ -43,26 +42,63 @@
     font-weight: 600;
     margin-left: 8px;
   }
+
+  .header-actions {
+    display: flex;
+    gap: 4px;
+  }
 }
 
-.assign-btn {
-  background: #646cff;
-  color: white;
-  border: none;
-  padding: 4px 12px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: opacity 0.2s;
+// Selection summary bar — appears below header when streams are selected
+.selection-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 0;
+  margin-top: 4px;
 
-  &:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
+  .selection-count {
+    font-size: 11px;
+    font-weight: 600;
+    color: #646cff;
   }
 
-  &:hover:not(:disabled) {
-    background: #535bf2;
+  .clear-selection-btn {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 10px;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 3px;
+    transition: color 0.15s, background 0.15s;
+
+    &:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.1);
+    }
+  }
+}
+
+.icon-btn {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s;
+
+  &:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .material-icons {
+    font-size: 18px;
   }
 }
 
@@ -72,6 +108,7 @@
   border-bottom: 1px solid var(--tui-base-03);
   display: flex;
   gap: 8px;
+  align-items: center;
   background: var(--tui-base-01);
   position: relative;
   z-index: 100;
@@ -80,7 +117,7 @@
 .search-input {
   flex: 2;
   background: var(--tui-base-02);
-  border: 1px solid var(--tui-base-03);
+  border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 4px;
   padding: 6px 10px;
   color: var(--tui-text-01);
@@ -88,7 +125,12 @@
   outline: none;
 
   &:focus {
-    border-color: var(--tui-primary);
+    border-color: #646cff;
+    box-shadow: 0 0 0 1px rgba(100, 108, 255, 0.3);
+  }
+
+  &::placeholder {
+    color: var(--tui-text-03);
   }
 }
 
@@ -103,7 +145,7 @@
   align-items: center;
   justify-content: space-between;
   background: var(--tui-base-02);
-  border: 1px solid var(--tui-base-03);
+  border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 4px;
   padding: 6px 10px;
   color: var(--tui-text-01);
@@ -115,7 +157,33 @@
   text-overflow: ellipsis;
 
   &:hover {
-    border-color: var(--tui-primary);
+    border-color: rgba(255, 255, 255, 0.3);
+  }
+}
+
+// Hide-assigned toggle button
+.filter-toggle {
+  background: var(--tui-base-02);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  padding: 6px 8px;
+  color: var(--tui-text-03);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  flex-shrink: 0;
+
+  &:hover {
+    border-color: rgba(255, 255, 255, 0.3);
+    color: var(--tui-text-01);
+  }
+
+  &.active {
+    background: rgba(100, 108, 255, 0.15);
+    border-color: #646cff;
+    color: #646cff;
   }
 }
 
@@ -126,7 +194,7 @@
   right: 0;
   margin-top: 4px;
   background: #1a1a2e;
-  border: 1px solid var(--tui-base-03);
+  border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 4px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
   display: flex;
@@ -139,7 +207,7 @@
   padding: 8px;
   background: #0f0f1a;
   border: none;
-  border-bottom: 1px solid var(--tui-base-03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   color: #fff;
   font-size: 11px;
   outline: none;
@@ -180,6 +248,7 @@
 
   input {
     cursor: pointer;
+    accent-color: #646cff;
   }
 }
 
@@ -310,7 +379,7 @@
   align-items: center;
   padding: 8px 16px 8px 48px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.03);
-  cursor: pointer;
+  cursor: default;
   transition: background 0.15s;
 
   &:hover {
@@ -323,6 +392,11 @@
 
   &.selected {
     background: rgba(100, 108, 255, 0.1);
+  }
+
+  // Dim assigned streams slightly to visually differentiate
+  &.assigned {
+    opacity: 0.7;
   }
 
   input[type="checkbox"] {
@@ -398,32 +472,25 @@
   }
 }
 
+// Assigned badge — small link icon indicating the stream is already assigned
+.assigned-badge {
+  display: flex;
+  align-items: center;
+  margin-right: 4px;
+  flex-shrink: 0;
+
+  .material-icons {
+    font-size: 14px;
+    color: rgba(100, 108, 255, 0.5);
+  }
+}
+
 .stream-actions {
   opacity: 0;
   transition: opacity 0.2s;
   display: flex;
   gap: 4px;
-}
-
-.icon-btn {
-  background: none;
-  border: none;
-  color: rgba(255, 255, 255, 0.4);
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  &:hover {
-    color: #fff;
-    background: rgba(255, 255, 255, 0.1);
-  }
-
-  .material-icons {
-    font-size: 18px;
-  }
+  flex-shrink: 0;
 }
 
 .spinning {

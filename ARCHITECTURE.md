@@ -102,9 +102,9 @@ angular-frontend/src/app/
 - **Hover actions**: Preview stream (👁 opens in-app player) + Test stream (🔍 via `POST /api/streams/:id/check/`)
 
 ### Selection System
-- Checkboxes on all channels and streams
-- Shift-click range selection on channels
-- Group filter acts as a datagrid filter (not selection)
+- **Channels Pane**: Checkboxes on channels and streams. Shift-click range selection on channels. Select All / Deselect All in header. Inline group-level select-all checkbox (with indeterminate state) for selecting all channels in a group.
+- **Streams Pane**: Self-managed selection state (no parent binding). Shift-click range selection. Select All / Deselect All in header.
+- **Multi-select Drag**: When dragging a selected stream, all selected streams are included in the drag payload.
 
 ### Drag-and-Drop Stream Assignment
 - Streams in the Stream Pane are `draggable="true"` and set `application/json` data with selected stream IDs.
@@ -119,10 +119,13 @@ angular-frontend/src/app/
 - **M3U Row**: Displays provider name, fetching status, last updated timestamp, and a manual "Refresh Now" button. All providers are shown even if they have 0 streams.
 - **Provider/Group Filter**: Searchable multi-select dropdowns that filter the tree.
 - **Group Name Resolution**: `channel_group` is a numeric ID in the stream API response. The frontend resolves it to a human-readable name via `GET /api/channels/groups/`.
+- **Hide Assigned Toggle**: Filters out streams that are already assigned to at least one channel. Assigned status is determined by fetching all channels and collecting their stream IDs.
 - **Stream Preview**: Integrated "Preview Stream" button opens the in-app player.
 - **3-Row Info Cell**: Displays Stream Name, (Reserved), and M3U Account Name.
 - **Drag Handles**: Each stream row has a grab handle (`drag_indicator`) matching the Channels Pane style.
+- **Expand/Collapse All**: Header buttons to expand or collapse all M3U providers and groups.
 - **Expansion Persistence**: When the tree is rebuilt (e.g. after drag-and-drop), both panes preserve which groups/channels/M3Us were expanded.
+- **Assigned Badge**: Streams already assigned to a channel show a small link icon and are slightly dimmed.
 
 ### In-App Video Player
 - Angular-native component using `mpegts.js` for live MPEG-TS stream playback
