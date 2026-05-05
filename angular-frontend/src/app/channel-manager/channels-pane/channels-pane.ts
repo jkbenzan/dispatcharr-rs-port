@@ -156,7 +156,7 @@ export class ChannelsPaneComponent implements OnInit {
    * Load all data: groups, channels (with streams), and M3U account names.
    * Builds the nested tree structure for the template.
    */
-  private loadData() {
+  public loadData() {
     this.loading = true;
     this.cdr.markForCheck();
 

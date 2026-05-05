@@ -53,10 +53,6 @@ export class ApiService {
     return this.http.get('/api/core/streamprofiles/');
   }
 
-  suggestMatches(channelName: string): Observable<any> {
-    return this.http.post('/api/channel-db/match/suggest/', { channel_name: channelName });
-  }
-
   // =================== STREAMS ===================
 
   getPlaylists(): Observable<any> {
