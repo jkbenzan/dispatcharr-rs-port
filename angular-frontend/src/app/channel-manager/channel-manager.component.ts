@@ -49,7 +49,9 @@ export class ChannelManagerComponent {
    * to the single selected channel in the Channels Pane.
    */
   assignSelected() {
+    console.log('[Assign] streams:', this.selectedStreamIds.size, 'channels:', this.selectedChannelIds.size);
     if (this.selectedStreamIds.size === 0 || this.selectedChannelIds.size !== 1) {
+      console.warn('[Assign] Blocked — need exactly 1 channel and ≥1 stream selected');
       return;
     }
 

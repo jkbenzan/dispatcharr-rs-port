@@ -183,46 +183,42 @@
   gap: 8px;
 }
 
-// Custom Taiga-style Action Button
+// Action buttons in expanded toolbar — icon-only, centered, with tooltip
 .action-btn {
   all: unset;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  margin: 0 auto; // center in toolbar
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
-  color: var(--tui-text-01);
+  color: var(--tui-primary);
   transition: all 0.2s ease;
 
-  &:hover {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(255, 255, 255, 0.15);
-    transform: translateY(-1px);
+  &:hover:not([disabled]) {
+    background: rgba(100, 108, 255, 0.2);
+    border-color: rgba(100, 108, 255, 0.4);
+    transform: scale(1.08);
   }
 
   &:active {
-    transform: translateY(0);
+    transform: scale(0.97);
   }
 
   &[disabled] {
-    opacity: 0.4;
+    opacity: 0.25;
     cursor: not-allowed;
     pointer-events: none;
-    filter: grayscale(100%);
   }
 
-  .material-icons {
-    font-size: 20px;
-    color: var(--tui-primary);
-  }
-
-  .action-label {
-    font-size: 13px;
-    font-weight: 500;
-    white-space: nowrap;
+  // Custom SVG icons in expanded toolbar are slightly larger
+  .custom-icon {
+    width: 24px;
+    height: 24px;
   }
 }
 
