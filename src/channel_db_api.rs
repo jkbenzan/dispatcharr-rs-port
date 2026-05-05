@@ -3,16 +3,12 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use sea_orm::{ActiveModelTrait, DatabaseBackend, EntityTrait, Statement, Set, ActiveValue};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::{json, Value};
 use std::sync::Arc;
-use std::path::PathBuf;
-use tokio::io::AsyncWriteExt;
 
 use crate::AppState;
-use crate::channel_db::{ChannelDb, FilterOptions, LineupPreview, LineupSummary, StationDetail, StationMatchResult, StationSearchResult};
-use crate::channel_match::{calculate_match_score, parse_channel_name, ParsedChannelName, StationForScoring};
+use crate::channel_match::{calculate_match_score, parse_channel_name, StationForScoring};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -178,9 +174,9 @@ pub struct ImportLineupPayload {
 }
 
 pub async fn import_lineup(
-    State(state): State<Arc<AppState>>,
-    Path(lineup_id): Path<String>,
-    Json(payload): Json<ImportLineupPayload>,
+    State(_state): State<Arc<AppState>>,
+    Path(_lineup_id): Path<String>,
+    Json(_payload): Json<ImportLineupPayload>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     // Basic wrapper, actual logic would integrate heavily with entities/channels
     // For now, return a 501 Not Implemented or minimal logic
@@ -216,7 +212,7 @@ pub async fn suggest_matches(
     let results = db.search_for_matching(
         &parsed.clean_name, 
         payload.filter_country.as_deref(), 
-        payload.filter_resolutions.as_deref().map(|v| v.as_slice()), 
+        payload.filter_resolutions.as_deref(), 
         20
     ).await.map_err(err_500)?;
     
@@ -289,7 +285,7 @@ pub async fn apply_match(
 }
 
 pub async fn batch_match(
-    State(state): State<Arc<AppState>>,
+    State(_state): State<Arc<AppState>>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     Ok(Json(json!({ "message": "Batch match placeholder" })))
 }
@@ -298,10 +294,10 @@ pub async fn batch_match(
 // Remote Updates
 // ---------------------------------------------------------------------------
 
-pub async fn check_update(State(state): State<Arc<AppState>>) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+pub async fn check_update(State(_state): State<Arc<AppState>>) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     Ok(Json(json!({ "message": "Check update placeholder" })))
 }
 
-pub async fn download_update(State(state): State<Arc<AppState>>) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+pub async fn download_update(State(_state): State<Arc<AppState>>) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     Ok(Json(json!({ "message": "Download update placeholder" })))
 }

@@ -10,7 +10,7 @@
 
 use sea_orm::{ConnectOptions, Database, DatabaseConnection, FromQueryResult, Statement};
 use sea_orm::DatabaseBackend;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::path::{Path, PathBuf};
 use tracing;
 
