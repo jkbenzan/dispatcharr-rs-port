@@ -106,6 +106,14 @@ angular-frontend/src/app/
 - Shift-click range selection on channels
 - Group filter acts as a datagrid filter (not selection)
 
+### Drag-and-Drop Stream Assignment
+- Streams in the Stream Pane are `draggable="true"` and set `application/json` data with selected stream IDs.
+- Channel rows in the Channels Pane accept drops: `(dragover)` / `(dragleave)` / `(drop)` handlers.
+- **Visual feedback**: A `box-shadow` inset border highlights the target channel during hover.
+- **Duplicate prevention**: Streams already assigned to the target channel are filtered out before assignment.
+- **Persistence**: The full stream ID list (existing + new) is sent via `PATCH /api/channels/channels/:id/` with `{ streams: [...] }`.
+- **Internal reorder**: Within the Channels Pane, streams can also be reordered within a single channel via drag handles (separate drag type using `text/plain`).
+
 ### Stream Pane (Source View)
 - **Hierarchy**: M3U Provider → M3U Group → Stream Name.
 - **M3U Row**: Displays provider name, fetching status, last updated timestamp, and a manual "Refresh Now" button.

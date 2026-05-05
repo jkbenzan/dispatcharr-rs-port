@@ -91,7 +91,11 @@
           <!-- CHANNEL ROW -->
           <div class="channel-row"
                [class.selected]="isChannelSelected(channel.id)"
-               [class.testing]="testingChannelIds.has(channel.id)">
+               [class.testing]="testingChannelIds.has(channel.id)"
+               [class.drop-target]="crossPaneDropTargetId === channel.id"
+               (dragover)="onChannelDragOver($event, channel)"
+               (dragleave)="onChannelDragLeave($event, channel)"
+               (drop)="onChannelDrop($event, channel)">
 
             <!-- Retrieval badge: shows when sheet was dismissed for this channel -->
             <button class="check-badge pulse"

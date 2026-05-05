@@ -111,6 +111,11 @@ export class ChannelsPaneComponent implements OnInit {
   dragOverIndex: number | null = null;
   dragOverChannelId: number | null = null;
 
+  // =================== CROSS-PANE DROP TARGET ===================
+
+  /** Channel ID currently being hovered over during a cross-pane drag */
+  crossPaneDropTargetId: number | null = null;
+
   // =================== TESTING STATE ===================
   /** Stream IDs currently being tested (show spinner) */
   testingStreamIds: Set<number> = new Set();
@@ -666,6 +671,84 @@ export class ChannelsPaneComponent implements OnInit {
 
   isDragTarget(channelId: number, streamIdx: number): boolean {
     return this.dragOverChannelId === channelId && this.dragOverIndex === streamIdx;
+  }
+
+  // =================== CROSS-PANE DROP (Streams Pane → Channel) ===================
+
+  /**
+   * Allow drops on channel rows from the Streams Pane.
+   * Only activates when the drag payload is 'application/json' (cross-pane),
+   * not 'text/plain' (internal reorder).
+   */
+  onChannelDragOver(event: DragEvent, channel: ChannelView) {
+    // Accept cross-pane drops (application/json from Streams Pane)
+    if (event.dataTransfer?.types.includes('application/json')) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'copy';
+      this.crossPaneDropTargetId = channel.id;
+      this.cdr.markForCheck();
+    }
+  }
+
+  /**
+   * Clear the drop highlight when the cursor leaves the channel row.
+   */
+  onChannelDragLeave(event: DragEvent, channel: ChannelView) {
+    // Only clear if the leave target is not a child element
+    const relatedTarget = event.relatedTarget as HTMLElement;
+    const currentTarget = event.currentTarget as HTMLElement;
+    if (currentTarget && relatedTarget && currentTarget.contains(relatedTarget)) {
+      return; // Still inside the same channel row, don't clear
+    }
+    if (this.crossPaneDropTargetId === channel.id) {
+      this.crossPaneDropTargetId = null;
+      this.cdr.markForCheck();
+    }
+  }
+
+  /**
+   * Handle dropping streams from the Streams Pane onto a channel.
+   * Extracts stream IDs from dataTransfer, appends them (avoiding duplicates),
+   * and persists via PATCH.
+   */
+  onChannelDrop(event: DragEvent, channel: ChannelView) {
+    event.preventDefault();
+    this.crossPaneDropTargetId = null;
+
+    const jsonData = event.dataTransfer?.getData('application/json');
+    if (!jsonData) return;
+
+    let droppedStreamIds: number[];
+    try {
+      droppedStreamIds = JSON.parse(jsonData);
+      if (!Array.isArray(droppedStreamIds)) return;
+    } catch {
+      return;
+    }
+
+    // Filter out stream IDs that are already assigned to this channel
+    const existingIds = new Set(channel.streams.map(s => s.id));
+    const newIds = droppedStreamIds.filter(id => !existingIds.has(id));
+    if (newIds.length === 0) {
+      console.log('All dropped streams are already assigned to this channel.');
+      this.cdr.markForCheck();
+      return;
+    }
+
+    // Build the full ordered stream list: existing + newly dropped
+    const allStreamIds = [...channel.streams.map(s => s.id), ...newIds];
+
+    // Persist via PATCH — the backend replaces the channel's stream list
+    this.api.updateChannel(channel.id, { streams: allStreamIds }).subscribe({
+      next: () => {
+        // Reload data to get fresh stream details (names, logos, stats)
+        this.loadData();
+      },
+      error: (err) => {
+        console.error('Failed to assign streams to channel:', err);
+        this.cdr.markForCheck();
+      }
+    });
   }
 
   // =================== HELPERS ===================
