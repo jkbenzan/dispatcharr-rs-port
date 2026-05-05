@@ -27,6 +27,7 @@
 
 .toolbar-divider {
   display: flex;
+  flex-direction: column;
   background: var(--tui-base-02);
   border-left: 1px solid var(--tui-base-03);
   border-right: 1px solid var(--tui-base-03);
@@ -47,12 +48,22 @@
   
   &:not(.expanded) {
     width: 24px;
-    justify-content: center;
+    align-items: center;
   }
 
   &.expanded {
     background: linear-gradient(180deg, var(--tui-base-02) 0%, rgba(20, 20, 20, 0.95) 100%);
   }
+}
+
+.toolbar-header-placeholder {
+  height: 85px; // 42px header + 42px filters + 1px divider
+  min-height: 85px;
+  width: 100%;
+  flex-shrink: 0;
+  background: #16213e; // match .pane-header
+  border-bottom: 1px solid rgba(100, 108, 255, 0.3); // match .filters-divider
+  z-index: 10;
 }
 
 .drag-handle {

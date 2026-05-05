@@ -10,6 +10,9 @@
        [class.expanded]="toolbarExpanded"
        [style.width.%]="toolbarExpanded ? 10 : null">
     
+    <!-- Placeholder to align with pane headers -->
+    <div class="toolbar-header-placeholder"></div>
+
     <!-- Drag handle (acts as divider when collapsed, left border when expanded) -->
     <div class="drag-handle" (mousedown)="onDividerMouseDown($event)" [class.collapsed-handle]="!toolbarExpanded">
       <div class="divider-handle" *ngIf="!toolbarExpanded"></div>
