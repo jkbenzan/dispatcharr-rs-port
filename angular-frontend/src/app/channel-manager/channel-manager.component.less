@@ -32,19 +32,9 @@
   border-left: 1px solid var(--tui-base-03);
   border-right: 1px solid var(--tui-base-03);
   position: relative;
-  transition: width 0.3s ease, box-shadow 0.3s ease;
+  transition: width 0.3s ease;
   z-index: 10;
-  box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
-
-  // Beveling effect using inset box-shadow
-  &::before {
-    content: "";
-    position: absolute;
-    top: 0; left: 0; right: 0; bottom: 0;
-    pointer-events: none;
-    box-shadow: inset 1px 1px 0px rgba(255, 255, 255, 0.08), inset -1px 0px 0px rgba(0, 0, 0, 0.3);
-    z-index: 11;
-  }
+  height: 100%;
   
   &:not(.expanded) {
     width: 24px;
