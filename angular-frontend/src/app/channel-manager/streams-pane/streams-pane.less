@@ -2,6 +2,12 @@
    Streams Pane — Nested M3U → Group → Stream tree
    ====================================================================== */
 
+// ========== SHARED LAYOUT VARIABLES ==========
+// These heights MUST match channels-pane.less so both panes align horizontally.
+@pane-header-height: 42px;
+@pane-filters-height: 42px;
+@pane-divider-height: 1px;
+
 .pane-container {
   display: flex;
   flex-direction: column;
@@ -12,17 +18,24 @@
 }
 
 // ========== HEADER ==========
+// Fixed-height header that aligns with the Channels Pane header.
 .pane-header {
-  padding: 10px 12px;
+  height: @pane-header-height;
+  min-height: @pane-header-height;
+  max-height: @pane-header-height;
+  padding: 0 12px;
   border-bottom: 1px solid var(--tui-base-03);
   background: #16213e; // Same as channels-pane
+  display: flex;
+  align-items: center;
   box-sizing: border-box;
+  flex-shrink: 0;
 
   .header-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    height: 100%;
+    width: 100%;
   }
 
   h3 {
@@ -46,22 +59,19 @@
   .header-actions {
     display: flex;
     gap: 4px;
+    align-items: center;
   }
 }
 
-// Selection summary bar — appears below header when streams are selected
-.selection-bar {
+// Selection summary — inline in header row, not a separate bar
+.selection-summary {
+  font-size: 11px;
+  font-weight: 600;
+  color: #646cff;
+  margin-left: 8px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 4px 0;
-  margin-top: 4px;
-
-  .selection-count {
-    font-size: 11px;
-    font-weight: 600;
-    color: #646cff;
-  }
+  gap: 6px;
 
   .clear-selection-btn {
     background: none;
@@ -103,15 +113,28 @@
 }
 
 // ========== FILTERS ==========
+// Fixed-height filter bar that aligns with the Channels Pane filter bar.
 .filters-bar {
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--tui-base-03);
+  height: @pane-filters-height;
+  min-height: @pane-filters-height;
+  max-height: @pane-filters-height;
+  padding: 0 12px;
   display: flex;
   gap: 8px;
   align-items: center;
   background: var(--tui-base-01);
   position: relative;
   z-index: 100;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+// Horizontal divider between filters and scroll area — must remain fixed.
+.filters-divider {
+  height: @pane-divider-height;
+  min-height: @pane-divider-height;
+  background: rgba(100, 108, 255, 0.3);
+  flex-shrink: 0;
 }
 
 .search-input {
@@ -252,11 +275,43 @@
   }
 }
 
+// Custom M3U toggle — special separator item inside the provider dropdown
+.dropdown-separator {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+  margin: 4px 8px;
+}
+
+.dropdown-toggle-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.1s;
+  color: var(--tui-text-03);
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  &.active {
+    color: #646cff;
+  }
+
+  .material-icons {
+    font-size: 16px;
+  }
+}
+
 // ========== SCROLL AREA ==========
+// This is the only scrollable region. Header + filters stay fixed above.
 .scroll-area {
   flex: 1;
   overflow-y: auto;
   padding-bottom: 20px;
+  min-height: 0; // Required for flex children to shrink below content height
 
   &::-webkit-scrollbar {
     width: 6px;

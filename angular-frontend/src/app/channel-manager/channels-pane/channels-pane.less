@@ -2,6 +2,12 @@
    Channels Pane — Nested Group → Channel → Stream tree
    ====================================================================== */
 
+// ========== SHARED LAYOUT VARIABLES ==========
+// These heights MUST match streams-pane.less so both panes align horizontally.
+@pane-header-height: 42px;
+@pane-filters-height: 42px;
+@pane-divider-height: 1px;
+
 // ========== CONTAINER ==========
 .pane-container {
   display: flex;
@@ -14,15 +20,24 @@
 }
 
 // ========== HEADER ==========
+// Fixed-height header that aligns with the Streams Pane header.
 .pane-header {
-  padding: 10px 12px;
+  height: @pane-header-height;
+  min-height: @pane-header-height;
+  max-height: @pane-header-height;
+  padding: 0 12px;
   border-bottom: 1px solid var(--tui-base-03);
   background: #16213e;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  flex-shrink: 0;
 
   .header-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    width: 100%;
   }
 
   h3 {
@@ -69,15 +84,29 @@
 }
 
 // ========== FILTERS ==========
+// Fixed-height filter bar that aligns with the Streams Pane filter bar.
 .filters-bar {
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--tui-base-03);
+  height: @pane-filters-height;
+  min-height: @pane-filters-height;
+  max-height: @pane-filters-height;
+  padding: 0 12px;
   display: flex;
   gap: 8px;
+  align-items: center;
   background: var(--tui-base-01);
   // Ensure dropdowns from this bar render above the scroll-area below.
   position: relative;
   z-index: 10;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+// Horizontal divider between filters and scroll area — must remain fixed.
+.filters-divider {
+  height: @pane-divider-height;
+  min-height: @pane-divider-height;
+  background: rgba(100, 108, 255, 0.3);
+  flex-shrink: 0;
 }
 
 .search-input {
@@ -172,9 +201,11 @@
 }
 
 // ========== SCROLL AREA ==========
+// This is the only scrollable region. Header + filters stay fixed above.
 .scroll-area {
   flex: 1;
   overflow-y: auto;
+  min-height: 0; // Required for flex children to shrink below content height
 
   &::-webkit-scrollbar {
     width: 6px;

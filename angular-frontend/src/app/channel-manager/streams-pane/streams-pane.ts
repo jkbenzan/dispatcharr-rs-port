@@ -57,6 +57,8 @@ export class StreamsPaneComponent implements OnInit, OnDestroy {
 
   // =================== SELECTION (self-managed) ===================
 
+  @Output() selectionChange = new EventEmitter<Set<number>>();
+
   /** Internally managed set of selected stream IDs */
   selectedStreamIds: Set<number> = new Set();
 
@@ -73,6 +75,9 @@ export class StreamsPaneComponent implements OnInit, OnDestroy {
 
   /** When true, streams already assigned to a channel are hidden */
   hideAssigned = false;
+
+  /** When true, "custom" M3U providers are shown. Off by default. */
+  showCustomM3U = false;
 
   showProviderDropdown = false;
   showGroupDropdown = false;
@@ -227,7 +232,12 @@ export class StreamsPaneComponent implements OnInit, OnDestroy {
 
   get filteredM3UViews(): M3UView[] {
     return this.m3uViews.filter(m => {
-      // Filter by provider
+      // Filter out "custom" M3U providers unless the toggle is on
+      if (!this.showCustomM3U && this.isCustomM3U(m)) {
+        return false;
+      }
+
+      // Filter by provider selection
       if (this.selectedProviderFilters.size > 0 && !this.selectedProviderFilters.has(m.id)) {
         return false;
       }
@@ -354,10 +364,24 @@ export class StreamsPaneComponent implements OnInit, OnDestroy {
     this.cdr.markForCheck();
   }
 
+  /** Toggle visibility of "custom" M3U providers in the stream tree */
+  toggleShowCustomM3U() {
+    this.showCustomM3U = !this.showCustomM3U;
+    this.cdr.markForCheck();
+  }
+
+  /**
+   * Filter providers for the dropdown — excludes "custom" M3U when toggle is off.
+   * A provider is considered "custom" if its name is exactly "custom" (case-insensitive).
+   */
   get filteredProviders() {
-    return this.allM3Us.filter(m => 
-      m.name.toLowerCase().includes(this.providerSearch.toLowerCase())
-    );
+    return this.allM3Us.filter(m => {
+      // Filter by search text
+      if (!m.name.toLowerCase().includes(this.providerSearch.toLowerCase())) return false;
+      // Filter out custom M3U unless toggle is on
+      if (!this.showCustomM3U && this.isCustomM3U(m)) return false;
+      return true;
+    });
   }
 
   get filteredGroups() {
@@ -403,10 +427,8 @@ export class StreamsPaneComponent implements OnInit, OnDestroy {
     return this.selectedStreamIds.has(id);
   }
 
-  /**
-   * Toggle a single stream's selection. Supports shift-click range selection.
-   */
-  onToggleStream(id: number, event: MouseEvent) {
+  /** Toggle a stream checkbox */
+  toggleStreamSelect(id: number, event: MouseEvent) {
     event.stopPropagation();
 
     // Rebuild flat IDs on every click to match current filter state
@@ -430,6 +452,7 @@ export class StreamsPaneComponent implements OnInit, OnDestroy {
     }
 
     this.lastClickedStreamIdx = idx;
+    this.selectionChange.emit(new Set(this.selectedStreamIds));
     this.cdr.markForCheck();
   }
 
@@ -437,6 +460,7 @@ export class StreamsPaneComponent implements OnInit, OnDestroy {
   selectAllStreams() {
     this.rebuildFlatStreamIds();
     this.flatStreamIds.forEach(id => this.selectedStreamIds.add(id));
+    this.selectionChange.emit(new Set(this.selectedStreamIds));
     this.cdr.markForCheck();
   }
 
@@ -444,6 +468,7 @@ export class StreamsPaneComponent implements OnInit, OnDestroy {
   deselectAllStreams() {
     this.selectedStreamIds.clear();
     this.lastClickedStreamIdx = -1;
+    this.selectionChange.emit(new Set(this.selectedStreamIds));
     this.cdr.markForCheck();
   }
 
@@ -514,4 +539,12 @@ export class StreamsPaneComponent implements OnInit, OnDestroy {
   trackByM3UId(_: number, m: M3UView) { return m.id; }
   trackByGroupName(_: number, g: M3UGroupView) { return g.name; }
   trackByStreamId(_: number, s: any) { return s.id; }
+
+  /**
+   * Determine if an M3U provider is a "custom" provider.
+   * Custom providers are identified by their name being exactly "custom" (case-insensitive).
+   */
+  private isCustomM3U(m3u: any): boolean {
+    return m3u?.name?.toLowerCase().trim() === 'custom';
+  }
 }

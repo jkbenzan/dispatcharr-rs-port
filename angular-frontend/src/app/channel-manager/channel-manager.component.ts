@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, HostListener, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, HostListener, inject, ViewChild, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ChannelsPaneComponent } from './channels-pane/channels-pane';
 import { StreamsPaneComponent } from './streams-pane/streams-pane';
@@ -18,12 +18,52 @@ import { StreamsPaneComponent } from './streams-pane/streams-pane';
   changeDetection: ChangeDetectionStrategy.Default,
 })
 export class ChannelManagerComponent {
+  private readonly cdr = inject(ChangeDetectorRef);
+
+  @ViewChild(ChannelsPaneComponent) channelsPane!: ChannelsPaneComponent;
+  @ViewChild(StreamsPaneComponent) streamsPane!: StreamsPaneComponent;
+
   // Resizable pane state — default 40% left
   leftPaneWidth = 40;
   private isResizing = false;
 
   // Toolbar state
   toolbarExpanded = false;
+
+  // Selection tracking (for enabling/disabling toolbar buttons)
+  selectedStreamIds: Set<number> = new Set();
+  selectedChannelIds: Set<number> = new Set();
+
+  onStreamSelectionChange(ids: Set<number>) {
+    this.selectedStreamIds = ids;
+    this.cdr.markForCheck();
+  }
+
+  onChannelSelectionChange(ids: Set<number>) {
+    this.selectedChannelIds = ids;
+    this.cdr.markForCheck();
+  }
+
+  /**
+   * Bulk assign all selected streams from the Streams Pane
+   * to the single selected channel in the Channels Pane.
+   */
+  assignSelected() {
+    if (this.selectedStreamIds.size === 0 || this.selectedChannelIds.size !== 1) {
+      return;
+    }
+
+    const streamIds = Array.from(this.selectedStreamIds);
+    this.channelsPane.assignSelectedStreams(streamIds).subscribe({
+      next: (res) => {
+        if (res !== null) {
+          // Success: clear the stream selection
+          this.streamsPane.deselectAllStreams();
+        }
+      },
+      error: (err) => console.error('Bulk assignment failed:', err)
+    });
+  }
 
   // --- Toolbar logic ---
 

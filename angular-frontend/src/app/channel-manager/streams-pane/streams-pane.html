@@ -1,8 +1,14 @@
 <div class="pane-container" (click)="onDocumentClick()">
   <!-- ========== HEADER ========== -->
+  <!-- Fixed-height header — must match channels-pane height for horizontal alignment -->
   <div class="pane-header">
     <div class="header-row">
       <h3>STREAMS <span class="badge">{{ totalVisibleStreamCount }}</span></h3>
+      <!-- Inline selection summary (no height change) -->
+      <span class="selection-summary" *ngIf="selectedStreamIds.size > 0">
+        {{ selectedStreamIds.size }} selected
+        <button class="clear-selection-btn" (click)="deselectAllStreams()">Clear</button>
+      </span>
       <div class="header-actions">
         <!-- Select All / Deselect All -->
         <button class="icon-btn" (click)="allVisibleSelected ? deselectAllStreams() : selectAllStreams()"
@@ -18,14 +24,10 @@
         </button>
       </div>
     </div>
-    <!-- Selection summary bar -->
-    <div class="selection-bar" *ngIf="selectedStreamIds.size > 0">
-      <span class="selection-count">{{ selectedStreamIds.size }} selected</span>
-      <button class="clear-selection-btn" (click)="deselectAllStreams()">Clear</button>
-    </div>
   </div>
 
   <!-- ========== FILTERS ========== -->
+  <!-- Fixed-height filter bar — must match channels-pane height for horizontal alignment -->
   <div class="filters-bar">
     <!-- Search -->
     <input
@@ -53,6 +55,14 @@
                    (change)="toggleProviderFilter(m.id)" />
             {{ m.name }}
           </label>
+        </div>
+        <!-- Custom M3U visibility toggle — separated from the regular provider list -->
+        <div class="dropdown-separator"></div>
+        <div class="dropdown-toggle-item"
+             [class.active]="showCustomM3U"
+             (click)="toggleShowCustomM3U()">
+          <span class="material-icons">{{ showCustomM3U ? 'visibility' : 'visibility_off' }}</span>
+          Custom M3U
         </div>
       </div>
     </div>
@@ -87,6 +97,9 @@
       <span class="material-icons" style="font-size: 16px;">{{ hideAssigned ? 'visibility_off' : 'visibility' }}</span>
     </button>
   </div>
+
+  <!-- Horizontal divider — visual separator between fixed header/filters and scrollable data -->
+  <div class="filters-divider"></div>
 
   <!-- ========== TREE ========== -->
   <tui-loader [overlay]="true" [loading]="loading">
@@ -148,7 +161,7 @@
                   <input 
                     type="checkbox" 
                     [checked]="isStreamSelected(stream.id)"
-                    (click)="onToggleStream(stream.id, $event)"
+                    (click)="toggleStreamSelect(stream.id, $event)"
                   />
 
                   <!-- Drag handle (matches Channels Pane style) -->

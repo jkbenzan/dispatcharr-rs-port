@@ -103,8 +103,9 @@ angular-frontend/src/app/
 
 ### Selection System
 - **Channels Pane**: Checkboxes on channels and streams. Shift-click range selection on channels. Select All / Deselect All in header. Inline group-level select-all checkbox (with indeterminate state) for selecting all channels in a group.
-- **Streams Pane**: Self-managed selection state (no parent binding). Shift-click range selection. Select All / Deselect All in header.
+- **Streams Pane**: Self-managed selection state (no parent binding). Shift-click range selection. Select All / Deselect All in header. Inline selection count displayed in header row.
 - **Multi-select Drag**: When dragging a selected stream, all selected streams are included in the drag payload.
+- **Bulk Assignment**: Both panes emit `selectionChange` events to the parent `ChannelManagerComponent`. The "Assign Selected" button (visible in both collapsed and expanded toolbar states) activates when exactly 1 channel and ≥1 stream are selected. It calls `ChannelsPaneComponent.assignSelectedStreams()` which PATCHes the channel with the combined stream list.
 
 ### Drag-and-Drop Stream Assignment
 - Streams in the Stream Pane are `draggable="true"` and set `application/json` data with selected stream IDs.
@@ -114,10 +115,16 @@ angular-frontend/src/app/
 - **Persistence**: The full stream ID list (existing + new) is sent via `PATCH /api/channels/channels/:id/` with `{ streams: [...] }`.
 - **Internal reorder**: Within the Channels Pane, streams can also be reordered within a single channel via drag handles (separate drag type using `text/plain`).
 
+### Layout Alignment
+- **Fixed-height header and filters**: Both Channels and Streams panes use identical CSS variable heights (`@pane-header-height: 42px`, `@pane-filters-height: 42px`) ensuring pixel-perfect horizontal alignment across the split-pane layout.
+- **Horizontal divider**: A styled `filters-divider` (rgba accent line) sits between the filter bar and scroll area on both panes, providing a clear visual boundary.
+- **Fixed header/filters**: The header, filters, and divider are `flex-shrink: 0` with explicit heights, so they remain fixed while only the `.scroll-area` (with `flex: 1; overflow-y: auto; min-height: 0`) scrolls independently per pane.
+
 ### Stream Pane (Source View)
 - **Hierarchy**: M3U Provider → M3U Group → Stream Name.
 - **M3U Row**: Displays provider name, fetching status, last updated timestamp, and a manual "Refresh Now" button. All providers are shown even if they have 0 streams.
 - **Provider/Group Filter**: Searchable multi-select dropdowns that filter the tree.
+- **Custom M3U Filter**: Inside the Provider dropdown, a toggle (`showCustomM3U`, default `false`) controls visibility of providers whose name is "custom" (case-insensitive). This prevents custom/manually-added streams from cluttering the view by default, but users can opt in.
 - **Group Name Resolution**: `channel_group` is a numeric ID in the stream API response. The frontend resolves it to a human-readable name via `GET /api/channels/groups/`.
 - **Hide Assigned Toggle**: Filters out streams that are already assigned to at least one channel. Assigned status is determined by fetching all channels and collecting their stream IDs.
 - **Stream Preview**: Integrated "Preview Stream" button opens the in-app player.

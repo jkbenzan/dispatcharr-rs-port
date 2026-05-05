@@ -2,7 +2,7 @@
 <div class="split-pane">
   <!-- LEFT: Channels pane (self-contained) -->
   <div class="pane left" [style.width.%]="leftPaneWidth">
-    <app-channels-pane></app-channels-pane>
+    <app-channels-pane (selectionChange)="onChannelSelectionChange($event)"></app-channels-pane>
   </div>
 
   <!-- TOOLBAR / DIVIDER -->
@@ -15,10 +15,20 @@
       <div class="divider-handle" *ngIf="!toolbarExpanded"></div>
     </div>
 
-    <!-- Collapsed state (Expand Button) -->
-    <button class="toggle-btn collapsed-btn" *ngIf="!toolbarExpanded" (click)="toggleToolbar()">
-      <span class="material-icons">chevron_right</span>
-    </button>
+    <!-- Collapsed state: Expand Button + quick-action icons -->
+    <div class="collapsed-actions" *ngIf="!toolbarExpanded">
+      <button class="toggle-btn collapsed-btn" (click)="toggleToolbar()">
+        <span class="material-icons">chevron_right</span>
+      </button>
+
+      <!-- Quick assign button — visible even when toolbar is collapsed -->
+      <button class="quick-action-btn"
+              (click)="assignSelected()"
+              [disabled]="selectedStreamIds.size === 0 || selectedChannelIds.size !== 1"
+              title="Assign selected streams to the selected channel">
+        <span class="material-icons">add_link</span>
+      </button>
+    </div>
 
     <!-- Expanded state -->
     <div class="toolbar-content" *ngIf="toolbarExpanded">
@@ -30,6 +40,13 @@
       </div>
 
       <div class="toolbar-actions">
+        <button class="action-btn" (click)="assignSelected()" 
+                [disabled]="selectedStreamIds.size === 0 || selectedChannelIds.size !== 1"
+                title="Assign selected streams to the selected channel">
+          <span class="material-icons">add_link</span>
+          <span class="action-label">Assign Selected</span>
+        </button>
+
         <button class="action-btn">
           <span class="material-icons">add_box</span>
           <span class="action-label">Create Channel</span>
@@ -41,6 +58,6 @@
 
   <!-- RIGHT: Streams pane (independent catalog) -->
   <div class="pane right" [style.width.%]="100 - leftPaneWidth - (toolbarExpanded ? 10 : 0)">
-    <app-streams-pane></app-streams-pane>
+    <app-streams-pane (selectionChange)="onStreamSelectionChange($event)"></app-streams-pane>
   </div>
 </div>

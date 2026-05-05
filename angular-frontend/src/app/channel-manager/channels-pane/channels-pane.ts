@@ -8,6 +8,8 @@ import { ApiService } from '../../api.service';
 import { VideoPlayerComponent } from '../video-player/video-player.component';
 import { TuiSheetDialog } from '@taiga-ui/addon-mobile';
 import { StreamCheckerSheetComponent } from '../stream-checker-sheet/stream-checker-sheet';
+import { Observable, of } from 'rxjs';
+import { tap } from 'rxjs/operators';
 
 // =================== INTERFACES ===================
 
@@ -76,6 +78,8 @@ export class ChannelsPaneComponent implements OnInit {
   showGroupFilterDropdown = false;
 
   // =================== SELECTION ===================
+
+  @Output() selectionChange = new EventEmitter<Set<number>>();
 
   /** Selected channel IDs (checkboxes) */
   selectedChannelIds: Set<number> = new Set();
@@ -409,6 +413,7 @@ export class ChannelsPaneComponent implements OnInit {
     }
 
     this.lastClickedChannelIdx = idx;
+    this.selectionChange.emit(new Set(this.selectedChannelIds));
     this.cdr.markForCheck();
   }
 
@@ -419,6 +424,7 @@ export class ChannelsPaneComponent implements OnInit {
   /** Select all visible channels */
   selectAllChannels() {
     this.flatChannelIds.forEach(id => this.selectedChannelIds.add(id));
+    this.selectionChange.emit(new Set(this.selectedChannelIds));
     this.cdr.markForCheck();
   }
 
@@ -426,6 +432,7 @@ export class ChannelsPaneComponent implements OnInit {
   deselectAllChannels() {
     this.selectedChannelIds.clear();
     this.lastClickedChannelIdx = -1;
+    this.selectionChange.emit(new Set(this.selectedChannelIds));
     this.cdr.markForCheck();
   }
 
@@ -461,6 +468,7 @@ export class ChannelsPaneComponent implements OnInit {
         this.selectedChannelIds.add(ch.id);
       }
     });
+    this.selectionChange.emit(new Set(this.selectedChannelIds));
     this.cdr.markForCheck();
   }
 
@@ -828,6 +836,32 @@ export class ChannelsPaneComponent implements OnInit {
     if (stats.video_bitrate) parts.push(`${(stats.video_bitrate / 1000).toFixed(1)} Mbps`);
     if (stats.status) parts.push(stats.status);
     return parts.length > 0 ? parts.join(' · ') : 'No stats';
+  }
+
+  /**
+   * Bulk assign streams to the currently selected channel.
+   * Only called if exactly one channel is selected.
+   */
+  assignSelectedStreams(streamIds: number[]): Observable<any> {
+    if (this.selectedChannelIds.size !== 1) return of(null);
+    const channelId = [...this.selectedChannelIds][0];
+    
+    // Find the channel view
+    let channel: ChannelView | undefined;
+    for (const g of this.groupViews) {
+      channel = g.channels.find(ch => ch.id === channelId);
+      if (channel) break;
+    }
+    if (!channel) return of(null);
+
+    const existingIds = new Set(channel.streams.map(s => s.id));
+    const newIds = streamIds.filter(id => !existingIds.has(id));
+    if (newIds.length === 0) return of(null);
+
+    const allStreamIds = [...channel.streams.map(s => s.id), ...newIds];
+    return this.api.updateChannel(channel.id, { streams: allStreamIds }).pipe(
+      tap(() => this.loadData())
+    );
   }
 
   /** Track-by for ngFor performance */
