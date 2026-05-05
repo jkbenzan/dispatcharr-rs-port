@@ -162,6 +162,17 @@ Taiga UI v5 significantly overhauled its dependency injection and provider syste
 
 ---
 
+## Channel Data Database (Sidecar Integration)
+
+To enrich channels with metadata (like correct logos, station identifiers, and EPG mapping heuristics), Dispatcharr-RS integrates a **third-party, read-only SQLite database** (`channel_data.db`) containing TV station metadata (powered by Gracenote data). 
+
+- **Sidecar Architecture**: Rather than bloating the core PostgreSQL schema with millions of immutable station rows, this data lives in an external SQLite file.
+- **Graceful Fallback**: The backend dynamically mounts the database at startup via an `Arc<RwLock<ChannelDb>>` injected into the Axum state. If the database file is missing or invalid, the backend continues to function normally, but the `/api/channel-db/*` endpoints will gracefully return `503 Service Unavailable`.
+- **Fuzzy Matching (`channel_match.rs`)**: A custom string-similarity heuristic is implemented using Jaro-Winkler distance (from the `strsim` crate). It parses user channel names (removing "HD", "FHD", country codes), and scores them against the SQLite station data based on call sign, common names, and available video resolutions.
+- **Hot-swapping**: The database connection can be locked and re-opened at runtime, allowing the server to download updated database files and seamlessly swap them without restarting the application.
+
+---
+
 ## Backend API Routes
 
 > **Critical:** The Angular frontend calls the Rust backend directly. These URL paths must match exactly.
