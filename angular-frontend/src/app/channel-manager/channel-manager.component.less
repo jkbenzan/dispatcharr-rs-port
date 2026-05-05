@@ -122,8 +122,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   border-radius: 4px;
   color: var(--tui-primary);
   background: rgba(100, 108, 255, 0.1);
@@ -139,10 +139,16 @@
     cursor: not-allowed;
     pointer-events: none;
   }
+}
 
-  .material-icons {
-    font-size: 18px;
-  }
+// ========== CUSTOM SVG ICONS ==========
+// Inline SVGs use currentColor for stroke, so they inherit the parent's color
+// and respond to hover / disabled states automatically.
+
+.custom-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
 }
 
 // ========== TOOLBAR CONTENT ==========
