@@ -18,6 +18,7 @@
 *.sql
 
 # Reference Projects (local copies, not part of this repo)
+Dispatcharr/
 Dispatcharr-main/
 enhancedchannelmanager-main/
 
