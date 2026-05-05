@@ -31,12 +31,27 @@
   border-left: 1px solid var(--tui-base-03);
   border-right: 1px solid var(--tui-base-03);
   position: relative;
-  transition: width 0.3s ease;
+  transition: width 0.3s ease, box-shadow 0.3s ease;
   z-index: 10;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+
+  // Beveling effect using inset box-shadow
+  &::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    pointer-events: none;
+    box-shadow: inset 1px 1px 0px rgba(255, 255, 255, 0.08), inset -1px 0px 0px rgba(0, 0, 0, 0.3);
+    z-index: 11;
+  }
   
   &:not(.expanded) {
     width: 24px;
     justify-content: center;
+  }
+
+  &.expanded {
+    background: linear-gradient(180deg, var(--tui-base-02) 0%, rgba(20, 20, 20, 0.95) 100%);
   }
 }
 
@@ -157,7 +172,7 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 12px;
+  padding: 16px;
   min-width: 0;
   overflow: hidden;
   margin-left: 6px; // Space for drag handle
@@ -180,7 +195,7 @@
 .toolbar-actions {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 16px;
 }
 
 // Action buttons in expanded toolbar — icon-only, centered, with tooltip
@@ -190,35 +205,41 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 100%;
+  aspect-ratio: 1;
+  max-width: 80px;
+  max-height: 80px;
   margin: 0 auto; // center in toolbar
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
+  border-radius: 12px;
   color: var(--tui-primary);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
   transition: all 0.2s ease;
 
   &:hover:not([disabled]) {
     background: rgba(100, 108, 255, 0.2);
     border-color: rgba(100, 108, 255, 0.4);
-    transform: scale(1.08);
+    transform: scale(1.05);
+    box-shadow: 0 6px 14px rgba(100, 108, 255, 0.3);
   }
 
   &:active {
     transform: scale(0.97);
+    box-shadow: 0 2px 4px rgba(100, 108, 255, 0.2);
   }
 
   &[disabled] {
     opacity: 0.25;
     cursor: not-allowed;
     pointer-events: none;
+    box-shadow: none;
   }
 
-  // Custom SVG icons in expanded toolbar are slightly larger
+  // Custom SVG icons auto-resize with the button
   .custom-icon {
-    width: 24px;
-    height: 24px;
+    width: 50%;
+    height: 50%;
   }
 }
 
