@@ -1,7 +1,10 @@
-import { ChangeDetectionStrategy, Component, HostListener, inject, ViewChild, ChangeDetectorRef } from '@angular/core';
+import { ChangeDetectionStrategy, Component, HostListener, inject, ViewChild, ChangeDetectorRef, Injector } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ChannelsPaneComponent } from './channels-pane/channels-pane';
 import { StreamsPaneComponent } from './streams-pane/streams-pane';
+import { TuiDialogService } from '@taiga-ui/core';
+import { PolymorpheusComponent } from '@taiga-ui/polymorpheus';
+import { CreateChannelDialogComponent } from './create-channel-dialog/create-channel-dialog';
 
 /**
  * Channel Manager orchestrator — manages the resizable two-pane layout.
@@ -19,6 +22,8 @@ import { StreamsPaneComponent } from './streams-pane/streams-pane';
 })
 export class ChannelManagerComponent {
   private readonly cdr = inject(ChangeDetectorRef);
+  private readonly dialogs = inject(TuiDialogService);
+  private readonly injector = inject(Injector);
 
   @ViewChild(ChannelsPaneComponent) channelsPane!: ChannelsPaneComponent;
   @ViewChild(StreamsPaneComponent) streamsPane!: StreamsPaneComponent;
@@ -64,6 +69,17 @@ export class ChannelManagerComponent {
         }
       },
       error: (err) => console.error('Bulk assignment failed:', err)
+    });
+  }
+
+  openCreateChannelDialog() {
+    this.dialogs.open<boolean>(
+      new PolymorpheusComponent(CreateChannelDialogComponent, this.injector),
+      { size: 'l', dismissible: true }
+    ).subscribe(result => {
+      if (result) {
+        this.channelsPane.loadData();
+      }
     });
   }
 

@@ -375,7 +375,7 @@ async fn main() {
         .route("/api/core/rehash-streams/", post(api::rehash_streams))
         .route("/api/core/background-telemetry/", get(api::get_background_telemetry))
         // --- CHANNELS & M3U ---
-        .route("/api/channels/channels/", get(api::get_channels))
+        .route("/api/channels/channels/", get(api::get_channels).post(api::create_channel))
         .route("/api/channels/channels/summary/", get(api::get_channels_summary))
         .route("/api/channels/channels/summary", get(api::get_channels_summary))
         .route("/api/channels/channels/by-uuids/", post(api::get_channels_by_uuids))

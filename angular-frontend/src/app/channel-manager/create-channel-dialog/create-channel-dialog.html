@@ -1,0 +1,84 @@
+<div class="dialog-container">
+  <h2>Create Channel</h2>
+  
+  <form [formGroup]="form" (ngSubmit)="submit()">
+    <div class="form-row">
+      <div class="form-group flex-2">
+        <label>Channel Name</label>
+        <input type="text" formControlName="name" class="tui-input" placeholder="e.g. HBO HD" autocomplete="off">
+        
+        <div class="suggestions-dropdown" *ngIf="suggestions.length > 0">
+          <div class="suggestion-item" *ngFor="let s of suggestions" (click)="selectSuggestion(s)">
+            <span class="s-name">{{ s.name }}</span>
+            <span class="s-callsign" *ngIf="s.call_sign">{{ s.call_sign }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="form-group flex-1">
+        <label>Channel #</label>
+        <input type="number" formControlName="channel_number" class="tui-input" placeholder="Auto">
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group flex-1">
+        <label>Channel Group</label>
+        <select formControlName="channel_group_id" class="tui-select">
+          <option [ngValue]="null">-- Select Group --</option>
+          <option *ngFor="let g of groups" [ngValue]="g.id">{{ g.name }}</option>
+        </select>
+      </div>
+      <div class="form-group flex-1">
+        <label>Stream Profile</label>
+        <select formControlName="stream_profile_id" class="tui-select">
+          <option [ngValue]="null">-- Default Profile --</option>
+          <option *ngFor="let p of profiles" [ngValue]="p.id">{{ p.name }}</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group flex-1">
+        <label>TVG-ID</label>
+        <input type="text" formControlName="tvg_id" class="tui-input" placeholder="e.g. HBO.us">
+      </div>
+      <div class="form-group flex-1">
+        <label>Gracenote Station ID</label>
+        <input type="text" formControlName="tvc_guide_stationid" class="tui-input" placeholder="e.g. 12345">
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group flex-1">
+        <label>Logo</label>
+        <select formControlName="logo_id" class="tui-select">
+          <option [ngValue]="null">-- No Logo --</option>
+          <option *ngFor="let l of logos" [ngValue]="l.id">{{ l.name }}</option>
+        </select>
+        <small class="hint">GitHub logo search coming soon.</small>
+      </div>
+      <div class="form-group flex-1">
+        <label>User Level</label>
+        <select formControlName="user_level" class="tui-select">
+          <option [ngValue]="1">Level 1 (Everyone)</option>
+          <option [ngValue]="2">Level 2</option>
+          <option [ngValue]="3">Level 3</option>
+          <option [ngValue]="4">Level 4</option>
+          <option [ngValue]="5">Level 5 (Admin Only)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-row checkbox-row">
+      <label class="checkbox-label">
+        <input type="checkbox" formControlName="is_adult">
+        <span>Mature Content (Requires Adult Role)</span>
+      </label>
+    </div>
+
+    <div class="dialog-actions">
+      <button type="button" class="btn-cancel" (click)="cancel()">Cancel</button>
+      <button type="submit" class="btn-submit" [disabled]="form.invalid">Create Channel</button>
+    </div>
+  </form>
+</div>

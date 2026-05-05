@@ -3706,6 +3706,76 @@ mod tests {
 
 // --- CHANNELS UPDATING ---
 
+pub async fn create_channel(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    use crate::entities::channel;
+    use sea_orm::{ActiveModelTrait, Set, QueryOrder};
+    use uuid::Uuid;
+
+    let name = payload.get("name").and_then(|v| v.as_str()).unwrap_or("New Channel").to_string();
+
+    let mut channel_number = 0.0;
+    if let Some(num) = payload.get("channel_number") {
+        if let Some(n) = num.as_f64() {
+            channel_number = n;
+        } else if let Some(n) = num.as_i64() {
+            channel_number = n as f64;
+        } else if let Some(n) = num.as_str().and_then(|s| s.parse::<f64>().ok()) {
+            channel_number = n;
+        }
+    }
+    
+    if channel_number == 0.0 {
+        // Auto-assign max + 1
+        if let Ok(Some(max_ch)) = channel::Entity::find()
+            .order_by_desc(channel::Column::ChannelNumber)
+            .one(&state.db)
+            .await 
+        {
+            channel_number = max_ch.channel_number.floor() + 1.0;
+        } else {
+            channel_number = 1.0;
+        }
+    }
+
+    let mut active = channel::ActiveModel {
+        name: Set(name),
+        channel_number: Set(channel_number),
+        uuid: Set(Uuid::new_v4()),
+        auto_created: Set(false),
+        is_adult: Set(payload.get("is_adult").and_then(|v| v.as_bool()).unwrap_or(false)),
+        user_level: Set(payload.get("user_level").and_then(|v| v.as_i64()).unwrap_or(1) as i32),
+        created_at: Set(chrono::Utc::now().into()),
+        updated_at: Set(chrono::Utc::now().into()),
+        ..Default::default()
+    };
+
+    if let Some(cg) = payload.get("channel_group_id") {
+        active.channel_group_id = Set(parse_id(cg));
+    }
+    if let Some(sp) = payload.get("stream_profile_id") {
+        active.stream_profile_id = Set(parse_id(sp));
+    }
+    if let Some(epg) = payload.get("epg_data_id") {
+        active.epg_data_id = Set(parse_id(epg));
+    }
+    if let Some(logo) = payload.get("logo_id") {
+        active.logo_id = Set(parse_id(logo));
+    }
+    if let Some(tvg) = payload.get("tvg_id").and_then(|v| v.as_str()) {
+        active.tvg_id = Set(Some(tvg.to_string()));
+    }
+    if let Some(tvc) = payload.get("tvc_guide_stationid").and_then(|v| v.as_str()) {
+        active.tvc_guide_stationid = Set(Some(tvc.to_string()));
+    }
+
+    let inserted = active.insert(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(get_channel_json(&state.db, inserted).await))
+}
+
 pub async fn update_channel(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,

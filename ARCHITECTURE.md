@@ -173,6 +173,15 @@ To enrich channels with metadata (like correct logos, station identifiers, and E
 
 ---
 
+## Logo Management
+
+Dispatcharr supports fetching and syncing channel logos from a configurable GitHub repository (e.g., `https://github.com/tv-logo/tv-logos.git`).
+- **Configurable Repository**: The repository URL is stored in the application settings.
+- **Periodic Sync**: A background task clones/pulls the repository to local disk and scans for image files.
+- **Searchable Index**: The parsed logos are inserted into the `dispatcharr_channels_logo` database table, allowing them to be searched via `/api/channels/logos/` and selected natively within the Angular UI (e.g., inside the Create Channel dialog).
+
+---
+
 ## Backend API Routes
 
 > **Critical:** The Angular frontend calls the Rust backend directly. These URL paths must match exactly.
@@ -182,6 +191,7 @@ To enrich channels with metadata (like correct logos, station identifiers, and E
 | Method | Path | Handler | Notes |
 |--------|------|---------|-------|
 | GET | `/api/channels/channels/` | `get_channels` | Paginated, includes `streams` array. Supports `?search=`, `?channel_group=`, `?ordering=`, `?page_size=` (default 50, max 5000) |
+| POST | `/api/channels/channels/` | `create_channel` | Create a new channel manually |
 | GET | `/api/channels/channels/summary/` | `get_channels_summary` | Lightweight: id, name, logo_id, channel_number only |
 | PATCH/PUT | `/api/channels/channels/:id/` | `update_channel` | Update channel fields including `streams` array |
 | GET | `/api/channels/groups/` | `get_channel_groups` | Returns flat array of `{id, name}` |
