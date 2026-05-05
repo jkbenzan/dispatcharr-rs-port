@@ -254,6 +254,14 @@ pub async fn initialize_core_settings(db: &sea_orm::DatabaseConnection) {
                 "max_streams": 1
             }),
         ),
+        (
+            "channel_db_settings",
+            "Channel DB Settings",
+            serde_json::json!({
+                "download_url": "https://github.com/djpongh/channelidentifiarr/releases/latest/download/channelidentifiarr.db",
+                "auto_check": false
+            }),
+        ),
     ];
 
     tracing::info!("🔍 Checking core settings defaults...");

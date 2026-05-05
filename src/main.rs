@@ -15,6 +15,9 @@ mod accounts;
 mod api;
 mod auth;
 mod background;
+mod channel_db;
+mod channel_match;
+mod channel_db_api;
 mod channel_sync;
 mod entities;
 mod epg;
@@ -117,6 +120,7 @@ use axum::extract::State;
 pub struct AppState {
     pub db: DatabaseConnection,
     pub http_client: reqwest::Client,
+    pub channel_db: Arc<tokio::sync::RwLock<channel_db::ChannelDb>>,
     pub ws_sender: tokio::sync::broadcast::Sender<serde_json::Value>,
     pub active_streams:
         Arc<tokio::sync::RwLock<std::collections::HashMap<String, crate::proxy::ChannelStats>>>,
@@ -244,9 +248,15 @@ async fn main() {
 
     let http_client = crate::settings::get_http_client(&db).await;
 
+    // Initialize optional channel data database
+    let channel_db_path = std::env::var("CHANNEL_DB_PATH")
+        .unwrap_or_else(|_| "./channel_data.db".to_string());
+    let channel_db = channel_db::ChannelDb::init(&channel_db_path).await;
+
     let state = Arc::new(AppState {
         db,
         http_client,
+        channel_db: Arc::new(tokio::sync::RwLock::new(channel_db)),
         ws_sender,
         active_streams: Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new())),
         broadcasters: Arc::new(dashmap::DashMap::new()),
@@ -580,6 +590,21 @@ async fn main() {
         .route("/proxy/ts/status/", get(proxy::handle_ts_status))
         .route("/proxy/vod/stats", get(proxy::handle_vod_stats))
         .route("/proxy/vod/stats/", get(proxy::handle_vod_stats))
+        // --- CHANNEL DATABASE ---
+        .route("/api/channel-db/health/", get(channel_db_api::health))
+        .route("/api/channel-db/metadata/", get(channel_db_api::get_metadata))
+        .route("/api/channel-db/stats/", get(channel_db_api::get_stats))
+        .route("/api/channel-db/filter-options/", get(channel_db_api::get_filter_options))
+        .route("/api/channel-db/search/stations/", get(channel_db_api::search_stations))
+        .route("/api/channel-db/station/:station_id/", get(channel_db_api::get_station))
+        .route("/api/channel-db/lineups/search-by-zip/", get(channel_db_api::search_lineups_by_zip))
+        .route("/api/channel-db/lineups/:lineup_id/preview/", get(channel_db_api::preview_lineup))
+        .route("/api/channel-db/lineups/:lineup_id/import/", post(channel_db_api::import_lineup))
+        .route("/api/channel-db/match/suggest/", post(channel_db_api::suggest_matches))
+        .route("/api/channel-db/match/apply/", post(channel_db_api::apply_match))
+        .route("/api/channel-db/match/batch/", post(channel_db_api::batch_match))
+        .route("/api/channel-db/update/check/", get(channel_db_api::check_update))
+        .route("/api/channel-db/update/download/", post(channel_db_api::download_update))
         // Serve the compiled React frontend for non-API routes
         .nest("/api/accounts", accounts_routes)
         .nest("/api/vod", vod_routes)

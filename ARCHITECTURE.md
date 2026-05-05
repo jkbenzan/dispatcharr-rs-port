@@ -201,6 +201,14 @@ Taiga UI v5 significantly overhauled its dependency injection and provider syste
 | GET | `/api/stream-checker/sorting-rules/` | `list_sorting_rules` | List all sorting rules |
 | POST | `/api/stream-checker/sorting-rules/` | `create_sorting_rule` | Create a sorting rule |
 
+### Channel Data Database Endpoints
+| Method | Path | Handler | Notes |
+|--------|------|---------|-------|
+| GET | `/api/channel-db/health/` | `health` | Status and station count |
+| GET | `/api/channel-db/search/stations/` | `search_stations` | Query third party TV station data |
+| POST | `/api/channel-db/match/suggest/` | `suggest_matches` | Fuzzy match local channel against metadata |
+| GET | `/api/channel-db/lineups/search-by-zip/` | `search_lineups_by_zip` | Find local MSO lineups |
+
 > ⚠️ **Common pitfall:** The original Django API used `/api/channels/` for channels. The Rust port uses `/api/channels/channels/` (double "channels"). Streams are at `/api/channels/streams/` not `/api/streams/`. Stream _checking_ routes are at `/api/streams/` (single).
 
 ---
