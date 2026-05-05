@@ -326,7 +326,25 @@
   }
 
   input[type="checkbox"] {
-    margin-right: 12px;
+    margin-right: 8px;
+    cursor: pointer;
+    accent-color: #646cff;
+    flex-shrink: 0;
+  }
+
+  // Drag handle — matches Channels Pane style
+  .drag-handle {
+    font-size: 16px;
+    color: var(--tui-text-03);
+    cursor: grab;
+    flex-shrink: 0;
+    opacity: 0.4;
+    transition: opacity 0.15s;
+    margin-right: 8px;
+
+    &:hover {
+      opacity: 1;
+    }
   }
 }
 

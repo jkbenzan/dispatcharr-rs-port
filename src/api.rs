@@ -1324,7 +1324,13 @@ pub async fn get_streams(
     Query(params): Query<HashMap<String, String>>,
 ) -> Json<Value> {
     let page: u64 = params.get("page").and_then(|p| p.parse().ok()).unwrap_or(1);
-    let page_size: u64 = 50;
+    // Allow the client to specify page_size (e.g. for the tree-view pane that needs all streams).
+    // Default to 50 for normal paginated usage; cap at 10000 to prevent abuse.
+    let page_size: u64 = params
+        .get("page_size")
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(50)
+        .min(10000);
     let offset = (page.saturating_sub(1)) * page_size;
 
     let mut q = stream::Entity::find();

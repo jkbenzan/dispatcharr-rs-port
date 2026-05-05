@@ -51,6 +51,9 @@ export class StreamsPaneComponent implements OnInit, OnDestroy {
   allM3Us: any[] = [];
   allGroups: string[] = [];
   
+  /** Lookup: channel_group_id → group name (resolved from /api/channels/groups/) */
+  private channelGroupNames: Map<number, string> = new Map();
+
   loading = false;
   refreshingIds: Set<number> = new Set();
 
@@ -83,48 +86,58 @@ export class StreamsPaneComponent implements OnInit, OnDestroy {
     this.loading = true;
     this.cdr.markForCheck();
 
-    // Fetch playlists (providers)
-    this.api.getPlaylists().subscribe((m3us: any) => {
-      this.allM3Us = Array.isArray(m3us) ? m3us : m3us?.results || [];
-      
-      // Fetch all streams to build the tree
-      // Using a large page_size to get enough data for the tree view
-      this.api.getStreams({ page_size: 5000 }).subscribe({
-        next: (streamsRes: any) => {
-          const streams = Array.isArray(streamsRes) ? streamsRes : streamsRes?.results || [];
-          this.buildTree(this.allM3Us, streams);
-          this.loading = false;
-          this.cdr.markForCheck();
-        },
-        error: (err) => {
-          console.error('Failed to fetch streams:', err);
-          this.loading = false;
-          this.cdr.markForCheck();
-        }
+    // Step 1: Fetch channel groups first so we can resolve IDs → names
+    this.api.getChannelGroups().subscribe((groupsRes: any) => {
+      const groups = Array.isArray(groupsRes) ? groupsRes : groupsRes?.results || [];
+      this.channelGroupNames.clear();
+      groups.forEach((g: any) => this.channelGroupNames.set(g.id, g.name));
+
+      // Step 2: Fetch playlists (providers)
+      this.api.getPlaylists().subscribe((m3us: any) => {
+        this.allM3Us = Array.isArray(m3us) ? m3us : m3us?.results || [];
+        
+        // Step 3: Fetch all streams to build the tree
+        // Using a large page_size to get enough data for the tree view
+        this.api.getStreams({ page_size: 10000 }).subscribe({
+          next: (streamsRes: any) => {
+            const streams = Array.isArray(streamsRes) ? streamsRes : streamsRes?.results || [];
+            this.buildTree(this.allM3Us, streams);
+            this.loading = false;
+            this.cdr.markForCheck();
+          },
+          error: (err) => {
+            console.error('Failed to fetch streams:', err);
+            this.loading = false;
+            this.cdr.markForCheck();
+          }
+        });
       });
     });
   }
 
   private buildTree(m3us: any[], streams: any[]) {
-    // Collect all unique group names for the filter
+    // Collect all unique group names for the filter dropdown.
+    // channel_group is a numeric ID — resolve it to a human-readable name
+    // using the channelGroupNames lookup populated from /api/channels/groups/.
     const groupsSet = new Set<string>();
     streams.forEach(s => {
-      if (s.channel_group) groupsSet.add(s.channel_group);
+      const groupName = this.resolveGroupName(s.channel_group);
+      if (groupName) groupsSet.add(groupName);
     });
     this.allGroups = Array.from(groupsSet).sort();
 
-    // Group streams by M3U Account ID, then by Group Name
+    // Group streams by M3U Account ID, then by resolved Group Name
     const streamsByM3U = new Map<number, Map<string, any[]>>();
 
     streams.forEach(s => {
-      const m3uId = s.m3u_account_id;
+      const m3uId = s.m3u_account_id ?? s.m3u_account;
       if (m3uId === undefined || m3uId === null) return;
 
       if (!streamsByM3U.has(m3uId)) {
         streamsByM3U.set(m3uId, new Map<string, any[]>());
       }
       
-      const groupName = s.channel_group || 'Ungrouped';
+      const groupName = this.resolveGroupName(s.channel_group) || 'Ungrouped';
       const m3uGroups = streamsByM3U.get(m3uId)!;
       
       if (!m3uGroups.has(groupName)) {
@@ -133,11 +146,21 @@ export class StreamsPaneComponent implements OnInit, OnDestroy {
       m3uGroups.get(groupName)!.push(s);
     });
 
+    // Preserve existing expansion state when rebuilding the tree
+    const previousExpandedM3U = new Set(this.m3uViews.filter(m => m.expanded).map(m => m.id));
+    const previousExpandedGroups = new Set<string>();
+    this.m3uViews.forEach(m => {
+      m.groups.forEach(g => {
+        if (g.expanded) previousExpandedGroups.add(`${m.id}::${g.name}`);
+      });
+    });
+
+    // Build M3U views — show ALL providers, even those with 0 streams
     this.m3uViews = m3us.map(m => {
       const m3uGroups = streamsByM3U.get(m.id) || new Map<string, any[]>();
       const groups: M3UGroupView[] = Array.from(m3uGroups.keys()).sort().map(name => ({
         name,
-        expanded: false,
+        expanded: previousExpandedGroups.has(`${m.id}::${name}`),
         streams: m3uGroups.get(name)!
       }));
 
@@ -148,11 +171,28 @@ export class StreamsPaneComponent implements OnInit, OnDestroy {
         name: m.name,
         status: m.status || 'idle',
         last_refreshed: m.updated_at || m.last_refreshed,
-        expanded: false,
+        expanded: previousExpandedM3U.has(m.id),
         groups,
         total_streams: totalStreams
       };
-    }).filter(m => m.total_streams > 0); // Only show providers with streams
+    });
+    // No longer filtering out empty providers — all M3U accounts are always shown
+  }
+
+  /**
+   * Resolve a channel_group value to a human-readable group name.
+   * The API returns channel_group as a numeric ID referencing the
+   * dispatcharr_channels_channelgroup table. We resolve it using
+   * the channelGroupNames map populated from GET /api/channels/groups/.
+   */
+  private resolveGroupName(channelGroup: any): string {
+    if (channelGroup === null || channelGroup === undefined) return '';
+    // If it's a number, look up the group name from our map
+    if (typeof channelGroup === 'number') {
+      return this.channelGroupNames.get(channelGroup) || `Group #${channelGroup}`;
+    }
+    // If it's already a string (shouldn't happen with current API, but defensive)
+    return String(channelGroup);
   }
 
   // =================== FILTERS ===================

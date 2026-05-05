@@ -193,8 +193,18 @@ export class ChannelsPaneComponent implements OnInit {
   /**
    * Build the nested GroupView[] from raw groups and channels data.
    * Only groups with at least one channel are included.
+   * Preserves previous expansion state when rebuilding.
    */
   private buildGroupViews(groups: any[], channels: any[]) {
+    // Capture previous expansion state before rebuilding
+    const prevExpandedGroups = new Set(this.groupViews.filter(g => g.expanded).map(g => g.id));
+    const prevExpandedChannels = new Set<number>();
+    this.groupViews.forEach(g => {
+      g.channels.forEach(ch => {
+        if (ch.expanded) prevExpandedChannels.add(ch.id);
+      });
+    });
+
     // Map channels to their group ID
     const channelsByGroup = new Map<number, any[]>();
     const ungroupedChannels: any[] = [];
@@ -221,8 +231,12 @@ export class ChannelsPaneComponent implements OnInit {
       views.push({
         id: g.id,
         name: g.name,
-        expanded: false,
-        channels: groupChannels.map(ch => this.buildChannelView(ch)),
+        expanded: prevExpandedGroups.has(g.id),
+        channels: groupChannels.map(ch => {
+          const view = this.buildChannelView(ch);
+          view.expanded = prevExpandedChannels.has(ch.id);
+          return view;
+        }),
       });
     });
 
@@ -231,8 +245,12 @@ export class ChannelsPaneComponent implements OnInit {
       views.push({
         id: -1,
         name: 'Ungrouped',
-        expanded: false,
-        channels: ungroupedChannels.map(ch => this.buildChannelView(ch)),
+        expanded: prevExpandedGroups.has(-1),
+        channels: ungroupedChannels.map(ch => {
+          const view = this.buildChannelView(ch);
+          view.expanded = prevExpandedChannels.has(ch.id);
+          return view;
+        }),
       });
     }
 

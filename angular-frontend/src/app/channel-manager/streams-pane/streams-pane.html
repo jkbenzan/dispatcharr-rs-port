@@ -127,15 +127,18 @@
                   *ngFor="let stream of group.streams; trackBy: trackByStreamId"
                   class="stream-item"
                   [class.selected]="isStreamSelected(stream.id)"
-                  (click)="onToggleStream(stream.id, $event)"
                   draggable="true"
                   (dragstart)="handleDragStart($event, stream)"
                 >
+                  <!-- Checkbox — clickable for direct selection -->
                   <input 
                     type="checkbox" 
                     [checked]="isStreamSelected(stream.id)"
-                    style="pointer-events: none;"
+                    (click)="onToggleStream(stream.id, $event)"
                   />
+
+                  <!-- Drag handle (matches Channels Pane style) -->
+                  <span class="material-icons drag-handle">drag_indicator</span>
                   
                   <!-- Logo or Icon -->
                   <div class="stream-logo">

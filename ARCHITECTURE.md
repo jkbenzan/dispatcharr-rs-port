@@ -116,10 +116,13 @@ angular-frontend/src/app/
 
 ### Stream Pane (Source View)
 - **Hierarchy**: M3U Provider → M3U Group → Stream Name.
-- **M3U Row**: Displays provider name, fetching status, last updated timestamp, and a manual "Refresh Now" button.
+- **M3U Row**: Displays provider name, fetching status, last updated timestamp, and a manual "Refresh Now" button. All providers are shown even if they have 0 streams.
 - **Provider/Group Filter**: Searchable multi-select dropdowns that filter the tree.
+- **Group Name Resolution**: `channel_group` is a numeric ID in the stream API response. The frontend resolves it to a human-readable name via `GET /api/channels/groups/`.
 - **Stream Preview**: Integrated "Preview Stream" button opens the in-app player.
 - **3-Row Info Cell**: Displays Stream Name, (Reserved), and M3U Account Name.
+- **Drag Handles**: Each stream row has a grab handle (`drag_indicator`) matching the Channels Pane style.
+- **Expansion Persistence**: When the tree is rebuilt (e.g. after drag-and-drop), both panes preserve which groups/channels/M3Us were expanded.
 
 ### In-App Video Player
 - Angular-native component using `mpegts.js` for live MPEG-TS stream playback
