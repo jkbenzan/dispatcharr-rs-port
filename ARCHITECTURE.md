@@ -142,10 +142,13 @@ angular-frontend/src/app/
 
 ### Create Channel Modal
 - Uses Taiga UI `TuiDialogContext`.
-- **Layout**: Implements a high-fidelity three-column grid layout (Settings | Logo | EPG) matching the original Dispatcharr design.
-- **EPG Integration**: Provides direct TVG-ID search and Gracenote Station ID (LCN) fetching. Includes a comprehensive **EPG Match Browser** overlay that allows users to fuzzy search the `channel.db`, view detailed station metadata (countries, resolution), and granularly apply specific fields (Name, TVG-ID, Station ID, Logo) or "Apply All" to the form.
-- **Channel Groups**: Implements alphabetical sorting, real-time search filtering via a native searchable datalist, and inline group creation. Includes an "Only Custom" toggle that dynamically filters the group list. The backend calculates the `is_custom` property by verifying that the group has no associations in the `channel_group_m3u_account` mapping table.
-- **Logo Handling**: Displays a real-time preview of the channel logo. To maintain performance with thousands of logos, the logo dropdown limits rendering to 50 items and implements a client-side filter. Supports uploading custom logo files and adding external logo URLs directly through the UI.
+- **Layout**: 2-panel design inspired by channelidentifier's CreateChannelModal. Left panel contains the form organized into collapsible section cards. Right panel is an "Existing Channels" sidebar listing all current channels (number + name) loaded from `/api/channels/channels/summary/` with a live search filter.
+- **Channel Configuration**: Channel Name input with live auto-suggest from `channel_data.db` (debounced 500ms). Channel Number input with three shortcut buttons: "Smart Range" (finds nearest gap), "First Available" (lowest unused number), "Highest + 1" (max + 1). Hint text explains automatic channel shifting behavior.
+- **Channel Groups**: Scrollable styled list with selection highlight, search filter, and "Only Custom" checkbox toggle. The backend calculates `is_custom` by verifying the group has no associations in `channel_group_m3u_account`. Inline group creation replaces the browser `prompt()` with a styled input + confirm/cancel buttons.
+- **channel_data.db Lookup**: Collapsible section (collapsed by default) that allows explicit fuzzy searching of the third-party SQLite database. Results are displayed in a scrollable list with logos. Selected matches can have individual fields (Name, TVG-ID, Station ID, Logo) or all fields applied to the form. This is **separate** from the EPG selector.
+- **EPG Selector**: Searchable dropdown that queries the `epg_epgdata` table for actual EPG data entries (tvg_id, name, icon_url, source). Supports filtering by name or TVG-ID. Includes "Use Dummy" shortcut for placeholder EPG assignment. This controls the `epg_data_id` form field.
+- **Logo Handling**: Displays a real-time preview of the selected logo. Uploading a file shows an **immediate local preview** via `FileReader.readAsDataURL()` before the upload completes. Supports both file upload and URL import (used by db match "Apply Logo").
+- **Metadata & Access**: TVG-ID, Gracenote Station ID, Stream Profile, User Level Access (Admin/Standard User/Streamer), and Mature Content toggle.
 
 ### Stream Checker SheetDialog
 

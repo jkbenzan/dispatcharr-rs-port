@@ -45,7 +45,32 @@ export class ApiService {
     return this.http.post('/api/channels/channels/', channelData);
   }
 
+  /**
+   * Fetch lightweight channel summary (id, name, channel_number, logo_id) for sidebar display.
+   * GET /api/channels/channels/summary/
+   */
+  getChannelsSummary(): Observable<any> {
+    return this.http.get('/api/channels/channels/summary/');
+  }
+
   // =================== EPG ===================
+
+  /**
+   * Fetch all EPG data records (tvg_id, name, icon_url, epg_source).
+   * Used by the EPG selector dropdown in the Create Channel dialog.
+   * GET /api/epg/epgdata/
+   */
+  getEpgData(): Observable<any> {
+    return this.http.get('/api/epg/epgdata/');
+  }
+
+  /**
+   * Fetch all EPG sources (id, name, source_type).
+   * GET /api/epg/sources/
+   */
+  getEpgSources(): Observable<any> {
+    return this.http.get('/api/epg/sources/');
+  }
 
   getEPGLcnByTvgId(tvgId: string): Observable<any> {
     return this.http.get(`/api/epg/lcn?tvg_id=${encodeURIComponent(tvgId)}`);

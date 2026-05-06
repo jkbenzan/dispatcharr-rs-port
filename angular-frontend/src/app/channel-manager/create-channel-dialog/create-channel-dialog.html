@@ -1,220 +1,286 @@
+<!-- =====================================================================
+     Create Channel Dialog — 2-Panel Layout
+     Left: Channel configuration form (name, number, group, IDs, EPG, logo)
+     Right: Existing channels sidebar for reference
+     ===================================================================== -->
 <div class="dialog-container">
-  <!-- EPG Browser Overlay -->
-  <div class="epg-browser-overlay" *ngIf="browsingMatches">
-    <div class="epg-browser-header">
-      <div class="search-box">
-        <span class="material-icons">search</span>
-        <input type="text" [formControl]="epgSearchControl" placeholder="Search channel_data.db..." (keyup.enter)="performEpgSearch(epgSearchControl.value || '')">
-        <button type="button" class="btn-go" (click)="performEpgSearch(epgSearchControl.value || '')">Search</button>
-      </div>
-      <div class="db-source-tag">
-        <span class="material-icons">storage</span> channel_data.db
-      </div>
-      <button class="btn-close-browser" (click)="browsingMatches = false">&times;</button>
-    </div>
-    
-    <div class="epg-browser-content">
-      <div class="results-list">
-        <div class="loading-spinner" *ngIf="searchingEPG">Invoking channel_data.db...</div>
-        <div class="empty-state" *ngIf="!searchingEPG && suggestions.length === 0">No matches found in channel_data.db.</div>
-        
-        <div class="match-item" *ngFor="let m of suggestions" [class.active]="selectedMatch?.station_id === m.station_id" (click)="selectMatch(m)">
-          <div class="m-logo">
-            <img *ngIf="m.logo_uri" [src]="m.logo_uri" alt="" (error)="m.logo_uri = null">
-            <span *ngIf="!m.logo_uri" class="material-icons">tv</span>
-          </div>
-          <div class="m-info">
-            <span class="m-name">{{ m.name }}</span>
-            <span class="m-call" *ngIf="m.call_sign">{{ m.call_sign }}</span>
-          </div>
-        </div>
-      </div>
-      
-      <div class="match-details" *ngIf="selectedMatch">
-        <div class="detail-header">
-          <h3>Match Details</h3>
-          <button type="button" class="btn-apply-all" (click)="applyMatchField('all')">Apply All</button>
-        </div>
 
-        <div class="detail-logo-section">
-          <div class="detail-logo-box">
-            <img *ngIf="selectedMatch.logo_uri" [src]="selectedMatch.logo_uri" alt="">
-            <div *ngIf="!selectedMatch.logo_uri" class="no-logo">No Logo</div>
-          </div>
-          <button type="button" class="btn-apply-field btn-small" (click)="applyMatchField('logo')" [disabled]="!selectedMatch.logo_uri">Apply Logo</button>
-        </div>
-        
-        <div class="detail-grid">
-          <div class="detail-row">
-            <div class="d-label">Channel Name</div>
-            <div class="d-val">{{ selectedMatch.name }}</div>
-            <button type="button" class="btn-apply-field" (click)="applyMatchField('name')">Apply</button>
-          </div>
-          
-          <div class="detail-row">
-            <div class="d-label">TVG-ID</div>
-            <div class="d-val">{{ selectedMatch.call_sign || selectedMatch.name }}</div>
-            <button type="button" class="btn-apply-field" (click)="applyMatchField('tvg_id')">Apply</button>
-          </div>
-          
-          <div class="detail-row">
-            <div class="d-label">Gracenote ID</div>
-            <div class="d-val">{{ selectedMatch.station_id }}</div>
-            <button type="button" class="btn-apply-field" (click)="applyMatchField('tvc_guide_stationid')">Apply</button>
-          </div>
-        </div>
-
-        <div class="detail-meta mt-4">
-          <div class="meta-item" *ngIf="selectedMatch.countries">
-            <span class="l">Country:</span>
-            <span class="v">{{ selectedMatch.countries }}</span>
-          </div>
-          <div class="meta-item" *ngIf="selectedMatch.video_types">
-            <span class="l">Quality:</span>
-            <span class="v">{{ selectedMatch.video_types }}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
+  <!-- ===================== HEADER ===================== -->
   <div class="dialog-header">
     <div class="header-left">
-       <span class="material-icons">list_alt</span>
-       <h2>Channels</h2>
+      <span class="material-icons">add_circle</span>
+      <h2>Create New Channel</h2>
     </div>
     <button class="btn-close" (click)="cancel()">&times;</button>
   </div>
-  
-  <form [formGroup]="form" (ngSubmit)="submit()" class="modal-form">
-    <div class="three-column-grid">
-      
-      <!-- Column 1: Basic Settings -->
-      <div class="column">
-        <div class="form-group">
-          <div class="label-row">
-            <label>Channel Name</label>
-            <a class="shortcut-link" (click)="useEpgName()" *ngIf="selectedStation">Use EPG Name</a>
+
+  <!-- ===================== BODY: 2-Panel Layout ===================== -->
+  <div class="dialog-body">
+
+    <!-- ==================== LEFT PANEL: Form ==================== -->
+    <div class="form-panel">
+      <form [formGroup]="form" (ngSubmit)="submit()">
+
+        <!-- ─── Section: Channel Configuration ─── -->
+        <div class="section-card">
+          <div class="section-title">
+            <span class="material-icons">edit</span> Channel Configuration
           </div>
-          <div class="input-wrapper">
-            <input type="text" formControlName="name" class="tui-input" placeholder="NFL Network" autocomplete="off">
-            <div class="suggestions-dropdown" *ngIf="suggestions.length > 0 && !browsingMatches">
-              <div class="suggestion-item" *ngFor="let s of suggestions" (click)="selectSuggestion(s)">
-                <span class="s-name">{{ s.name }}</span>
-                <span class="s-callsign" *ngIf="s.call_sign">{{ s.call_sign }}</span>
+
+          <!-- Channel Name -->
+          <div class="form-group">
+            <label>Channel Name: <span class="required">*</span></label>
+            <div class="input-wrapper">
+              <input type="text" formControlName="name" class="form-input" placeholder="Enter channel name" autocomplete="off">
+              <!-- Auto-suggest dropdown from channel_data.db as user types -->
+              <div class="suggestions-dropdown" *ngIf="suggestions.length > 0 && !browsingMatches">
+                <div class="suggestion-item" *ngFor="let s of suggestions" (click)="selectSuggestion(s)">
+                  <span class="s-name">{{ s.name }}</span>
+                  <span class="s-callsign" *ngIf="s.call_sign">{{ s.call_sign }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Channel Number -->
+          <div class="form-group mt-3">
+            <label>Channel Number:</label>
+            <div class="channel-number-row">
+              <input type="number" formControlName="channel_number" class="form-input ch-num-input" placeholder="e.g. 101">
+              <div class="ch-num-buttons">
+                <button type="button" class="btn-pill btn-smart" (click)="useSmartRange()" title="Find gap near your input number">🔢 Smart Range</button>
+                <button type="button" class="btn-pill btn-first" (click)="useFirstAvailable()" title="Lowest unused number">First Available</button>
+                <button type="button" class="btn-pill btn-highest" (click)="useHighestPlusOne()" title="One above the current highest">Highest + 1</button>
+              </div>
+            </div>
+            <div class="hint-text">💡 If you select an occupied channel number, existing channels will shift up automatically.</div>
+          </div>
+        </div>
+
+        <!-- ─── Section: Group ─── -->
+        <div class="section-card">
+          <div class="section-title">
+            <span class="material-icons">folder</span> Group: <span class="required">*</span>
+          </div>
+
+          <!-- Group filter input -->
+          <input type="text" [formControl]="groupSearchControl" class="form-input" placeholder="Type to filter groups...">
+
+          <!-- Create New Group button -->
+          <button type="button" class="btn-create-group mt-2" (click)="startAddGroup()">
+            <span class="material-icons">add</span> Create New Group
+          </button>
+
+          <!-- Inline new group input (replaces browser prompt) -->
+          <div class="new-group-inline mt-2" *ngIf="addingGroup">
+            <input type="text" [(ngModel)]="newGroupName" [ngModelOptions]="{standalone: true}" class="form-input" placeholder="New group name..." (keyup.enter)="confirmAddGroup()">
+            <button type="button" class="btn-confirm-group" (click)="confirmAddGroup()">✓</button>
+            <button type="button" class="btn-cancel-group" (click)="addingGroup = false">✕</button>
+          </div>
+
+          <!-- Custom groups only checkbox -->
+          <label class="custom-checkbox mt-2">
+            <input type="checkbox" [(ngModel)]="showOnlyCustomGroups" [ngModelOptions]="{standalone: true}" (change)="filterGroups()">
+            <span class="checkmark"></span>
+            Show only custom groups (no M3U associations)
+          </label>
+
+          <!-- Scrollable group list -->
+          <div class="group-list mt-2">
+            <div class="group-item"
+                 *ngFor="let g of displayedGroups"
+                 [class.selected]="form.get('channel_group_id')?.value === g.id"
+                 (click)="selectGroup(g)">
+              <span class="group-name">{{ g.name }}</span>
+              <span class="group-badge" *ngIf="g.is_custom">custom</span>
+            </div>
+            <div class="group-empty" *ngIf="displayedGroups.length === 0">No groups match filter.</div>
+          </div>
+        </div>
+
+        <!-- ─── Section: channel_data.db Lookup (collapsible) ─── -->
+        <div class="section-card">
+          <div class="section-title clickable" (click)="dbBrowserExpanded = !dbBrowserExpanded">
+            <span class="material-icons">storage</span> channel_data.db Lookup
+            <span class="material-icons chevron">{{ dbBrowserExpanded ? 'expand_less' : 'expand_more' }}</span>
+          </div>
+
+          <div *ngIf="dbBrowserExpanded" class="db-browser-section">
+            <div class="db-search-row">
+              <input type="text" [formControl]="epgSearchControl" class="form-input" placeholder="Search channel_data.db..." (keyup.enter)="performEpgSearch(epgSearchControl.value || '')">
+              <button type="button" class="btn-db-search" (click)="performEpgSearch(epgSearchControl.value || '')">
+                <span class="material-icons">search</span>
+              </button>
+            </div>
+
+            <div class="loading-text" *ngIf="searchingEPG">Searching channel_data.db...</div>
+
+            <!-- Results list -->
+            <div class="db-results" *ngIf="!searchingEPG && dbSearchResults.length > 0">
+              <div class="db-result-item"
+                   *ngFor="let m of dbSearchResults"
+                   [class.active]="selectedMatch?.station_id === m.station_id"
+                   (click)="selectMatch(m)">
+                <div class="db-result-logo">
+                  <img *ngIf="m.logo_uri" [src]="m.logo_uri" alt="" (error)="m.logo_uri = null">
+                  <span *ngIf="!m.logo_uri" class="material-icons">tv</span>
+                </div>
+                <div class="db-result-info">
+                  <span class="db-result-name">{{ m.name }}</span>
+                  <span class="db-result-call" *ngIf="m.call_sign">{{ m.call_sign }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Match detail + apply buttons -->
+            <div class="db-match-apply" *ngIf="selectedMatch">
+              <div class="apply-row">
+                <span class="apply-label">{{ selectedMatch.name }}</span>
+                <button type="button" class="btn-apply-all" (click)="applyMatchField('all')">Apply All</button>
+              </div>
+              <div class="apply-buttons">
+                <button type="button" class="btn-apply-sm" (click)="applyMatchField('name')">Name</button>
+                <button type="button" class="btn-apply-sm" (click)="applyMatchField('tvg_id')">TVG-ID</button>
+                <button type="button" class="btn-apply-sm" (click)="applyMatchField('tvc_guide_stationid')">Station ID</button>
+                <button type="button" class="btn-apply-sm" (click)="applyMatchField('logo')" [disabled]="!selectedMatch.logo_uri">Logo</button>
+              </div>
+            </div>
+
+            <div class="db-empty" *ngIf="!searchingEPG && dbSearchResults.length === 0 && epgSearchControl.value">No matches found.</div>
+          </div>
+        </div>
+
+        <!-- ─── Section: EPG & Metadata ─── -->
+        <div class="section-card">
+          <div class="section-title">
+            <span class="material-icons">live_tv</span> EPG & Metadata
+          </div>
+
+          <div class="two-col">
+            <!-- Left sub-column: IDs -->
+            <div class="sub-col">
+              <!-- TVG-ID -->
+              <div class="form-group">
+                <div class="label-row">
+                  <label>TVG-ID</label>
+                  <a class="shortcut-link" (click)="useEpgTvgId()" *ngIf="selectedStation">Use EPG</a>
+                </div>
+                <input type="text" formControlName="tvg_id" class="form-input" placeholder="e.g. NFLHD">
+              </div>
+
+              <!-- Gracenote Station ID -->
+              <div class="form-group mt-3">
+                <label>Gracenote Station ID</label>
+                <input type="text" formControlName="tvc_guide_stationid" class="form-input" placeholder="e.g. 45399">
+              </div>
+
+              <!-- Stream Profile -->
+              <div class="form-group mt-3">
+                <label>Stream Profile</label>
+                <select formControlName="stream_profile_id" class="form-select">
+                  <option [ngValue]="null">(use default)</option>
+                  <option *ngFor="let p of profiles" [ngValue]="p.id">{{ p.name }}</option>
+                </select>
+              </div>
+
+              <!-- User Level -->
+              <div class="form-group mt-3">
+                <label>User Level Access</label>
+                <select formControlName="user_level" class="form-select">
+                  <option *ngFor="let level of userLevels" [ngValue]="level.id">{{ level.name }}</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Right sub-column: EPG + Logo -->
+            <div class="sub-col">
+              <!-- EPG Selector (actual EPG data, not channel_data.db) -->
+              <div class="form-group">
+                <div class="label-row">
+                  <label>EPG Assignment</label>
+                  <div class="epg-actions">
+                    <a class="shortcut-link" (click)="useDummyEpg()">Use Dummy</a>
+                  </div>
+                </div>
+                <div class="epg-dropdown-wrapper" (clickOutside)="epgDropdownOpen = false">
+                  <div class="epg-selector" (click)="epgDropdownOpen = !epgDropdownOpen">
+                    <span class="epg-selected-text">{{ selectedEpgDisplay }}</span>
+                    <span class="material-icons epg-arrow">{{ epgDropdownOpen ? 'expand_less' : 'expand_more' }}</span>
+                  </div>
+                  <div class="epg-dropdown" *ngIf="epgDropdownOpen">
+                    <input type="text" [formControl]="epgFilterControl" class="epg-search-input" placeholder="Search EPG entries..." (click)="$event.stopPropagation()">
+                    <div class="epg-option none-option" (click)="selectEpg(null)">
+                      <span>None</span>
+                    </div>
+                    <div class="epg-option"
+                         *ngFor="let epg of filteredEpgData"
+                         (click)="selectEpg(epg)">
+                      <span class="epg-opt-name">{{ epg.name }}</span>
+                      <span class="epg-opt-tvgid">{{ epg.tvg_id }}</span>
+                    </div>
+                    <div class="epg-option disabled" *ngIf="filteredEpgData.length === 0">No EPG entries match.</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Logo -->
+              <div class="form-group mt-3">
+                <div class="label-row">
+                  <label>Logo</label>
+                  <a class="shortcut-link" (click)="useEpgLogo()" *ngIf="selectedStation?.logo_uri">Use DB Logo</a>
+                </div>
+                <div class="logo-preview-box">
+                  <img *ngIf="selectedLogoPreview" [src]="selectedLogoPreview" alt="Logo preview" (error)="onLogoError()">
+                  <div *ngIf="!selectedLogoPreview" class="no-logo-placeholder">
+                    <span class="material-icons">image</span>
+                    <span>No Logo</span>
+                  </div>
+                </div>
+                <button type="button" class="btn-upload-logo mt-2" (click)="fileInput.click()">
+                  <span class="material-icons">upload</span> Upload Logo
+                </button>
+                <input type="file" #fileInput hidden accept="image/*" (change)="uploadLogoFile($event)">
+              </div>
+
+              <!-- Mature Content Toggle -->
+              <div class="form-group mt-3">
+                <label class="toggle-label">
+                  <div class="toggle-switch">
+                    <input type="checkbox" formControlName="is_adult">
+                    <span class="toggle-slider"></span>
+                  </div>
+                  <span>Mature Content</span>
+                </label>
               </div>
             </div>
           </div>
         </div>
 
-        <div class="form-group mt-3">
-          <div class="label-row">
-            <label>Channel Group</label>
-            <div class="mature-toggle inline-toggle">
-              <label class="switch">
-                <input type="checkbox" [(ngModel)]="showOnlyCustomGroups" [ngModelOptions]="{standalone: true}" (change)="filterGroups()">
-                <span class="slider round"></span>
-              </label>
-              <span class="label-text">Only Custom</span>
-            </div>
-          </div>
-          <div class="group-control searchable-select mt-2">
-            <input type="text" [formControl]="groupSearchControl" list="group-list" class="tui-input" placeholder="Search or select group...">
-            <datalist id="group-list">
-              <option *ngFor="let g of filteredGroups" [value]="g.name"></option>
-            </datalist>
-            <button type="button" class="btn-add-group" (click)="addGroup()">+</button>
-          </div>
+        <!-- ─── Footer ─── -->
+        <div class="dialog-footer">
+          <button type="button" class="btn-cancel" (click)="cancel()">Cancel</button>
+          <button type="submit" class="btn-submit" [disabled]="form.invalid || submitting">
+            {{ submitting ? 'Creating...' : '+ Create Channel' }}
+          </button>
         </div>
-
-        <div class="form-group mt-3">
-          <label>Stream Profile</label>
-          <select formControlName="stream_profile_id" class="tui-select">
-            <option [ngValue]="null">(use default)</option>
-            <option *ngFor="let p of profiles" [ngValue]="p.id">{{ p.name }}</option>
-          </select>
-        </div>
-
-        <div class="form-group mt-3">
-          <label>User Level Access</label>
-          <select formControlName="user_level" class="tui-select">
-            <option *ngFor="let level of userLevels" [ngValue]="level.id">{{ level.name }}</option>
-          </select>
-        </div>
-      </div>
-
-      <!-- Column 2: Logo & Content -->
-      <div class="column centered-col">
-        <div class="form-group">
-          <div class="label-row">
-            <label>Logo</label>
-            <a class="shortcut-link" (click)="useEpgLogo()" *ngIf="selectedStation?.logo_uri">Use EPG Logo</a>
-          </div>
-          <input type="text" [formControl]="logoSearchControl" class="tui-input" placeholder="Search logos...">
-        </div>
-
-        <div class="logo-preview-area mt-2">
-          <img *ngIf="selectedLogoPreview" [src]="selectedLogoPreview" alt="Logo preview" (error)="onLogoError()">
-          <div *ngIf="!selectedLogoPreview" class="no-logo">No Logo</div>
-        </div>
-
-        <button type="button" class="btn-upload mt-3" (click)="fileInput.click()">
-           Upload or Create Logo
-        </button>
-        <input type="file" #fileInput hidden accept="image/*" (change)="uploadLogoFile($event)">
-
-        <div class="mature-toggle mt-4">
-           <label class="switch">
-             <input type="checkbox" formControlName="is_adult">
-             <span class="slider round"></span>
-           </label>
-           <span class="label-text">Mature Content</span>
-        </div>
-      </div>
-
-      <!-- Column 3: EPG & IDs -->
-      <div class="column">
-        <div class="form-group">
-          <label>Channel # (blank to auto-assign)</label>
-          <input type="number" formControlName="channel_number" class="tui-input" placeholder="1">
-        </div>
-
-        <div class="form-group mt-3">
-          <div class="label-row">
-            <label>TVG-ID</label>
-            <a class="shortcut-link" (click)="useEpgTvgId()" *ngIf="selectedStation">Use EPG TVG-ID</a>
-          </div>
-          <input type="text" formControlName="tvg_id" class="tui-input" placeholder="NFLHD">
-        </div>
-
-        <div class="form-group mt-3">
-          <label>Gracenote StationId</label>
-          <input type="text" formControlName="tvc_guide_stationid" class="tui-input" placeholder="45399">
-        </div>
-
-        <div class="form-group mt-3">
-          <div class="label-row">
-            <label>EPG</label>
-            <div class="epg-actions">
-               <a class="shortcut-link" (click)="useDummyEpg()">Use Dummy</a>
-               <a class="shortcut-link match-link" (click)="openEpgBrowser()">
-                 <span class="material-icons">bolt</span> Auto Match
-               </a>
-            </div>
-          </div>
-          <div class="epg-selection-box" (click)="openEpgBrowser()">
-             <span class="selected-val">{{ selectedStation ? selectedStation.name : 'None selected' }}</span>
-             <button type="button" class="btn-clear" (click)="clearEpg(); $event.stopPropagation()" *ngIf="selectedStation">&times;</button>
-          </div>
-        </div>
-      </div>
-
+      </form>
     </div>
 
-    <div class="dialog-footer">
-      <button type="submit" class="btn-submit" [disabled]="form.invalid || submitting">
-        {{ submitting ? 'Submitting...' : 'Submit' }}
-      </button>
+    <!-- ==================== RIGHT PANEL: Existing Channels ==================== -->
+    <div class="sidebar-panel">
+      <div class="sidebar-header">
+        <span class="material-icons">list</span>
+        <span>Existing Channels</span>
+      </div>
+      <input type="text" [formControl]="channelSearchControl" class="sidebar-search" placeholder="Filter by number or name...">
+      <div class="channel-list">
+        <div class="channel-row" *ngFor="let ch of filteredExistingChannels">
+          <span class="ch-number">{{ ch.channel_number }}</span>
+          <span class="ch-name">{{ ch.name }}</span>
+        </div>
+        <div class="channel-row empty" *ngIf="filteredExistingChannels.length === 0">No channels found.</div>
+      </div>
     </div>
-  </form>
+
+  </div>
 </div>
