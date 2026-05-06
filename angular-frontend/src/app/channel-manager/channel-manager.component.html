@@ -101,3 +101,16 @@
     <app-streams-pane (selectionChange)="onStreamSelectionChange($event)"></app-streams-pane>
   </div>
 </div>
+
+<!-- ===================== CREATE CHANNEL DIALOG OVERLAY ===================== -->
+<!-- Rendered as a custom overlay instead of TuiDialogService to avoid the
+     "double modal" issue where Taiga's dialog chrome wraps our custom dialog UI.
+     The backdrop click closes the dialog (dismissible behavior). -->
+<div class="dialog-overlay" *ngIf="showCreateChannelDialog" (click)="onCreateChannelDialogClose(false)">
+  <!-- Stop click propagation so clicking the dialog content doesn't close the overlay -->
+  <div class="dialog-wrapper" (click)="$event.stopPropagation()">
+    <app-create-channel-dialog
+      (dialogClose)="onCreateChannelDialogClose($event)">
+    </app-create-channel-dialog>
+  </div>
+</div>

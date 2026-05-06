@@ -252,3 +252,49 @@
     pointer-events: none;
   }
 }
+
+// ========== CREATE CHANNEL DIALOG OVERLAY ==========
+// Custom overlay replaces TuiDialogService to avoid the "double modal" issue.
+// The dialog component provides its own header/close/layout — we just need
+// a backdrop and centering wrapper.
+
+.dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.65);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: overlayFadeIn 0.2s ease;
+  // Prevent body scroll while dialog is open
+  overflow: hidden;
+}
+
+.dialog-wrapper {
+  // Responsive constraints — never exceed the viewport
+  max-width: 95vw;
+  max-height: 92vh;
+  // Allow the inner dialog component to control its own sizing
+  display: flex;
+  animation: dialogSlideIn 0.25s ease;
+}
+
+@keyframes overlayFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes dialogSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-16px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}

@@ -1,9 +1,7 @@
-import { ChangeDetectionStrategy, Component, HostListener, inject, ViewChild, ChangeDetectorRef, Injector } from '@angular/core';
+import { ChangeDetectionStrategy, Component, HostListener, inject, ViewChild, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ChannelsPaneComponent } from './channels-pane/channels-pane';
 import { StreamsPaneComponent } from './streams-pane/streams-pane';
-import { TuiDialogService } from '@taiga-ui/core';
-import { PolymorpheusComponent } from '@taiga-ui/polymorpheus';
 import { CreateChannelDialogComponent } from './create-channel-dialog/create-channel-dialog';
 
 /**
@@ -15,15 +13,13 @@ import { CreateChannelDialogComponent } from './create-channel-dialog/create-cha
 @Component({
   selector: 'app-channel-manager',
   standalone: true,
-  imports: [CommonModule, ChannelsPaneComponent, StreamsPaneComponent],
+  imports: [CommonModule, ChannelsPaneComponent, StreamsPaneComponent, CreateChannelDialogComponent],
   templateUrl: './channel-manager.component.html',
   styleUrl: './channel-manager.component.less',
   changeDetection: ChangeDetectionStrategy.Default,
 })
 export class ChannelManagerComponent {
   private readonly cdr = inject(ChangeDetectorRef);
-  private readonly dialogs = inject(TuiDialogService);
-  private readonly injector = inject(Injector);
 
   @ViewChild(ChannelsPaneComponent) channelsPane!: ChannelsPaneComponent;
   @ViewChild(StreamsPaneComponent) streamsPane!: StreamsPaneComponent;
@@ -34,6 +30,11 @@ export class ChannelManagerComponent {
 
   // Toolbar state
   toolbarExpanded = false;
+
+  // Create Channel Dialog state — rendered as an inline overlay
+  // instead of using TuiDialogService (which wraps content in its own
+  // dialog chrome, causing a "double modal" effect).
+  showCreateChannelDialog = false;
 
   // Selection tracking (for enabling/disabling toolbar buttons)
   selectedStreamIds: Set<number> = new Set();
@@ -72,15 +73,40 @@ export class ChannelManagerComponent {
     });
   }
 
+  /**
+   * Open the Create Channel dialog as a custom overlay.
+   * We avoid TuiDialogService here because it wraps content in its own
+   * dialog chrome (header, backdrop, sizing), which duplicates our
+   * component's custom dialog UI and causes positioning issues on
+   * smaller screens.
+   */
   openCreateChannelDialog() {
-    this.dialogs.open<boolean>(
-      new PolymorpheusComponent(CreateChannelDialogComponent, this.injector),
-      { size: 'l', dismissible: true }
-    ).subscribe(result => {
-      if (result) {
-        this.channelsPane.loadData();
-      }
-    });
+    this.showCreateChannelDialog = true;
+    this.cdr.markForCheck();
+  }
+
+  /**
+   * Handle the result from the Create Channel dialog.
+   * @param created - true if a channel was successfully created, false if cancelled.
+   */
+  onCreateChannelDialogClose(created: boolean) {
+    this.showCreateChannelDialog = false;
+    if (created) {
+      // Refresh the channels pane to show the newly created channel
+      this.channelsPane.loadData();
+    }
+    this.cdr.markForCheck();
+  }
+
+  /**
+   * Close dialog when Escape is pressed (dismissible behavior).
+   */
+  @HostListener('document:keydown.escape')
+  onEscapeKey() {
+    if (this.showCreateChannelDialog) {
+      this.showCreateChannelDialog = false;
+      this.cdr.markForCheck();
+    }
   }
 
   // --- Toolbar logic ---

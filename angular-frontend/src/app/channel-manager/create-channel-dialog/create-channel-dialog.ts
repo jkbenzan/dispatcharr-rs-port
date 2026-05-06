@@ -1,11 +1,10 @@
-import { ChangeDetectionStrategy, Component, inject, OnInit, ChangeDetectorRef } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, OnInit, ChangeDetectorRef, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, FormsModule, Validators, FormControl } from '@angular/forms';
 import { ApiService } from '../../api.service';
 import { Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged, switchMap } from 'rxjs/operators';
-import { POLYMORPHEUS_CONTEXT } from '@taiga-ui/polymorpheus';
-import { TuiDialogContext } from '@taiga-ui/core';
+
 
 @Component({
   selector: 'app-create-channel-dialog',
@@ -16,7 +15,13 @@ import { TuiDialogContext } from '@taiga-ui/core';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class CreateChannelDialogComponent implements OnInit {
-  private readonly context = inject<TuiDialogContext<boolean>>(POLYMORPHEUS_CONTEXT);
+  /**
+   * Emits when the dialog should close.
+   * true  = a channel was successfully created (parent should refresh data)
+   * false = user cancelled (no changes made)
+   */
+  @Output() dialogClose = new EventEmitter<boolean>();
+
   private readonly api = inject(ApiService);
   private readonly fb = inject(FormBuilder);
   private readonly cdr = inject(ChangeDetectorRef);
@@ -496,7 +501,7 @@ export class CreateChannelDialogComponent implements OnInit {
     if (this.form.invalid) return;
     this.submitting = true;
     this.api.createChannel(this.form.value).subscribe({
-      next: () => this.context.completeWith(true),
+      next: () => this.dialogClose.emit(true),
       error: () => {
         this.submitting = false;
         this.cdr.markForCheck();
@@ -505,6 +510,6 @@ export class CreateChannelDialogComponent implements OnInit {
   }
 
   cancel() {
-    this.context.completeWith(false);
+    this.dialogClose.emit(false);
   }
 }

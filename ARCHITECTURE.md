@@ -1,7 +1,7 @@
 # Dispatcharr-RS Architecture
 
 > **Living Document** — Update this file whenever a significant design decision is made.
-> Last updated: 2026-05-04
+> Last updated: 2026-05-06
 
 ---
 
@@ -141,8 +141,10 @@ angular-frontend/src/app/
 - Used for both "Play Channel" and "Preview Stream" actions
 
 ### Create Channel Modal
-- Uses Taiga UI `TuiDialogContext`.
+- **Rendering**: Rendered as a **custom inline overlay** in the `ChannelManagerComponent` template, rather than via Taiga UI's `TuiDialogService`. This avoids the "double modal" issue where Taiga's dialog chrome (header, backdrop, sizing wrapper) wraps the component's own custom dialog UI, producing two overlapping dialog shells. The component emits a `(dialogClose)` event (boolean) instead of injecting `POLYMORPHEUS_CONTEXT` / `TuiDialogContext`.
+- **Dismissible**: Backdrop click and `Escape` key both close the dialog (cancel behavior).
 - **Layout**: 2-panel design inspired by channelidentifier's CreateChannelModal. Left panel contains the form organized into collapsible section cards. Right panel is an "Existing Channels" sidebar listing all current channels (number + name) loaded from `/api/channels/channels/summary/` with a live search filter.
+- **Responsive Design**: On screens < 768px, the sidebar hides and the two-column metadata layout collapses to single column to prevent horizontal overflow. On medium screens (769–1024px), the sidebar shrinks to 180px.
 - **Channel Configuration**: Channel Name input with live auto-suggest from `channel_data.db` (debounced 500ms). Channel Number input with three shortcut buttons: "Smart Range" (finds nearest gap), "First Available" (lowest unused number), "Highest + 1" (max + 1). Hint text explains automatic channel shifting behavior.
 - **Channel Groups**: Scrollable styled list with selection highlight, search filter, and "Only Custom" checkbox toggle. The backend calculates `is_custom` by verifying the group has no associations in `channel_group_m3u_account`. Inline group creation replaces the browser `prompt()` with a styled input + confirm/cancel buttons.
 - **channel_data.db Lookup**: Collapsible section (collapsed by default) that allows explicit fuzzy searching of the third-party SQLite database. Results are displayed in a scrollable list with logos. Selected matches can have individual fields (Name, TVG-ID, Station ID, Logo) or all fields applied to the form. This is **separate** from the EPG selector.
