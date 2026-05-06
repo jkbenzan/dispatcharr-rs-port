@@ -249,8 +249,10 @@ async fn main() {
     let http_client = crate::settings::get_http_client(&db).await;
 
     // Initialize optional channel data database
+    // Default to data/ directory where other runtime files live (offline.ts, logos).
+    // Override with CHANNEL_DB_PATH env var if the file lives elsewhere.
     let channel_db_path = std::env::var("CHANNEL_DB_PATH")
-        .unwrap_or_else(|_| "./channel_data.db".to_string());
+        .unwrap_or_else(|_| "data/channel_data.db".to_string());
     let channel_db = channel_db::ChannelDb::init(&channel_db_path).await;
 
     let state = Arc::new(AppState {

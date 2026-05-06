@@ -373,7 +373,7 @@ export class CreateChannelDialogComponent implements OnInit {
         const status = err?.status || 0;
         const detail = err?.error?.error || err?.message || 'Unknown error';
         if (status === 503) {
-          this.dbSearchError = 'Channel data database is not available. Make sure channel_data.db exists in the data directory.';
+          this.dbSearchError = 'Channel data database is not available. Place channel_data.db in the data/ directory or set CHANNEL_DB_PATH.';
         } else {
           this.dbSearchError = `Search failed (HTTP ${status}): ${detail}`;
         }
