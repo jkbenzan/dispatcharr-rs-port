@@ -144,7 +144,7 @@ angular-frontend/src/app/
 - Uses Taiga UI `TuiDialogContext`.
 - **Layout**: Implements a high-fidelity three-column grid layout (Settings | Logo | EPG) matching the original Dispatcharr design.
 - **EPG Integration**: Provides direct TVG-ID search and Gracenote Station ID (LCN) fetching. Includes a comprehensive **EPG Match Browser** overlay that allows users to fuzzy search the `channel.db`, view detailed station metadata (countries, resolution), and granularly apply specific fields (Name, TVG-ID, Station ID, Logo) or "Apply All" to the form.
-- **Channel Groups**: Implements alphabetical sorting, real-time search filtering, and inline group creation.
+- **Channel Groups**: Implements alphabetical sorting, real-time search filtering via a native searchable datalist, and inline group creation. Includes an "Only Custom" toggle that dynamically filters the group list. The backend calculates the `is_custom` property by verifying that the group has no associations in the `channel_group_m3u_account` mapping table.
 - **Logo Handling**: Displays a real-time preview of the channel logo. To maintain performance with thousands of logos, the logo dropdown limits rendering to 50 items and implements a client-side filter. Supports uploading custom logo files and adding external logo URLs directly through the UI.
 
 ### Stream Checker SheetDialog
