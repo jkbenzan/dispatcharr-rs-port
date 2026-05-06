@@ -108,11 +108,20 @@
         </div>
 
         <div class="form-group mt-3">
-          <label>Channel Group</label>
-          <div class="group-control searchable-select">
+          <div class="label-row">
+            <label>Channel Group</label>
+            <div class="mature-toggle inline-toggle">
+              <label class="switch">
+                <input type="checkbox" [(ngModel)]="showOnlyCustomGroups" [ngModelOptions]="{standalone: true}" (change)="filterGroups()">
+                <span class="slider round"></span>
+              </label>
+              <span class="label-text">Only Custom</span>
+            </div>
+          </div>
+          <div class="group-control searchable-select mt-2">
             <input type="text" [formControl]="groupSearchControl" list="group-list" class="tui-input" placeholder="Search or select group...">
             <datalist id="group-list">
-              <option *ngFor="let g of groups" [value]="g.name"></option>
+              <option *ngFor="let g of filteredGroups" [value]="g.name"></option>
             </datalist>
             <button type="button" class="btn-add-group" (click)="addGroup()">+</button>
           </div>

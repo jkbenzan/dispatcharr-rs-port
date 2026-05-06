@@ -1295,10 +1295,26 @@ pub async fn get_dashboard_stats(State(state): State<Arc<AppState>>) -> Json<Val
 }
 
 pub async fn get_channel_groups(State(state): State<Arc<AppState>>) -> Json<Value> {
-    let results = channel_group::Entity::find()
+    let groups = channel_group::Entity::find()
         .all(&state.db)
         .await
         .unwrap_or_default();
+
+    let mappings = crate::entities::channel_group_m3u_account::Entity::find()
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+
+    let m3u_group_ids: std::collections::HashSet<i64> = mappings.into_iter().map(|m| m.channel_group_id).collect();
+
+    let mut results = Vec::new();
+    for g in groups {
+        let is_custom = !m3u_group_ids.contains(&g.id);
+        let mut js = serde_json::to_value(&g).unwrap();
+        js["is_custom"] = serde_json::json!(is_custom);
+        results.push(js);
+    }
+
     Json(json!(results))
 }
 

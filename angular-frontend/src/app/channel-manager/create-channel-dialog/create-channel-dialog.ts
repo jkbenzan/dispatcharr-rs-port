@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormBuilder, ReactiveFormsModule, Validators, FormControl } from '@angular/forms';
+import { FormBuilder, ReactiveFormsModule, FormsModule, Validators, FormControl } from '@angular/forms';
 import { ApiService } from '../../api.service';
 import { Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged, switchMap } from 'rxjs/operators';
@@ -10,7 +10,7 @@ import { TuiDialogContext } from '@taiga-ui/core';
 @Component({
   selector: 'app-create-channel-dialog',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [CommonModule, ReactiveFormsModule, FormsModule],
   templateUrl: './create-channel-dialog.html',
   styleUrl: './create-channel-dialog.less',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -50,6 +50,7 @@ export class CreateChannelDialogComponent implements OnInit {
   ];
 
   groups: any[] = [];
+  filteredGroups: any[] = [];
   profiles: any[] = [];
   logos: any[] = [];
   filteredLogos: any[] = [];
@@ -127,8 +128,17 @@ export class CreateChannelDialogComponent implements OnInit {
     this.api.getChannelGroups().subscribe((res: any) => {
       const allGroups = res.results || res;
       this.groups = allGroups.sort((a: any, b: any) => a.name.localeCompare(b.name));
-      this.cdr.markForCheck();
+      this.filterGroups();
     });
+  }
+
+  filterGroups() {
+    if (this.showOnlyCustomGroups) {
+      this.filteredGroups = this.groups.filter(g => g.is_custom === true);
+    } else {
+      this.filteredGroups = this.groups;
+    }
+    this.cdr.markForCheck();
   }
 
   filterLogos(search: string) {
