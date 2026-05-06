@@ -37,7 +37,11 @@ export class CreateChannelDialogComponent implements OnInit {
   groupSearchControl = new FormControl('');
   logoSearchControl = new FormControl('');
   newLogoUrlControl = new FormControl('');
+  epgSearchControl = new FormControl('');
+  
   showOnlyCustomGroups = false;
+  browsingMatches = false;
+  selectedMatch: any = null;
 
   userLevels = [
     { id: 1, name: 'Admin' },
@@ -51,13 +55,14 @@ export class CreateChannelDialogComponent implements OnInit {
   logos: any[] = [];
   filteredLogos: any[] = [];
   suggestions: any[] = [];
-  selectedStation: any = null; // Currently matched station from EPG suggestions
+  selectedStation: any = null; 
   
   selectedLogoPreview: string | null = null;
   addingLogo = false;
   uploadingLogo = false;
   addingGroup = false;
   submitting = false;
+  searchingEPG = false;
 
   private nameSearchSubject = new Subject<string>();
 
@@ -91,11 +96,7 @@ export class CreateChannelDialogComponent implements OnInit {
 
     this.form.get('logo_id')?.valueChanges.subscribe(val => {
       const logo = this.logos.find(l => l.id === val);
-      if (logo) {
-        this.selectedLogoPreview = logo.cache_url || logo.url;
-      } else {
-        this.selectedLogoPreview = null;
-      }
+      this.selectedLogoPreview = logo ? (logo.cache_url || logo.url) : null;
       this.cdr.markForCheck();
     });
 
@@ -111,7 +112,7 @@ export class CreateChannelDialogComponent implements OnInit {
     });
 
     this.form.get('name')?.valueChanges.subscribe(val => {
-      if (val && val.length > 2) {
+      if (val && val.length > 2 && !this.browsingMatches) {
         this.nameSearchSubject.next(val);
       } else {
         this.suggestions = [];
@@ -156,59 +157,83 @@ export class CreateChannelDialogComponent implements OnInit {
 
   selectSuggestion(station: any) {
     this.selectedStation = station;
-    // Set initially
     this.form.patchValue({
       name: station.name,
       tvg_id: station.call_sign || station.name,
       tvc_guide_stationid: station.station_id || ''
     });
     this.suggestions = [];
+    this.browsingMatches = false;
     this.cdr.markForCheck();
   }
 
-  /**
-   * Copy specific fields from the selected EPG station
-   */
-  useEpgName() {
-    if (this.selectedStation) {
-      this.form.patchValue({ name: this.selectedStation.name });
-    }
-  }
+  // --- EPG Browser Logic ---
 
-  useEpgTvgId() {
-    if (this.selectedStation) {
-      this.form.patchValue({ tvg_id: this.selectedStation.call_sign || this.selectedStation.name });
-    }
-  }
-
-  useEpgLogo() {
-    if (this.selectedStation && this.selectedStation.logo_uri) {
-      // Find logo by URL or create one
-      // For now, let's look for a logo with similar name or just add via URL
-      this.newLogoUrlControl.setValue(this.selectedStation.logo_uri);
-      this.addLogoFromUrl();
-    }
-  }
-
-  useDummyEpg() {
-    this.form.patchValue({
-      tvg_id: 'dummy',
-      tvc_guide_stationid: 'dummy',
-      epg_data_id: null
-    });
-    this.selectedStation = { name: 'Dummy EPG', station_id: 'dummy' };
-    this.cdr.markForCheck();
-  }
-
-  autoMatchEpg() {
+  openEpgBrowser() {
+    this.browsingMatches = true;
     const name = this.form.get('name')?.value;
     if (name) {
-      this.api.suggestMatches(name).subscribe((res: any) => {
-        if (res && res.matches && res.matches.length > 0) {
-          this.selectSuggestion(res.matches[0].station);
-        }
-      });
+      this.epgSearchControl.setValue(name);
+      this.performEpgSearch(name);
     }
+    this.cdr.markForCheck();
+  }
+
+  performEpgSearch(query: string) {
+    if (!query) return;
+    this.searchingEPG = true;
+    this.cdr.markForCheck();
+    this.api.suggestMatches(query).subscribe((res: any) => {
+      this.suggestions = res.matches.map((m: any) => m.station);
+      if (this.suggestions.length > 0) {
+        this.selectedMatch = this.suggestions[0];
+      }
+      this.searchingEPG = false;
+      this.cdr.markForCheck();
+    });
+  }
+
+  selectMatch(match: any) {
+    this.selectedMatch = match;
+    this.cdr.markForCheck();
+  }
+
+  applyMatchField(field: 'name' | 'tvg_id' | 'tvc_guide_stationid' | 'logo' | 'all') {
+    if (!this.selectedMatch) return;
+
+    if (field === 'name' || field === 'all') {
+      this.form.patchValue({ name: this.selectedMatch.name });
+    }
+    if (field === 'tvg_id' || field === 'all') {
+      this.form.patchValue({ tvg_id: this.selectedMatch.call_sign || this.selectedMatch.name });
+    }
+    if (field === 'tvc_guide_stationid' || field === 'all') {
+      this.form.patchValue({ tvc_guide_stationid: this.selectedMatch.station_id });
+    }
+    if (field === 'logo' || field === 'all') {
+      if (this.selectedMatch.logo_uri) {
+        this.newLogoUrlControl.setValue(this.selectedMatch.logo_uri);
+        this.addLogoFromUrl();
+      }
+    }
+    
+    this.selectedStation = this.selectedMatch;
+    if (field === 'all') {
+      this.browsingMatches = false;
+    }
+    this.cdr.markForCheck();
+  }
+
+  // --- Shortcut Logic (linked to selectedStation) ---
+
+  useEpgName() { if (this.selectedStation) this.form.patchValue({ name: this.selectedStation.name }); }
+  useEpgTvgId() { if (this.selectedStation) this.form.patchValue({ tvg_id: this.selectedStation.call_sign || this.selectedStation.name }); }
+  useEpgLogo() { if (this.selectedStation?.logo_uri) { this.newLogoUrlControl.setValue(this.selectedStation.logo_uri); this.addLogoFromUrl(); } }
+
+  useDummyEpg() {
+    this.form.patchValue({ tvg_id: 'dummy', tvc_guide_stationid: 'dummy', epg_data_id: null });
+    this.selectedStation = { name: 'Dummy EPG', station_id: 'dummy' };
+    this.cdr.markForCheck();
   }
 
   clearEpg() {
@@ -231,10 +256,9 @@ export class CreateChannelDialogComponent implements OnInit {
     }
   }
 
-  onLogoError() {
-    this.selectedLogoPreview = null;
-    this.cdr.markForCheck();
-  }
+  // --- Logo / Group Logic ---
+
+  onLogoError() { this.selectedLogoPreview = null; this.cdr.markForCheck(); }
 
   addLogoFromUrl() {
     const url = this.newLogoUrlControl.value?.trim();
@@ -295,7 +319,5 @@ export class CreateChannelDialogComponent implements OnInit {
     });
   }
 
-  cancel() {
-    this.context.completeWith(false);
-  }
+  cancel() { this.context.completeWith(false); }
 }

@@ -143,7 +143,7 @@ angular-frontend/src/app/
 ### Create Channel Modal
 - Uses Taiga UI `TuiDialogContext`.
 - **Layout**: Implements a high-fidelity three-column grid layout (Settings | Logo | EPG) matching the original Dispatcharr design.
-- **EPG Integration**: Provides direct TVG-ID search and Gracenote Station ID (LCN) fetching. Includes "Use EPG Name", "Use EPG TVG-ID", "Use EPG Logo", "Use Dummy", and "Auto Match" shortcuts.
+- **EPG Integration**: Provides direct TVG-ID search and Gracenote Station ID (LCN) fetching. Includes a comprehensive **EPG Match Browser** overlay that allows users to fuzzy search the `channel.db`, view detailed station metadata (countries, resolution), and granularly apply specific fields (Name, TVG-ID, Station ID, Logo) or "Apply All" to the form.
 - **Channel Groups**: Implements alphabetical sorting, real-time search filtering, and inline group creation.
 - **Logo Handling**: Displays a real-time preview of the channel logo. To maintain performance with thousands of logos, the logo dropdown limits rendering to 50 items and implements a client-side filter. Supports uploading custom logo files and adding external logo URLs directly through the UI.
 

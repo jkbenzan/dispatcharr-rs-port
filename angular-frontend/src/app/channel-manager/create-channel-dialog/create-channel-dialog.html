@@ -1,4 +1,80 @@
 <div class="dialog-container">
+  <!-- EPG Browser Overlay -->
+  <div class="epg-browser-overlay" *ngIf="browsingMatches">
+    <div class="epg-browser-header">
+      <div class="search-box">
+        <span class="material-icons">search</span>
+        <input type="text" [formControl]="epgSearchControl" placeholder="Search Channel DB..." (keyup.enter)="performEpgSearch(epgSearchControl.value || '')">
+        <button type="button" class="btn-go" (click)="performEpgSearch(epgSearchControl.value || '')">Search</button>
+      </div>
+      <button class="btn-close-browser" (click)="browsingMatches = false">&times;</button>
+    </div>
+    
+    <div class="epg-browser-content">
+      <div class="results-list">
+        <div class="loading-spinner" *ngIf="searchingEPG">Searching database...</div>
+        <div class="empty-state" *ngIf="!searchingEPG && suggestions.length === 0">No matches found.</div>
+        
+        <div class="match-item" *ngFor="let m of suggestions" [class.active]="selectedMatch?.station_id === m.station_id" (click)="selectMatch(m)">
+          <div class="m-logo">
+            <img *ngIf="m.logo_uri" [src]="m.logo_uri" alt="" (error)="m.logo_uri = null">
+            <span *ngIf="!m.logo_uri" class="material-icons">tv</span>
+          </div>
+          <div class="m-info">
+            <span class="m-name">{{ m.name }}</span>
+            <span class="m-call" *ngIf="m.call_sign">{{ m.call_sign }}</span>
+          </div>
+        </div>
+      </div>
+      
+      <div class="match-details" *ngIf="selectedMatch">
+        <div class="detail-header">
+          <h3>Match Details</h3>
+          <button type="button" class="btn-apply-all" (click)="applyMatchField('all')">Apply All</button>
+        </div>
+
+        <div class="detail-logo-section">
+          <div class="detail-logo-box">
+            <img *ngIf="selectedMatch.logo_uri" [src]="selectedMatch.logo_uri" alt="">
+            <div *ngIf="!selectedMatch.logo_uri" class="no-logo">No Logo</div>
+          </div>
+          <button type="button" class="btn-apply-field btn-small" (click)="applyMatchField('logo')" [disabled]="!selectedMatch.logo_uri">Apply Logo</button>
+        </div>
+        
+        <div class="detail-grid">
+          <div class="detail-row">
+            <div class="d-label">Channel Name</div>
+            <div class="d-val">{{ selectedMatch.name }}</div>
+            <button type="button" class="btn-apply-field" (click)="applyMatchField('name')">Apply</button>
+          </div>
+          
+          <div class="detail-row">
+            <div class="d-label">TVG-ID</div>
+            <div class="d-val">{{ selectedMatch.call_sign || selectedMatch.name }}</div>
+            <button type="button" class="btn-apply-field" (click)="applyMatchField('tvg_id')">Apply</button>
+          </div>
+          
+          <div class="detail-row">
+            <div class="d-label">Gracenote ID</div>
+            <div class="d-val">{{ selectedMatch.station_id }}</div>
+            <button type="button" class="btn-apply-field" (click)="applyMatchField('tvc_guide_stationid')">Apply</button>
+          </div>
+        </div>
+
+        <div class="detail-meta mt-4">
+          <div class="meta-item" *ngIf="selectedMatch.countries">
+            <span class="l">Country:</span>
+            <span class="v">{{ selectedMatch.countries }}</span>
+          </div>
+          <div class="meta-item" *ngIf="selectedMatch.video_types">
+            <span class="l">Quality:</span>
+            <span class="v">{{ selectedMatch.video_types }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="dialog-header">
     <div class="header-left">
        <span class="material-icons">list_alt</span>
@@ -19,7 +95,7 @@
           </div>
           <div class="input-wrapper">
             <input type="text" formControlName="name" class="tui-input" placeholder="NFL Network" autocomplete="off">
-            <div class="suggestions-dropdown" *ngIf="suggestions.length > 0">
+            <div class="suggestions-dropdown" *ngIf="suggestions.length > 0 && !browsingMatches">
               <div class="suggestion-item" *ngFor="let s of suggestions" (click)="selectSuggestion(s)">
                 <span class="s-name">{{ s.name }}</span>
                 <span class="s-callsign" *ngIf="s.call_sign">{{ s.call_sign }}</span>
@@ -110,7 +186,7 @@
             <label>EPG</label>
             <div class="epg-actions">
                <a class="shortcut-link" (click)="useDummyEpg()">Use Dummy</a>
-               <a class="shortcut-link match-link" (click)="autoMatchEpg()">
+               <a class="shortcut-link match-link" (click)="openEpgBrowser()">
                  <span class="material-icons">bolt</span> Auto Match
                </a>
             </div>
