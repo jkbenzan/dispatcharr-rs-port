@@ -23,10 +23,13 @@
     <div class="form-row">
       <div class="form-group flex-1">
         <label>Channel Group</label>
-        <select formControlName="channel_group_id" class="tui-select">
-          <option [ngValue]="null">-- Select Group --</option>
-          <option *ngFor="let g of groups" [ngValue]="g.id">{{ g.name }}</option>
-        </select>
+        <div class="flex-row gap-2" style="display: flex; gap: 8px;">
+          <select formControlName="channel_group_id" class="tui-select" style="flex: 1;">
+            <option [ngValue]="null">-- Select Group --</option>
+            <option *ngFor="let g of groups" [ngValue]="g.id">{{ g.name }}</option>
+          </select>
+          <button type="button" class="btn-action" title="Add Group" (click)="addGroup()">+</button>
+        </div>
       </div>
       <div class="form-group flex-1">
         <label>Stream Profile</label>
@@ -40,45 +43,73 @@
     <div class="form-row">
       <div class="form-group flex-1">
         <label>TVG-ID</label>
-        <input type="text" formControlName="tvg_id" class="tui-input" placeholder="e.g. HBO.us">
+        <div class="flex-row gap-2" style="display: flex; gap: 8px;">
+          <input type="text" formControlName="tvg_id" class="tui-input" style="flex: 1;" placeholder="e.g. HBO.us">
+          <button type="button" class="btn-action" (click)="searchEpgData()" title="Search EPG">
+            Search
+          </button>
+        </div>
       </div>
       <div class="form-group flex-1">
         <label>Gracenote Station ID</label>
-        <input type="text" formControlName="tvc_guide_stationid" class="tui-input" placeholder="e.g. 12345">
+        <div class="flex-row gap-2" style="display: flex; gap: 8px;">
+          <input type="text" formControlName="tvc_guide_stationid" class="tui-input" style="flex: 1;" placeholder="e.g. 12345">
+          <button type="button" class="btn-action" (click)="fetchLcn()" [disabled]="!form.get('tvg_id')?.value" title="Fetch LCN from EPG">
+            Fetch
+          </button>
+        </div>
       </div>
     </div>
 
-    <div class="form-row">
-      <div class="form-group flex-1">
-        <label>Logo</label>
-        <select formControlName="logo_id" class="tui-select">
-          <option [ngValue]="null">-- No Logo --</option>
-          <option *ngFor="let l of logos" [ngValue]="l.id">{{ l.name }}</option>
-        </select>
-        <small class="hint">GitHub logo search coming soon.</small>
+    <div class="form-group" style="margin-top: 16px;">
+      <label>Channel Logo</label>
+      <div class="logo-preview-row" style="display: flex; gap: 16px; align-items: flex-start; margin-top: 4px;">
+        <div class="logo-preview-box" style="width: 80px; height: 80px; border: 1px solid #333; border-radius: 4px; display: flex; align-items: center; justify-content: center; background: #111; overflow: hidden; flex-shrink: 0;">
+          <img *ngIf="selectedLogoPreview" [src]="selectedLogoPreview" alt="Logo preview" (error)="onLogoError()" style="max-width: 100%; max-height: 100%; object-fit: contain;">
+          <div *ngIf="!selectedLogoPreview" class="no-logo-placeholder" style="color: #666; font-size: 12px; text-align: center;">No Logo</div>
+        </div>
+        <div class="logo-controls" style="flex: 1; display: flex; flex-direction: column; gap: 8px;">
+          <div class="flex-row" style="display: flex; gap: 8px;">
+            <input type="text" [formControl]="logoSearchControl" class="tui-input" style="flex: 1;" placeholder="Search logos...">
+            <select formControlName="logo_id" class="tui-select" style="flex: 2;">
+              <option [ngValue]="null">-- Select Logo --</option>
+              <option *ngFor="let l of filteredLogos" [ngValue]="l.id">{{ l.name }}</option>
+            </select>
+          </div>
+          <div class="flex-row" style="display: flex; gap: 8px;">
+            <input type="text" [formControl]="newLogoUrlControl" class="tui-input" style="flex: 1;" placeholder="Image URL...">
+            <button type="button" class="btn-action" (click)="addLogoFromUrl()" [disabled]="!newLogoUrlControl.value || addingLogo">
+              {{ addingLogo ? 'Adding...' : 'Add from URL' }}
+            </button>
+            <input type="file" #fileInput hidden accept="image/*" (change)="uploadLogoFile($event)">
+            <button type="button" class="btn-action" (click)="fileInput.click()" [disabled]="uploadingLogo">
+              {{ uploadingLogo ? 'Uploading...' : 'Upload File' }}
+            </button>
+          </div>
+        </div>
       </div>
+    </div>
+
+    <div class="form-row" style="display: flex; gap: 16px; margin-top: 16px; align-items: center;">
       <div class="form-group flex-1">
-        <label>User Level</label>
+        <label>User Level Access</label>
         <select formControlName="user_level" class="tui-select">
-          <option [ngValue]="1">Level 1 (Everyone)</option>
-          <option [ngValue]="2">Level 2</option>
-          <option [ngValue]="3">Level 3</option>
-          <option [ngValue]="4">Level 4</option>
-          <option [ngValue]="5">Level 5 (Admin Only)</option>
+          <option *ngFor="let level of userLevels" [ngValue]="level.id">{{ level.name }}</option>
         </select>
+      </div>
+      <div class="form-group flex-1 checkbox-row" style="margin-top: 24px;">
+        <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px;">
+          <input type="checkbox" formControlName="is_adult">
+          <span>Mature Content</span>
+        </label>
       </div>
     </div>
 
-    <div class="form-row checkbox-row">
-      <label class="checkbox-label">
-        <input type="checkbox" formControlName="is_adult">
-        <span>Mature Content (Requires Adult Role)</span>
-      </label>
-    </div>
-
-    <div class="dialog-actions">
+    <div class="dialog-actions" style="margin-top: 24px;">
       <button type="button" class="btn-cancel" (click)="cancel()">Cancel</button>
-      <button type="submit" class="btn-submit" [disabled]="form.invalid">Create Channel</button>
+      <button type="submit" class="btn-submit" [disabled]="form.invalid || submitting">
+        {{ submitting ? 'Creating...' : 'Create Channel' }}
+      </button>
     </div>
   </form>
 </div>

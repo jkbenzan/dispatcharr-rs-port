@@ -140,6 +140,12 @@ angular-frontend/src/app/
 - Displays as a centered modal overlay with loading spinner and error states
 - Used for both "Play Channel" and "Preview Stream" actions
 
+### Create Channel Modal
+- Uses Taiga UI `TuiDialogContext`.
+- **EPG Integration**: Provides direct TVG-ID search and Gracenote Station ID (LCN) fetching from the `channel.db` database via the `suggestMatches` and `getEPGLcnByTvgId` API endpoints.
+- **Logo Handling**: Displays a real-time preview of the channel logo. To maintain performance with thousands of logos, the logo dropdown limits rendering to 50 items and implements a client-side filter. Supports uploading custom logo files and adding external logo URLs directly through the UI.
+- **Data Loading**: Fetches and caches groups, profiles, and logos via the `ApiService` to instantly populate dropdowns.
+
 ### Stream Checker SheetDialog
 
 The stream checker is presented as a **Taiga UI SheetDialog** (from `@taiga-ui/addon-mobile`) that slides up from the bottom of the screen when any "Test" action is triggered. This replaces the previous approach of switching to the React Stream Checker tab.

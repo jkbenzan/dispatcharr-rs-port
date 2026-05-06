@@ -41,12 +41,29 @@ export class ApiService {
     return this.http.post('/api/channels/channels/', channelData);
   }
 
+  // =================== EPG ===================
+
+  getEPGLcnByTvgId(tvgId: string): Observable<any> {
+    return this.http.get(`/api/epg/lcn?tvg_id=${encodeURIComponent(tvgId)}`);
+  }
+
   suggestMatches(channelName: string): Observable<any> {
     return this.http.post('/api/channel-db/match/suggest/', { channel_name: channelName });
   }
 
   getLogos(): Observable<any> {
     return this.http.get('/api/channels/logos/');
+  }
+
+  createLogo(data: { name: string; url: string }): Observable<any> {
+    return this.http.post('/api/channels/logos/', data);
+  }
+
+  uploadLogo(file: File): Observable<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('name', file.name);
+    return this.http.post('/api/channels/logos/upload', formData);
   }
 
   getStreamProfiles(): Observable<any> {
