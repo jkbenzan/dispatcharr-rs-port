@@ -98,8 +98,9 @@ pub async fn search_stations(
         return Ok(Json(json!([])));
     }
     
-    let limit = query.limit.unwrap_or(20);
-    let results = db.search_stations(&q, query.country.as_deref(), query.quality.as_deref(), limit).await.map_err(err_500)?;
+    tracing::info!("🔍 Invoking channel_data.db for search query: '{}'", q);
+    
+    let results = db.search_stations(&q, query.country.as_deref(), query.quality.as_deref(), query.limit.unwrap_or(20)).await.map_err(err_500)?;
     
     Ok(Json(serde_json::to_value(results).unwrap()))
 }
@@ -202,6 +203,8 @@ pub async fn suggest_matches(
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     let db = state.channel_db.read().await;
     if !db.is_available() { return Err(err_503("Not available")); }
+    
+    tracing::info!("🔍 Invoking channel_data.db for match suggestions: '{}'", payload.channel_name);
     
     if payload.channel_name.is_empty() {
         return Err(err_400("channel_name is required"));

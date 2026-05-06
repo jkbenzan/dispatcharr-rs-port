@@ -4,16 +4,19 @@
     <div class="epg-browser-header">
       <div class="search-box">
         <span class="material-icons">search</span>
-        <input type="text" [formControl]="epgSearchControl" placeholder="Search Channel DB..." (keyup.enter)="performEpgSearch(epgSearchControl.value || '')">
+        <input type="text" [formControl]="epgSearchControl" placeholder="Search channel_data.db..." (keyup.enter)="performEpgSearch(epgSearchControl.value || '')">
         <button type="button" class="btn-go" (click)="performEpgSearch(epgSearchControl.value || '')">Search</button>
+      </div>
+      <div class="db-source-tag">
+        <span class="material-icons">storage</span> channel_data.db
       </div>
       <button class="btn-close-browser" (click)="browsingMatches = false">&times;</button>
     </div>
     
     <div class="epg-browser-content">
       <div class="results-list">
-        <div class="loading-spinner" *ngIf="searchingEPG">Searching database...</div>
-        <div class="empty-state" *ngIf="!searchingEPG && suggestions.length === 0">No matches found.</div>
+        <div class="loading-spinner" *ngIf="searchingEPG">Invoking channel_data.db...</div>
+        <div class="empty-state" *ngIf="!searchingEPG && suggestions.length === 0">No matches found in channel_data.db.</div>
         
         <div class="match-item" *ngFor="let m of suggestions" [class.active]="selectedMatch?.station_id === m.station_id" (click)="selectMatch(m)">
           <div class="m-logo">
@@ -106,14 +109,13 @@
 
         <div class="form-group mt-3">
           <label>Channel Group</label>
-          <div class="group-control">
-            <select formControlName="channel_group_id" class="tui-select">
-               <option [ngValue]="null">-- Select Group --</option>
-               <option *ngFor="let g of filteredGroups" [ngValue]="g.id">{{ g.name }}</option>
-            </select>
+          <div class="group-control searchable-select">
+            <input type="text" [formControl]="groupSearchControl" list="group-list" class="tui-input" placeholder="Search or select group...">
+            <datalist id="group-list">
+              <option *ngFor="let g of groups" [value]="g.name"></option>
+            </datalist>
             <button type="button" class="btn-add-group" (click)="addGroup()">+</button>
           </div>
-          <input type="text" [formControl]="groupSearchControl" class="tui-input search-sub" placeholder="Filter groups...">
         </div>
 
         <div class="form-group mt-3">
@@ -191,9 +193,9 @@
                </a>
             </div>
           </div>
-          <div class="epg-selection-box">
+          <div class="epg-selection-box" (click)="openEpgBrowser()">
              <span class="selected-val">{{ selectedStation ? selectedStation.name : 'None selected' }}</span>
-             <button type="button" class="btn-clear" (click)="clearEpg()" *ngIf="selectedStation">&times;</button>
+             <button type="button" class="btn-clear" (click)="clearEpg(); $event.stopPropagation()" *ngIf="selectedStation">&times;</button>
           </div>
         </div>
       </div>

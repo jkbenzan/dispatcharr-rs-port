@@ -24,14 +24,14 @@ export class CreateChannelDialogComponent implements OnInit {
   readonly form = this.fb.group({
     name: ['', Validators.required],
     channel_number: [null],
-    channel_group_id: [null],
-    stream_profile_id: [null],
+    channel_group_id: [null as any],
+    stream_profile_id: [null as any],
     user_level: [1],
-    logo_id: [null],
+    logo_id: [null as any],
     is_adult: [false],
     tvg_id: [''],
     tvc_guide_stationid: [''],
-    epg_data_id: [null]
+    epg_data_id: [null as any]
   });
 
   groupSearchControl = new FormControl('');
@@ -50,7 +50,6 @@ export class CreateChannelDialogComponent implements OnInit {
   ];
 
   groups: any[] = [];
-  filteredGroups: any[] = [];
   profiles: any[] = [];
   logos: any[] = [];
   filteredLogos: any[] = [];
@@ -80,11 +79,14 @@ export class CreateChannelDialogComponent implements OnInit {
       this.cdr.markForCheck();
     });
 
-    this.groupSearchControl.valueChanges.pipe(
-      debounceTime(200),
-      distinctUntilChanged()
-    ).subscribe(val => {
-      this.applyGroupFilters(val || '');
+    this.groupSearchControl.valueChanges.subscribe(val => {
+      const group = this.groups.find(g => g.name === val);
+      if (group) {
+        this.form.get('channel_group_id')?.setValue(group.id, { emitEvent: false });
+      } else {
+        this.form.get('channel_group_id')?.setValue(null, { emitEvent: false });
+      }
+      this.cdr.markForCheck();
     });
 
     this.logoSearchControl.valueChanges.pipe(
@@ -125,24 +127,8 @@ export class CreateChannelDialogComponent implements OnInit {
     this.api.getChannelGroups().subscribe((res: any) => {
       const allGroups = res.results || res;
       this.groups = allGroups.sort((a: any, b: any) => a.name.localeCompare(b.name));
-      this.applyGroupFilters(this.groupSearchControl.value || '');
       this.cdr.markForCheck();
     });
-  }
-
-  applyGroupFilters(search: string) {
-    let filtered = [...this.groups];
-    if (search) {
-      const lower = search.toLowerCase();
-      filtered = filtered.filter(g => g.name.toLowerCase().includes(lower));
-    }
-    this.filteredGroups = filtered;
-    this.cdr.markForCheck();
-  }
-
-  toggleCustomGroups() {
-    this.showOnlyCustomGroups = !this.showOnlyCustomGroups;
-    this.applyGroupFilters(this.groupSearchControl.value || '');
   }
 
   filterLogos(search: string) {
@@ -301,7 +287,7 @@ export class CreateChannelDialogComponent implements OnInit {
       next: (res: any) => {
         this.groups.push(res);
         this.groups.sort((a: any, b: any) => a.name.localeCompare(b.name));
-        this.applyGroupFilters(this.groupSearchControl.value || '');
+        this.groupSearchControl.setValue(res.name);
         this.form.patchValue({ channel_group_id: res.id });
         this.addingGroup = false;
         this.cdr.markForCheck();
