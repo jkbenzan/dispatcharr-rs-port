@@ -92,13 +92,23 @@ export class CreateChannelDialogComponent implements OnInit {
   }
 
   // ─── Computed display for filtered groups (search + custom toggle) ───
+  // Searches group name AND M3U account names so users can find groups
+  // by provider name (e.g. typing "iptv" finds groups from that provider).
   get displayedGroups(): any[] {
     const search = (this.groupSearchControl.value || '').toLowerCase();
     let list = this.showOnlyCustomGroups
       ? this.groups.filter(g => g.is_custom === true)
       : this.groups;
     if (search) {
-      list = list.filter(g => g.name.toLowerCase().includes(search));
+      list = list.filter(g => {
+        // Match against group name
+        if (g.name.toLowerCase().includes(search)) return true;
+        // Match against any associated M3U account name
+        if (g.m3u_accounts && Array.isArray(g.m3u_accounts)) {
+          return g.m3u_accounts.some((acc: string) => acc.toLowerCase().includes(search));
+        }
+        return false;
+      });
     }
     return list;
   }
@@ -199,10 +209,18 @@ export class CreateChannelDialogComponent implements OnInit {
   // ═══════════════════════════════════════════════════════════
 
   loadGroups() {
-    this.api.getChannelGroups().subscribe((res: any) => {
-      const allGroups = res.results || res;
-      this.groups = allGroups.sort((a: any, b: any) => a.name.localeCompare(b.name));
-      this.cdr.markForCheck();
+    this.api.getChannelGroups().subscribe({
+      next: (res: any) => {
+        const allGroups = res.results || res;
+        this.groups = allGroups.sort((a: any, b: any) => a.name.localeCompare(b.name));
+        this.cdr.markForCheck();
+      },
+      error: (err: any) => {
+        // Degrade gracefully — show empty group list if the API fails
+        console.error('Failed to load channel groups:', err);
+        this.groups = [];
+        this.cdr.markForCheck();
+      }
     });
   }
 

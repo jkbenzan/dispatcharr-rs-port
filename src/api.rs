@@ -1300,18 +1300,53 @@ pub async fn get_channel_groups(State(state): State<Arc<AppState>>) -> Json<Valu
         .await
         .unwrap_or_default();
 
+    // Fetch the join table that links groups ↔ M3U accounts.
+    // Groups WITHOUT any rows here are user-created (is_custom = true).
     let mappings = crate::entities::channel_group_m3u_account::Entity::find()
         .all(&state.db)
         .await
         .unwrap_or_default();
 
-    let m3u_group_ids: std::collections::HashSet<i64> = mappings.into_iter().map(|m| m.channel_group_id).collect();
+    // Fetch all M3U accounts so we can resolve account IDs → human-readable names.
+    let m3u_accounts = m3u_account::Entity::find()
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+
+    // Build a lookup: m3u_account_id → account name
+    let account_name_map: std::collections::HashMap<i64, String> = m3u_accounts
+        .into_iter()
+        .map(|a| (a.id, a.name))
+        .collect();
+
+    // Build a lookup: channel_group_id → Vec<account name>
+    // A single group may be associated with multiple M3U providers.
+    let mut group_accounts: std::collections::HashMap<i64, Vec<String>> =
+        std::collections::HashMap::new();
+    for m in &mappings {
+        let name = account_name_map
+            .get(&m.m3u_account_id)
+            .cloned()
+            .unwrap_or_else(|| format!("Provider #{}", m.m3u_account_id));
+        group_accounts
+            .entry(m.channel_group_id)
+            .or_default()
+            .push(name);
+    }
 
     let mut results = Vec::new();
     for g in groups {
-        let is_custom = !m3u_group_ids.contains(&g.id);
+        // A group is "custom" (user-created) if it has NO M3U account associations
+        let is_custom = !group_accounts.contains_key(&g.id);
+        let accounts = group_accounts
+            .get(&g.id)
+            .cloned()
+            .unwrap_or_default();
+
         let mut js = serde_json::to_value(&g).unwrap();
         js["is_custom"] = serde_json::json!(is_custom);
+        // Include the list of M3U provider names for frontend display
+        js["m3u_accounts"] = serde_json::json!(accounts);
         results.push(js);
     }
 

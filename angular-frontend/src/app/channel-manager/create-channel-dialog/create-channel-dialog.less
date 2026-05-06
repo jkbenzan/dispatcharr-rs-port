@@ -342,6 +342,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 8px;
     padding: 8px 12px;
     cursor: pointer;
     transition: background 0.15s;
@@ -354,15 +355,49 @@
       border-left: 3px solid @accent;
     }
 
-    .group-name { font-size: 13px; color: @text; }
+    .group-name {
+      font-size: 13px;
+      color: @text;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1;
+    }
+
+    /* Container for badge(s) — wraps if multiple M3U providers */
+    .group-badges {
+      display: flex;
+      gap: 4px;
+      flex-shrink: 0;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      max-width: 50%;
+    }
+
     .group-badge {
       font-size: 10px;
       padding: 2px 8px;
       border-radius: 10px;
-      background: rgba(108, 92, 231, 0.15);
-      color: @accent-light;
       font-weight: 600;
       text-transform: uppercase;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 120px;
+    }
+
+    /* Green badge — user-created groups (no M3U associations) */
+    .badge-custom {
+      background: rgba(0, 184, 148, 0.15);
+      color: @accent-green;
+    }
+
+    /* Blue badge — M3U provider association */
+    .badge-m3u {
+      background: rgba(137, 180, 250, 0.12);
+      color: @info-blue;
+      text-transform: none;
     }
   }
 

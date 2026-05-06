@@ -85,14 +85,23 @@
             Show only custom groups (no M3U associations)
           </label>
 
-          <!-- Scrollable group list -->
+          <!-- Scrollable group list — shows group name + M3U provider badges.
+               User-created groups (no M3U association) show a green "custom" badge.
+               M3U-imported groups show their provider name(s) as blue badges. -->
           <div class="group-list mt-2">
             <div class="group-item"
                  *ngFor="let g of displayedGroups"
                  [class.selected]="form.get('channel_group_id')?.value === g.id"
                  (click)="selectGroup(g)">
               <span class="group-name">{{ g.name }}</span>
-              <span class="group-badge" *ngIf="g.is_custom">custom</span>
+              <div class="group-badges">
+                <!-- Custom badge: group has NO M3U association (user-created) -->
+                <span class="group-badge badge-custom" *ngIf="g.is_custom">custom</span>
+                <!-- M3U provider badges: one per associated account -->
+                <span class="group-badge badge-m3u"
+                      *ngFor="let acc of g.m3u_accounts"
+                      [title]="acc">{{ acc }}</span>
+              </div>
             </div>
             <div class="group-empty" *ngIf="displayedGroups.length === 0">No groups match filter.</div>
           </div>
