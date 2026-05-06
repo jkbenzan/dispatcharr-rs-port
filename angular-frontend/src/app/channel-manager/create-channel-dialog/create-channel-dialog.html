@@ -1,113 +1,132 @@
 <div class="dialog-container">
-  <h2>Create Channel</h2>
+  <div class="dialog-header">
+    <h2>Create New Channel</h2>
+    <p class="subtitle">Manual channel entry and metadata assignment</p>
+  </div>
   
-  <form [formGroup]="form" (ngSubmit)="submit()">
-    <div class="form-row">
-      <div class="form-group flex-2">
-        <label>Channel Name</label>
-        <input type="text" formControlName="name" class="tui-input" placeholder="e.g. HBO HD" autocomplete="off">
-        
-        <div class="suggestions-dropdown" *ngIf="suggestions.length > 0">
-          <div class="suggestion-item" *ngFor="let s of suggestions" (click)="selectSuggestion(s)">
-            <span class="s-name">{{ s.name }}</span>
-            <span class="s-callsign" *ngIf="s.call_sign">{{ s.call_sign }}</span>
+  <form [formGroup]="form" (ngSubmit)="submit()" class="modal-form">
+    
+    <!-- Section 1: Basic Info -->
+    <div class="form-section">
+      <h3 class="section-title">Identity & Placement</h3>
+      <div class="grid-row">
+        <div class="form-group col-8">
+          <label>Channel Name</label>
+          <div class="input-with-shortcuts">
+            <input type="text" formControlName="name" class="tui-input" placeholder="e.g. HBO HD" autocomplete="off">
+            <div class="suggestions-dropdown" *ngIf="suggestions.length > 0">
+              <div class="suggestion-item" *ngFor="let s of suggestions" (click)="selectSuggestion(s)">
+                <span class="s-name">{{ s.name }}</span>
+                <span class="s-callsign" *ngIf="s.call_sign">{{ s.call_sign }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="form-group col-4">
+          <label>Number</label>
+          <input type="number" formControlName="channel_number" class="tui-input" placeholder="Auto">
+        </div>
+      </div>
+
+      <div class="grid-row mt-3">
+        <div class="form-group col-6">
+          <label>Channel Group</label>
+          <div class="group-control-wrapper">
+             <div class="search-row" style="display: flex; gap: 4px;">
+                <input type="text" [formControl]="groupSearchControl" class="tui-input search-small" placeholder="Search groups..." style="height: 32px; font-size: 13px;">
+                <button type="button" class="btn-filter" [class.active]="showOnlyCustomGroups" (click)="toggleCustomGroups()" title="Toggle Custom Groups">
+                   <span class="material-icons" style="font-size: 18px;">filter_list</span>
+                </button>
+             </div>
+             <div class="select-row" style="display: flex; gap: 8px; margin-top: 4px;">
+                <select formControlName="channel_group_id" class="tui-select" style="flex: 1;">
+                  <option [ngValue]="null">-- Select Group --</option>
+                  <option *ngFor="let g of filteredGroups" [ngValue]="g.id">{{ g.name }}</option>
+                </select>
+                <button type="button" class="btn-action-square" (click)="addGroup()" title="Add New Group">+</button>
+             </div>
+          </div>
+        </div>
+        <div class="form-group col-6">
+          <label>Stream Profile</label>
+          <select formControlName="stream_profile_id" class="tui-select">
+            <option [ngValue]="null">-- Default Profile --</option>
+            <option *ngFor="let p of profiles" [ngValue]="p.id">{{ p.name }}</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 2: EPG Data -->
+    <div class="form-section mt-4">
+      <h3 class="section-title">EPG & Metadata</h3>
+      <div class="grid-row">
+        <div class="form-group col-6">
+          <label>TVG-ID</label>
+          <div class="input-with-action" style="display: flex; gap: 4px; align-items: center;">
+            <input type="text" formControlName="tvg_id" class="tui-input" style="flex: 1;" placeholder="e.g. HBO.us">
+            <div class="shortcut-buttons" style="display: flex; gap: 4px;">
+              <button type="button" class="btn-shortcut" (click)="copyNameToTvgId()" title="Copy from Name">
+                <span class="material-icons">content_copy</span>
+              </button>
+              <button type="button" class="btn-action-small" (click)="searchEpgData()" title="Search EPG DB">Search</button>
+            </div>
+          </div>
+        </div>
+        <div class="form-group col-6">
+          <label>Gracenote Station ID / LCN</label>
+          <div class="input-with-action" style="display: flex; gap: 4px;">
+            <input type="text" formControlName="tvc_guide_stationid" class="tui-input" style="flex: 1;" placeholder="e.g. 12345">
+            <button type="button" class="btn-action-small" (click)="fetchLcn()" [disabled]="!form.get('tvg_id')?.value" title="Fetch LCN from EPG">Fetch</button>
           </div>
         </div>
       </div>
-      <div class="form-group flex-1">
-        <label>Channel #</label>
-        <input type="number" formControlName="channel_number" class="tui-input" placeholder="Auto">
-      </div>
     </div>
 
-    <div class="form-row">
-      <div class="form-group flex-1">
-        <label>Channel Group</label>
-        <div class="flex-row gap-2" style="display: flex; gap: 8px;">
-          <select formControlName="channel_group_id" class="tui-select" style="flex: 1;">
-            <option [ngValue]="null">-- Select Group --</option>
-            <option *ngFor="let g of groups" [ngValue]="g.id">{{ g.name }}</option>
-          </select>
-          <button type="button" class="btn-action" title="Add Group" (click)="addGroup()">+</button>
-        </div>
-      </div>
-      <div class="form-group flex-1">
-        <label>Stream Profile</label>
-        <select formControlName="stream_profile_id" class="tui-select">
-          <option [ngValue]="null">-- Default Profile --</option>
-          <option *ngFor="let p of profiles" [ngValue]="p.id">{{ p.name }}</option>
-        </select>
-      </div>
-    </div>
-
-    <div class="form-row">
-      <div class="form-group flex-1">
-        <label>TVG-ID</label>
-        <div class="flex-row gap-2" style="display: flex; gap: 8px;">
-          <input type="text" formControlName="tvg_id" class="tui-input" style="flex: 1;" placeholder="e.g. HBO.us">
-          <button type="button" class="btn-action" (click)="searchEpgData()" title="Search EPG">
-            Search
-          </button>
-        </div>
-      </div>
-      <div class="form-group flex-1">
-        <label>Gracenote Station ID</label>
-        <div class="flex-row gap-2" style="display: flex; gap: 8px;">
-          <input type="text" formControlName="tvc_guide_stationid" class="tui-input" style="flex: 1;" placeholder="e.g. 12345">
-          <button type="button" class="btn-action" (click)="fetchLcn()" [disabled]="!form.get('tvg_id')?.value" title="Fetch LCN from EPG">
-            Fetch
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <div class="form-group" style="margin-top: 16px;">
-      <label>Channel Logo</label>
-      <div class="logo-preview-row" style="display: flex; gap: 16px; align-items: flex-start; margin-top: 4px;">
+    <!-- Section 3: Visuals & Access -->
+    <div class="form-section mt-4">
+      <h3 class="section-title">Visuals & Access</h3>
+      <div class="logo-config-wrapper" style="display: flex; gap: 16px; align-items: flex-start;">
         <div class="logo-preview-box" style="width: 80px; height: 80px; border: 1px solid #333; border-radius: 4px; display: flex; align-items: center; justify-content: center; background: #111; overflow: hidden; flex-shrink: 0;">
           <img *ngIf="selectedLogoPreview" [src]="selectedLogoPreview" alt="Logo preview" (error)="onLogoError()" style="max-width: 100%; max-height: 100%; object-fit: contain;">
-          <div *ngIf="!selectedLogoPreview" class="no-logo-placeholder" style="color: #666; font-size: 12px; text-align: center;">No Logo</div>
+          <div *ngIf="!selectedLogoPreview" class="no-logo-placeholder" style="color: #666; font-size: 11px;">No Logo</div>
         </div>
-        <div class="logo-controls" style="flex: 1; display: flex; flex-direction: column; gap: 8px;">
-          <div class="flex-row" style="display: flex; gap: 8px;">
-            <input type="text" [formControl]="logoSearchControl" class="tui-input" style="flex: 1;" placeholder="Search logos...">
+        <div class="logo-fields" style="flex: 1;">
+          <div class="search-select-row" style="display: flex; gap: 4px;">
+            <input type="text" [formControl]="logoSearchControl" class="tui-input search-small" placeholder="Search logos..." style="flex: 1; height: 32px; font-size: 13px;">
             <select formControlName="logo_id" class="tui-select" style="flex: 2;">
               <option [ngValue]="null">-- Select Logo --</option>
               <option *ngFor="let l of filteredLogos" [ngValue]="l.id">{{ l.name }}</option>
             </select>
           </div>
-          <div class="flex-row" style="display: flex; gap: 8px;">
-            <input type="text" [formControl]="newLogoUrlControl" class="tui-input" style="flex: 1;" placeholder="Image URL...">
-            <button type="button" class="btn-action" (click)="addLogoFromUrl()" [disabled]="!newLogoUrlControl.value || addingLogo">
-              {{ addingLogo ? 'Adding...' : 'Add from URL' }}
-            </button>
+          <div class="upload-row mt-2" style="display: flex; gap: 4px;">
+            <input type="text" [formControl]="newLogoUrlControl" class="tui-input" placeholder="URL..." style="flex: 1; height: 32px; font-size: 13px;">
+            <button type="button" class="btn-action-small" (click)="addLogoFromUrl()" [disabled]="!newLogoUrlControl.value || addingLogo">Add</button>
             <input type="file" #fileInput hidden accept="image/*" (change)="uploadLogoFile($event)">
-            <button type="button" class="btn-action" (click)="fileInput.click()" [disabled]="uploadingLogo">
-              {{ uploadingLogo ? 'Uploading...' : 'Upload File' }}
-            </button>
+            <button type="button" class="btn-action-small" (click)="fileInput.click()" [disabled]="uploadingLogo">Upload</button>
           </div>
+        </div>
+      </div>
+
+      <div class="grid-row mt-4" style="display: flex; gap: 16px; align-items: center;">
+        <div class="form-group col-6" style="flex: 1;">
+          <label>User Level Access</label>
+          <select formControlName="user_level" class="tui-select">
+            <option *ngFor="let level of userLevels" [ngValue]="level.id">{{ level.name }}</option>
+          </select>
+        </div>
+        <div class="form-group col-6" style="flex: 1;">
+           <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px; margin-top: 24px;">
+             <input type="checkbox" formControlName="is_adult">
+             <span class="label-text">Mature Content</span>
+           </label>
         </div>
       </div>
     </div>
 
-    <div class="form-row" style="display: flex; gap: 16px; margin-top: 16px; align-items: center;">
-      <div class="form-group flex-1">
-        <label>User Level Access</label>
-        <select formControlName="user_level" class="tui-select">
-          <option *ngFor="let level of userLevels" [ngValue]="level.id">{{ level.name }}</option>
-        </select>
-      </div>
-      <div class="form-group flex-1 checkbox-row" style="margin-top: 24px;">
-        <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px;">
-          <input type="checkbox" formControlName="is_adult">
-          <span>Mature Content</span>
-        </label>
-      </div>
-    </div>
-
-    <div class="dialog-actions" style="margin-top: 24px;">
-      <button type="button" class="btn-cancel" (click)="cancel()">Cancel</button>
-      <button type="submit" class="btn-submit" [disabled]="form.invalid || submitting">
+    <div class="dialog-footer" style="margin-top: 32px; display: flex; justify-content: flex-end; gap: 12px;">
+      <button type="button" class="btn-cancel" (click)="cancel()" style="padding: 8px 16px; background: #333; color: white; border: none; border-radius: 4px; cursor: pointer;">Cancel</button>
+      <button type="submit" class="btn-submit" [disabled]="form.invalid || submitting" style="padding: 8px 24px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
         {{ submitting ? 'Creating...' : 'Create Channel' }}
       </button>
     </div>

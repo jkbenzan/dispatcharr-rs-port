@@ -1302,6 +1302,25 @@ pub async fn get_channel_groups(State(state): State<Arc<AppState>>) -> Json<Valu
     Json(json!(results))
 }
 
+pub async fn create_channel_group(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<Value>,
+) -> Result<Json<Value>, StatusCode> {
+    let name = payload.get("name").and_then(|v| v.as_str()).ok_or(StatusCode::BAD_REQUEST)?;
+    
+    let active = channel_group::ActiveModel {
+        name: Set(name.to_string()),
+        ..Default::default()
+    };
+    
+    let inserted = active.insert(&state.db).await.map_err(|e| {
+        tracing::error!("Failed to create channel group: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    
+    Ok(Json(json!(inserted)))
+}
+
 pub async fn get_channel_profiles(State(state): State<Arc<AppState>>) -> Json<Value> {
     let profiles = channel_profile::Entity::find()
         .all(&state.db)

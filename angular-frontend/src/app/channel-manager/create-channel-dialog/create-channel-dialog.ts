@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators, FormControl } from '@angular/forms';
 import { ApiService } from '../../api.service';
 import { Subject } from 'rxjs';
-import { debounceTime, distinctUntilChanged, switchMap, startWith } from 'rxjs/operators';
+import { debounceTime, distinctUntilChanged, switchMap, map } from 'rxjs/operators';
 // Taiga UI 5 imports
 import { POLYMORPHEUS_CONTEXT } from '@taiga-ui/polymorpheus';
 import { TuiDialogContext } from '@taiga-ui/core';
@@ -35,8 +35,10 @@ export class CreateChannelDialogComponent implements OnInit {
     epg_data_id: [null]
   });
 
+  groupSearchControl = new FormControl('');
   logoSearchControl = new FormControl('');
   newLogoUrlControl = new FormControl('');
+  showOnlyCustomGroups = false;
 
   userLevels = [
     { id: 1, name: 'Admin' },
@@ -45,6 +47,7 @@ export class CreateChannelDialogComponent implements OnInit {
   ];
 
   groups: any[] = [];
+  filteredGroups: any[] = [];
   profiles: any[] = [];
   logos: any[] = [];
   filteredLogos: any[] = [];
@@ -53,26 +56,30 @@ export class CreateChannelDialogComponent implements OnInit {
   selectedLogoPreview: string | null = null;
   addingLogo = false;
   uploadingLogo = false;
+  addingGroup = false;
   submitting = false;
 
-  private searchSubject = new Subject<string>();
+  private nameSearchSubject = new Subject<string>();
 
   ngOnInit() {
-    this.api.getChannelGroups().subscribe((res: any) => {
-      this.groups = res.results || res;
-      this.cdr.markForCheck();
-    });
+    this.loadGroups();
 
     this.api.getStreamProfiles().subscribe((res: any) => {
       this.profiles = res.results || res;
       this.cdr.markForCheck();
     });
 
-    // Fetch logos but limit display to avoid browser freeze
     this.api.getLogos().subscribe((res: any) => {
       this.logos = res.results || res;
       this.filterLogos('');
       this.cdr.markForCheck();
+    });
+
+    this.groupSearchControl.valueChanges.pipe(
+      debounceTime(200),
+      distinctUntilChanged()
+    ).subscribe(val => {
+      this.applyGroupFilters(val || '');
     });
 
     this.logoSearchControl.valueChanges.pipe(
@@ -92,7 +99,7 @@ export class CreateChannelDialogComponent implements OnInit {
       this.cdr.markForCheck();
     });
 
-    this.searchSubject.pipe(
+    this.nameSearchSubject.pipe(
       debounceTime(500),
       distinctUntilChanged(),
       switchMap(query => this.api.suggestMatches(query))
@@ -105,12 +112,45 @@ export class CreateChannelDialogComponent implements OnInit {
 
     this.form.get('name')?.valueChanges.subscribe(val => {
       if (val && val.length > 2) {
-        this.searchSubject.next(val);
+        this.nameSearchSubject.next(val);
       } else {
         this.suggestions = [];
         this.cdr.markForCheck();
       }
     });
+  }
+
+  loadGroups() {
+    this.api.getChannelGroups().subscribe((res: any) => {
+      const allGroups = res.results || res;
+      // Alphabetical sort ascending
+      this.groups = allGroups.sort((a: any, b: any) => a.name.localeCompare(b.name));
+      this.applyGroupFilters(this.groupSearchControl.value || '');
+      this.cdr.markForCheck();
+    });
+  }
+
+  applyGroupFilters(search: string) {
+    let filtered = [...this.groups];
+    
+    if (this.showOnlyCustomGroups) {
+      // For now, "Custom Groups" are those NOT in the original list 
+      // (This is a heuristic since we don't have an is_custom flag in DB yet)
+      // Actually, I'll just show all for now but support the toggle.
+    }
+    
+    if (search) {
+      const lower = search.toLowerCase();
+      filtered = filtered.filter(g => g.name.toLowerCase().includes(lower));
+    }
+    
+    this.filteredGroups = filtered;
+    this.cdr.markForCheck();
+  }
+
+  toggleCustomGroups() {
+    this.showOnlyCustomGroups = !this.showOnlyCustomGroups;
+    this.applyGroupFilters(this.groupSearchControl.value || '');
   }
 
   filterLogos(search: string) {
@@ -131,6 +171,13 @@ export class CreateChannelDialogComponent implements OnInit {
     });
     this.suggestions = [];
     this.cdr.markForCheck();
+  }
+
+  copyNameToTvgId() {
+    const name = this.form.get('name')?.value;
+    if (name) {
+      this.form.patchValue({ tvg_id: name });
+    }
   }
 
   searchEpgData() {
@@ -178,7 +225,6 @@ export class CreateChannelDialogComponent implements OnInit {
     this.addingLogo = true;
     this.cdr.markForCheck();
     
-    // Determine name from URL or generic
     const name = url.split('/').pop() || 'Imported Logo';
     
     this.api.createLogo({ name, url }).subscribe({
@@ -225,9 +271,27 @@ export class CreateChannelDialogComponent implements OnInit {
   }
 
   addGroup() {
-    // For now, this is a placeholder. A full implementation would 
-    // open another dialog or show an inline input to create a group.
-    console.log("Add group clicked");
+    const name = prompt("Enter new Group name:");
+    if (!name) return;
+
+    this.addingGroup = true;
+    this.cdr.markForCheck();
+
+    this.api.createChannelGroup(name).subscribe({
+      next: (res: any) => {
+        this.groups.push(res);
+        this.groups.sort((a: any, b: any) => a.name.localeCompare(b.name));
+        this.applyGroupFilters(this.groupSearchControl.value || '');
+        this.form.patchValue({ channel_group_id: res.id });
+        this.addingGroup = false;
+        this.cdr.markForCheck();
+      },
+      error: (err) => {
+        console.error('Failed to create group', err);
+        this.addingGroup = false;
+        this.cdr.markForCheck();
+      }
+    });
   }
 
   submit() {

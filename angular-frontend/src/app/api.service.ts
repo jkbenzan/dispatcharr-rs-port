@@ -14,6 +14,10 @@ export class ApiService {
     return this.http.get('/api/channels/groups/');
   }
 
+  createChannelGroup(name: string): Observable<any> {
+    return this.http.post('/api/channels/groups/', { name });
+  }
+
   getChannels(params: any = {}): Observable<any> {
     let httpParams = new HttpParams();
     Object.keys(params).forEach(key => {

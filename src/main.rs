@@ -416,7 +416,7 @@ async fn main() {
             "/api/channels/channels/set-logos-from-epg",
             post(api::set_channel_logos_from_epg),
         )
-        .route("/api/channels/groups/", get(api::get_channel_groups))
+        .route("/api/channels/groups/", get(api::get_channel_groups).post(api::create_channel_group))
         .route("/api/channels/profiles/", get(api::get_channel_profiles))
         .route("/api/channels/channels/ids/", get(api::get_channel_ids))
         .route(

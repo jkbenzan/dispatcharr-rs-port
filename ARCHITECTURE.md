@@ -142,9 +142,10 @@ angular-frontend/src/app/
 
 ### Create Channel Modal
 - Uses Taiga UI `TuiDialogContext`.
-- **EPG Integration**: Provides direct TVG-ID search and Gracenote Station ID (LCN) fetching from the `channel.db` database via the `suggestMatches` and `getEPGLcnByTvgId` API endpoints.
+- **Layout**: Uses a sectioned grid-based layout for logical grouping of Identity, EPG, and Visual metadata.
+- **EPG Integration**: Provides direct TVG-ID search and Gracenote Station ID (LCN) fetching. Includes "Copy from Name" shortcuts to speed up data entry.
+- **Channel Groups**: Implements alphabetical sorting, real-time search filtering, and inline group creation.
 - **Logo Handling**: Displays a real-time preview of the channel logo. To maintain performance with thousands of logos, the logo dropdown limits rendering to 50 items and implements a client-side filter. Supports uploading custom logo files and adding external logo URLs directly through the UI.
-- **Data Loading**: Fetches and caches groups, profiles, and logos via the `ApiService` to instantly populate dropdowns.
 
 ### Stream Checker SheetDialog
 
@@ -201,6 +202,7 @@ Dispatcharr supports fetching and syncing channel logos from a configurable GitH
 | GET | `/api/channels/channels/summary/` | `get_channels_summary` | Lightweight: id, name, logo_id, channel_number only |
 | PATCH/PUT | `/api/channels/channels/:id/` | `update_channel` | Update channel fields including `streams` array |
 | GET | `/api/channels/groups/` | `get_channel_groups` | Returns flat array of `{id, name}` |
+| POST | `/api/channels/groups/` | `create_channel_group` | Create a new channel group manually |
 
 ### Stream Endpoints
 
