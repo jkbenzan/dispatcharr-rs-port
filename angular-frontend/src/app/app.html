@@ -1,3 +1,57 @@
+<!-- TuiNavigation shell — provides sidebar + main content layout -->
 <tui-root>
-  <router-outlet></router-outlet>
+  <!-- Embedded mode (inside React iframe): no sidebar, just content -->
+  <ng-container *ngIf="isEmbedded; else standaloneLayout">
+    <router-outlet></router-outlet>
+  </ng-container>
+
+  <!-- Standalone mode: full TuiNavigation sidebar layout -->
+  <ng-template #standaloneLayout>
+
+    <!-- ─── Sidebar (aside) ─── -->
+    <aside [tuiNavigationAside]="expanded()">
+
+      <header>
+        <!-- Brand / Logo toggle -->
+        <button
+          tuiAsideItem
+          (click)="toggleExpanded()"
+        >
+          <tui-icon icon="@tui.radio"></tui-icon>
+          <span>Dispatcharr</span>
+        </button>
+      </header>
+
+      <!-- Internal Angular routes -->
+      <a
+        *ngFor="let item of internalRoutes"
+        tuiAsideItem
+        [routerLink]="item.path"
+        routerLinkActive="_active"
+        [routerLinkActiveOptions]="{ exact: item.exact }"
+      >
+        <tui-icon [icon]="item.icon"></tui-icon>
+        <span>{{ item.label }}</span>
+      </a>
+
+      <hr />
+
+      <!-- External links to React app (features not yet migrated) -->
+      <a
+        *ngFor="let item of externalRoutes"
+        tuiAsideItem
+        [href]="item.href"
+      >
+        <tui-icon [icon]="item.icon"></tui-icon>
+        <span>{{ item.label }}</span>
+      </a>
+
+    </aside>
+
+    <!-- ─── Main Content Area ─── -->
+    <main tuiNavigationMain>
+      <router-outlet></router-outlet>
+    </main>
+
+  </ng-template>
 </tui-root>
