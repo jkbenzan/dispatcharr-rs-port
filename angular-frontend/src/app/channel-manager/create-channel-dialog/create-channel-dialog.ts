@@ -51,7 +51,8 @@ export class CreateChannelDialogComponent implements OnInit {
   // ─── UI State ───
   showOnlyCustomGroups = false;
   browsingMatches = false;               // legacy flag for auto-suggest suppression
-  dbBrowserExpanded = false;             // channel_data.db section collapsed by default
+  dbBrowserExpanded = false;             // Channel Data Lookup section collapsed by default
+  dbSearchError: string | null = null;   // error message shown in the Channel Data Lookup section
   epgDropdownOpen = false;               // EPG assignment dropdown
   addingGroup = false;                   // inline group creation mode
   newGroupName = '';                     // inline group name input
@@ -348,21 +349,35 @@ export class CreateChannelDialogComponent implements OnInit {
     this.cdr.markForCheck();
   }
 
-  /** Explicit search in the channel_data.db browser section */
+  /** Explicit search in the Channel Data Lookup section */
   performEpgSearch(query: string) {
     if (!query) return;
     this.searchingEPG = true;
+    this.dbSearchError = null;
     this.cdr.markForCheck();
     this.api.suggestMatches(query).subscribe({
       next: (res: any) => {
         this.dbSearchResults = (res.matches || []).map((m: any) => m.station);
         if (this.dbSearchResults.length > 0) {
           this.selectedMatch = this.dbSearchResults[0];
+        } else {
+          // No results returned — inform the user
+          this.dbSearchError = `No matches found for "${query}". The channel data database may not contain this station.`;
         }
         this.searchingEPG = false;
         this.cdr.markForCheck();
       },
-      error: () => {
+      error: (err: any) => {
+        // Surface the error to the user so they know *why* results are empty.
+        // Common causes: 503 (database not loaded), network error, backend crash.
+        const status = err?.status || 0;
+        const detail = err?.error?.error || err?.message || 'Unknown error';
+        if (status === 503) {
+          this.dbSearchError = 'Channel data database is not available. Make sure channel_data.db exists in the data directory.';
+        } else {
+          this.dbSearchError = `Search failed (HTTP ${status}): ${detail}`;
+        }
+        console.error('Channel Data Lookup search failed:', status, detail);
         this.dbSearchResults = [];
         this.searchingEPG = false;
         this.cdr.markForCheck();

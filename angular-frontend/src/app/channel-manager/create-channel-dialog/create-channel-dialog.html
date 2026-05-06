@@ -127,6 +127,12 @@
 
             <div class="loading-text" *ngIf="searchingEPG">Searching channel data...</div>
 
+            <!-- Error message — shown when search fails (503 = DB not loaded, or other errors) -->
+            <div class="db-search-error" *ngIf="dbSearchError && !searchingEPG">
+              <span class="material-icons">warning</span>
+              <span>{{ dbSearchError }}</span>
+            </div>
+
             <!-- Results list -->
             <div class="db-results" *ngIf="!searchingEPG && dbSearchResults.length > 0">
               <div class="db-result-item"

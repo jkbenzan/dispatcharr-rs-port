@@ -204,20 +204,41 @@ pub async fn suggest_matches(
     let db = state.channel_db.read().await;
     if !db.is_available() { return Err(err_503("Not available")); }
     
-    tracing::info!("🔍 Invoking channel_data.db for match suggestions: '{}'", payload.channel_name);
-    
     if payload.channel_name.is_empty() {
         return Err(err_400("channel_name is required"));
     }
     
     let parsed = parse_channel_name(&payload.channel_name);
     
-    let results = db.search_for_matching(
+    tracing::info!(
+        "🔍 Channel Data Lookup: original='{}' clean='{}' country={:?} resolution={:?}",
+        payload.channel_name, parsed.clean_name, parsed.country, parsed.resolution
+    );
+    
+    // Primary search: use the parsed clean_name (with country/resolution/noise stripped)
+    let mut results = db.search_for_matching(
         &parsed.clean_name, 
         payload.filter_country.as_deref(), 
         payload.filter_resolutions.as_deref(), 
         20
     ).await.map_err(err_500)?;
+    
+    // Fallback: if parsing produced a different (shorter) clean name and got 0 results,
+    // retry with the original channel_name. This prevents overly aggressive parsing
+    // from eliminating valid matches (e.g. if a station name happens to contain a
+    // country code or resolution keyword).
+    if results.is_empty() && parsed.clean_name.to_uppercase() != payload.channel_name.to_uppercase() {
+        tracing::info!(
+            "🔄 Channel Data Lookup: clean_name '{}' returned 0 results, retrying with original '{}'",
+            parsed.clean_name, payload.channel_name
+        );
+        results = db.search_for_matching(
+            &payload.channel_name,
+            payload.filter_country.as_deref(),
+            payload.filter_resolutions.as_deref(),
+            20
+        ).await.map_err(err_500)?;
+    }
     
     let mut matches = Vec::new();
     for res in results {
