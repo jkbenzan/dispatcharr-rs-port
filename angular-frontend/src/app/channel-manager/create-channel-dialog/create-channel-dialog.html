@@ -12,8 +12,11 @@
       <div class="grid-row">
         <div class="form-group col-8">
           <label>Channel Name</label>
-          <div class="input-with-shortcuts">
-            <input type="text" formControlName="name" class="tui-input" placeholder="e.g. HBO HD" autocomplete="off">
+          <div class="input-with-shortcuts" style="display: flex; gap: 4px; align-items: center; position: relative;">
+            <input type="text" formControlName="name" class="tui-input" style="flex: 1;" placeholder="e.g. HBO HD" autocomplete="off">
+            <button type="button" class="btn-shortcut" (click)="copyFromEpg('name')" [disabled]="!selectedStation" title="Autofill from selected EPG">
+              <span class="material-icons">content_copy</span>
+            </button>
             <div class="suggestions-dropdown" *ngIf="suggestions.length > 0">
               <div class="suggestion-item" *ngFor="let s of suggestions" (click)="selectSuggestion(s)">
                 <span class="s-name">{{ s.name }}</span>
@@ -65,21 +68,24 @@
           <label>TVG-ID</label>
           <div class="input-with-action" style="display: flex; gap: 4px; align-items: center;">
             <input type="text" formControlName="tvg_id" class="tui-input" style="flex: 1;" placeholder="e.g. HBO.us">
-            <div class="shortcut-buttons" style="display: flex; gap: 4px;">
-              <button type="button" class="btn-shortcut" (click)="copyNameToTvgId()" title="Copy from Name">
-                <span class="material-icons">content_copy</span>
-              </button>
-              <button type="button" class="btn-action-small" (click)="searchEpgData()" title="Search EPG DB">Search</button>
-            </div>
+            <button type="button" class="btn-shortcut" (click)="copyFromEpg('tvg_id')" [disabled]="!selectedStation" title="Autofill from selected EPG">
+              <span class="material-icons">content_copy</span>
+            </button>
           </div>
         </div>
         <div class="form-group col-6">
           <label>Gracenote Station ID / LCN</label>
-          <div class="input-with-action" style="display: flex; gap: 4px;">
+          <div class="input-with-action" style="display: flex; gap: 4px; align-items: center;">
             <input type="text" formControlName="tvc_guide_stationid" class="tui-input" style="flex: 1;" placeholder="e.g. 12345">
-            <button type="button" class="btn-action-small" (click)="fetchLcn()" [disabled]="!form.get('tvg_id')?.value" title="Fetch LCN from EPG">Fetch</button>
+            <button type="button" class="btn-shortcut" (click)="copyFromEpg('tvc_guide_stationid')" [disabled]="!selectedStation" title="Autofill from selected EPG">
+              <span class="material-icons">content_copy</span>
+            </button>
+            <button type="button" class="btn-action-small" (click)="fetchLcn()" [disabled]="!form.get('tvg_id')?.value" title="Fetch LCN from EPG Source">Fetch</button>
           </div>
         </div>
+      </div>
+      <div class="epg-info-banner mt-2" *ngIf="selectedStation">
+        <span class="info-text">Linked to EPG Station: <strong>{{ selectedStation.name }}</strong> ({{ selectedStation.call_sign || 'No Call Sign' }})</span>
       </div>
     </div>
 

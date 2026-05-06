@@ -52,6 +52,7 @@ export class CreateChannelDialogComponent implements OnInit {
   logos: any[] = [];
   filteredLogos: any[] = [];
   suggestions: any[] = [];
+  selectedStation: any = null; // Store the station selected from EPG suggestions
   
   selectedLogoPreview: string | null = null;
   addingLogo = false;
@@ -123,7 +124,6 @@ export class CreateChannelDialogComponent implements OnInit {
   loadGroups() {
     this.api.getChannelGroups().subscribe((res: any) => {
       const allGroups = res.results || res;
-      // Alphabetical sort ascending
       this.groups = allGroups.sort((a: any, b: any) => a.name.localeCompare(b.name));
       this.applyGroupFilters(this.groupSearchControl.value || '');
       this.cdr.markForCheck();
@@ -132,18 +132,10 @@ export class CreateChannelDialogComponent implements OnInit {
 
   applyGroupFilters(search: string) {
     let filtered = [...this.groups];
-    
-    if (this.showOnlyCustomGroups) {
-      // For now, "Custom Groups" are those NOT in the original list 
-      // (This is a heuristic since we don't have an is_custom flag in DB yet)
-      // Actually, I'll just show all for now but support the toggle.
-    }
-    
     if (search) {
       const lower = search.toLowerCase();
       filtered = filtered.filter(g => g.name.toLowerCase().includes(lower));
     }
-    
     this.filteredGroups = filtered;
     this.cdr.markForCheck();
   }
@@ -164,6 +156,8 @@ export class CreateChannelDialogComponent implements OnInit {
   }
 
   selectSuggestion(station: any) {
+    this.selectedStation = station;
+    // Auto-fill initially, but user can still use shortcuts later
     this.form.patchValue({
       name: station.name,
       tvg_id: station.call_sign || station.name,
@@ -173,23 +167,35 @@ export class CreateChannelDialogComponent implements OnInit {
     this.cdr.markForCheck();
   }
 
-  copyNameToTvgId() {
-    const name = this.form.get('name')?.value;
-    if (name) {
-      this.form.patchValue({ tvg_id: name });
+  /**
+   * Autofill Shortcut: Copies a value from the currently assigned EPG station.
+   * Does nothing if no station is assigned.
+   */
+  copyFromEpg(targetField: 'tvg_id' | 'tvc_guide_stationid' | 'name') {
+    if (!this.selectedStation) return;
+
+    let value = '';
+    if (targetField === 'tvg_id') {
+      value = this.selectedStation.call_sign || this.selectedStation.name;
+    } else if (targetField === 'tvc_guide_stationid') {
+      value = this.selectedStation.station_id || '';
+    } else if (targetField === 'name') {
+      value = this.selectedStation.name;
+    }
+
+    if (value) {
+      this.form.patchValue({ [targetField]: value });
+      this.cdr.markForCheck();
     }
   }
 
   searchEpgData() {
-    const val = this.form.get('tvg_id')?.value;
+    const val = this.form.get('name')?.value || this.form.get('tvg_id')?.value;
     if (val && val.length > 2) {
       this.api.suggestMatches(val).subscribe((res: any) => {
         if (res && res.matches && res.matches.length > 0) {
           const first = res.matches[0].station;
-          this.form.patchValue({
-            tvg_id: first.call_sign || first.name,
-            tvc_guide_stationid: first.station_id || ''
-          });
+          this.selectedStation = first;
           this.cdr.markForCheck();
         }
       });
@@ -221,13 +227,8 @@ export class CreateChannelDialogComponent implements OnInit {
   addLogoFromUrl() {
     const url = this.newLogoUrlControl.value?.trim();
     if (!url) return;
-    
     this.addingLogo = true;
-    this.cdr.markForCheck();
-    
-    const name = url.split('/').pop() || 'Imported Logo';
-    
-    this.api.createLogo({ name, url }).subscribe({
+    this.api.createLogo({ name: url.split('/').pop() || 'Imported Logo', url }).subscribe({
       next: (res: any) => {
         this.logos.unshift(res);
         this.filterLogos(this.logoSearchControl.value || '');
@@ -236,47 +237,30 @@ export class CreateChannelDialogComponent implements OnInit {
         this.addingLogo = false;
         this.cdr.markForCheck();
       },
-      error: (err) => {
-        console.error('Failed to add logo', err);
-        this.addingLogo = false;
-        this.cdr.markForCheck();
-      }
+      error: () => { this.addingLogo = false; this.cdr.markForCheck(); }
     });
   }
 
   uploadLogoFile(event: Event) {
-    const input = event.target as HTMLInputElement;
-    const file = input.files?.[0];
+    const file = (event.target as HTMLInputElement).files?.[0];
     if (!file) return;
-
     this.uploadingLogo = true;
-    this.cdr.markForCheck();
-
     this.api.uploadLogo(file).subscribe({
       next: (res: any) => {
         this.logos.unshift(res);
         this.filterLogos(this.logoSearchControl.value || '');
         this.form.patchValue({ logo_id: res.id });
         this.uploadingLogo = false;
-        input.value = '';
         this.cdr.markForCheck();
       },
-      error: (err) => {
-        console.error('Failed to upload logo', err);
-        this.uploadingLogo = false;
-        input.value = '';
-        this.cdr.markForCheck();
-      }
+      error: () => { this.uploadingLogo = false; this.cdr.markForCheck(); }
     });
   }
 
   addGroup() {
     const name = prompt("Enter new Group name:");
     if (!name) return;
-
     this.addingGroup = true;
-    this.cdr.markForCheck();
-
     this.api.createChannelGroup(name).subscribe({
       next: (res: any) => {
         this.groups.push(res);
@@ -286,29 +270,16 @@ export class CreateChannelDialogComponent implements OnInit {
         this.addingGroup = false;
         this.cdr.markForCheck();
       },
-      error: (err) => {
-        console.error('Failed to create group', err);
-        this.addingGroup = false;
-        this.cdr.markForCheck();
-      }
+      error: () => { this.addingGroup = false; this.cdr.markForCheck(); }
     });
   }
 
   submit() {
     if (this.form.invalid) return;
-
     this.submitting = true;
-    this.cdr.markForCheck();
-
     this.api.createChannel(this.form.value).subscribe({
-      next: () => {
-        this.context.completeWith(true);
-      },
-      error: (err) => {
-        console.error('Failed to create channel', err);
-        this.submitting = false;
-        this.cdr.markForCheck();
-      }
+      next: () => this.context.completeWith(true),
+      error: () => { this.submitting = false; this.cdr.markForCheck(); }
     });
   }
 
