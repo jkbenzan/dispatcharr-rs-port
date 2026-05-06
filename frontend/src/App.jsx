@@ -8,7 +8,6 @@ import {
 import Sidebar from './components/Sidebar';
 import Login from './pages/Login';
 import Channels from './pages/Channels';
-import ChannelManagerPage from './pages/ChannelManager';
 import ContentSources from './pages/ContentSources';
 import Guide from './pages/Guide';
 import Stats from './pages/Stats';
@@ -152,7 +151,6 @@ const App = () => {
                     {isAuthenticated && isInitialized ? (
                       <>
                         <Route path="/channels" element={<Channels />} />
-                        <Route path="/channel-manager" element={<ChannelManagerPage />} />
                         <Route path="/sources" element={<ContentSources />} />
                         <Route path="/guide" element={<Guide />} />
                         <Route path="/dvr" element={<DVR />} />

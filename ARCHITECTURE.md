@@ -40,20 +40,9 @@ dispatcharr-rs-port/
 | Path | Framework | Source | Purpose |
 |------|-----------|--------|---------|
 | `/` | React | `frontend/` | Main application (dashboard, EPG, M3U, settings, etc.) |
-| `/channel-manager` | React → Angular iframe | `frontend/` + `angular-frontend/` | Standalone nav item; React renders iframe to Angular app |
-| `/channel-manager/` | Angular 18 + Taiga UI | `angular-frontend/` | Channel manager mini-app with TuiNavigation shell |
+| `/channel-manager/` | Angular 18 + Taiga UI | `angular-frontend/` | Channel manager mini-app (migration in progress) |
 
-**Why two frameworks?** The channel manager is being incrementally migrated from React to Angular 18 with Taiga UI v5. Rather than a big-bang rewrite, it runs as a standalone mini-app at `/channel-manager/` while the rest of the React app remains untouched. Channel Manager has been promoted to its own top-level navigation item (below Channels) instead of being a sub-tab of the Channels page.
-
-### Navigation Architecture
-
-**React sidebar** (Mantine): The main sidebar navigation for the React app. Nav items are defined in `frontend/src/config/navigation.js`. Channel Manager is its own top-level entry (`/channel-manager`) right after Channels, using the `Settings2` icon.
-
-**Angular shell** (Taiga UI `TuiNavigation`): The Angular app (`app.ts`) wraps content in a `TuiNavigation` sidebar layout from `@taiga-ui/layout`. The sidebar includes:
-- Internal routes (Channel Manager — default route)
-- External links back to the React app (Channels, M3U & EPG, TV Guide, Settings)
-
-**Iframe detection**: The Angular shell detects if it's running inside an iframe (`window.self !== window.top`). When embedded in the React shell (via iframe), the sidebar is hidden to avoid a double-sidebar UX issue. When accessed standalone (direct URL), the full sidebar is visible. This ensures a clean UX during the migration period and enables standalone operation once React is fully replaced.
+**Why two frameworks?** The channel manager is being incrementally migrated from React to Angular 18 with Taiga UI v5. Rather than a big-bang rewrite, it runs as a standalone mini-app at `/channel-manager/` while the rest of the React app remains untouched.
 
 ### How it works
 
@@ -67,10 +56,6 @@ dispatcharr-rs-port/
 
 ```
 angular-frontend/src/app/
-├── app.ts                                 # Root shell with TuiNavigation sidebar + iframe detection
-├── app.html                               # TuiNavigation template (aside + main layout)
-├── app.less                               # Shell styles (dark theme, active nav highlight)
-├── app.routes.ts                          # Routing: default → Channel Manager, catch-all redirect
 ├── channel-manager/
 │   ├── channel-manager.component.*    # Orchestrator (resizable two-pane layout only)
 │   ├── channels-pane/                 # Left pane: nested Group → Channel → Stream tree

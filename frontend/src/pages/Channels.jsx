@@ -1,19 +1,13 @@
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import ChannelsTable from '../components/tables/ChannelsTable';
-import { Box } from '@mantine/core';
+import ChannelManager from '../components/ChannelManager/index.jsx';
+import { Box, Tabs, rem } from '@mantine/core';
+import { LayoutGrid, Settings2 } from 'lucide-react';
 import { USER_LEVELS } from '../constants';
 import useAuthStore from '../store/auth';
 import useLogosStore from '../store/logos';
 import ErrorBoundary from '../components/ErrorBoundary';
 
-/**
- * Channels page — displays the ChannelsTable grid.
- *
- * The Channel Manager (Angular mini-app) has been detached into its own
- * top-level route at /channel-manager. This page now only shows the
- * Channels Grid, which will eventually be replaced by the Angular
- * Channel Manager entirely.
- */
 const PageContent = () => {
   const authUser = useAuthStore((s) => s.user);
   const fetchChannelAssignableLogos = useLogosStore(
@@ -22,7 +16,10 @@ const PageContent = () => {
   const enableLogoRendering = useLogosStore((s) => s.enableLogoRendering);
 
   const channelsReady = useRef(false);
+  const managerReady = useRef(false);
   const logosTriggered = useRef(false);
+
+  const [activeTab, setActiveTab] = useState('channels');
 
   // Only load logos when channels table is ready
   const tryLoadLogos = useCallback(() => {
@@ -44,13 +41,46 @@ const PageContent = () => {
 
   if (!authUser.id) return <></>;
 
+  if (authUser.user_level <= USER_LEVELS.STANDARD) {
+    return (
+      <Box style={{ padding: 10 }}>
+        <ChannelsTable onReady={handleChannelsReady} />
+      </Box>
+    );
+  }
+
+  const iconStyle = { width: rem(14), height: rem(14) };
+
   return (
     <Box h={'100vh'} w={'100%'} display={'flex'} style={{ flexDirection: 'column', overflowX: 'auto' }}>
-      <Box style={{ flexGrow: 1, padding: 10, minHeight: 0 }}>
-        <Box h="100%">
-          <ChannelsTable onReady={handleChannelsReady} />
-        </Box>
-      </Box>
+      <Tabs value={activeTab} onChange={setActiveTab} style={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
+        <Tabs.List px="md" pt="sm">
+          <Tabs.Tab value="channels" leftSection={<LayoutGrid style={iconStyle} />}>
+            Channels Grid
+          </Tabs.Tab>
+          <Tabs.Tab value="manager" leftSection={<Settings2 style={iconStyle} />}>
+            Channel Manager
+          </Tabs.Tab>
+        </Tabs.List>
+
+        <Tabs.Panel value="channels" style={{ flexGrow: 1, padding: 10, minHeight: 0 }}>
+          <Box h="100%">
+            <ChannelsTable onReady={handleChannelsReady} />
+          </Box>
+        </Tabs.Panel>
+
+        <Tabs.Panel value="manager" style={{ flexGrow: 1, padding: 0, minHeight: 0 }}>
+          <Box h="100%">
+            {activeTab === 'manager' && (
+              <iframe
+                src="/channel-manager/index.html"
+                style={{ width: '100%', height: '100%', border: 'none' }}
+                title="Angular Channel Manager"
+              />
+            )}
+          </Box>
+        </Tabs.Panel>
+      </Tabs>
     </Box>
   );
 };
