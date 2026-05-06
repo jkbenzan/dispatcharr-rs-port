@@ -1,22 +1,24 @@
 <div class="dialog-container">
   <div class="dialog-header">
-    <h2>Create New Channel</h2>
-    <p class="subtitle">Manual channel entry and metadata assignment</p>
+    <div class="header-left">
+       <span class="material-icons">list_alt</span>
+       <h2>Channels</h2>
+    </div>
+    <button class="btn-close" (click)="cancel()">&times;</button>
   </div>
   
   <form [formGroup]="form" (ngSubmit)="submit()" class="modal-form">
-    
-    <!-- Section 1: Basic Info -->
-    <div class="form-section">
-      <h3 class="section-title">Identity & Placement</h3>
-      <div class="grid-row">
-        <div class="form-group col-8">
-          <label>Channel Name</label>
-          <div class="input-with-shortcuts" style="display: flex; gap: 4px; align-items: center; position: relative;">
-            <input type="text" formControlName="name" class="tui-input" style="flex: 1;" placeholder="e.g. HBO HD" autocomplete="off">
-            <button type="button" class="btn-shortcut" (click)="copyFromEpg('name')" [disabled]="!selectedStation" title="Autofill from selected EPG">
-              <span class="material-icons">content_copy</span>
-            </button>
+    <div class="three-column-grid">
+      
+      <!-- Column 1: Basic Settings -->
+      <div class="column">
+        <div class="form-group">
+          <div class="label-row">
+            <label>Channel Name</label>
+            <a class="shortcut-link" (click)="useEpgName()" *ngIf="selectedStation">Use EPG Name</a>
+          </div>
+          <div class="input-wrapper">
+            <input type="text" formControlName="name" class="tui-input" placeholder="NFL Network" autocomplete="off">
             <div class="suggestions-dropdown" *ngIf="suggestions.length > 0">
               <div class="suggestion-item" *ngFor="let s of suggestions" (click)="selectSuggestion(s)">
                 <span class="s-name">{{ s.name }}</span>
@@ -25,115 +27,106 @@
             </div>
           </div>
         </div>
-        <div class="form-group col-4">
-          <label>Number</label>
-          <input type="number" formControlName="channel_number" class="tui-input" placeholder="Auto">
-        </div>
-      </div>
 
-      <div class="grid-row mt-3">
-        <div class="form-group col-6">
+        <div class="form-group mt-3">
           <label>Channel Group</label>
-          <div class="group-control-wrapper">
-             <div class="search-row" style="display: flex; gap: 4px;">
-                <input type="text" [formControl]="groupSearchControl" class="tui-input search-small" placeholder="Search groups..." style="height: 32px; font-size: 13px;">
-                <button type="button" class="btn-filter" [class.active]="showOnlyCustomGroups" (click)="toggleCustomGroups()" title="Toggle Custom Groups">
-                   <span class="material-icons" style="font-size: 18px;">filter_list</span>
-                </button>
-             </div>
-             <div class="select-row" style="display: flex; gap: 8px; margin-top: 4px;">
-                <select formControlName="channel_group_id" class="tui-select" style="flex: 1;">
-                  <option [ngValue]="null">-- Select Group --</option>
-                  <option *ngFor="let g of filteredGroups" [ngValue]="g.id">{{ g.name }}</option>
-                </select>
-                <button type="button" class="btn-action-square" (click)="addGroup()" title="Add New Group">+</button>
-             </div>
+          <div class="group-control">
+            <select formControlName="channel_group_id" class="tui-select">
+               <option [ngValue]="null">-- Select Group --</option>
+               <option *ngFor="let g of filteredGroups" [ngValue]="g.id">{{ g.name }}</option>
+            </select>
+            <button type="button" class="btn-add-group" (click)="addGroup()">+</button>
           </div>
+          <input type="text" [formControl]="groupSearchControl" class="tui-input search-sub" placeholder="Filter groups...">
         </div>
-        <div class="form-group col-6">
+
+        <div class="form-group mt-3">
           <label>Stream Profile</label>
           <select formControlName="stream_profile_id" class="tui-select">
-            <option [ngValue]="null">-- Default Profile --</option>
+            <option [ngValue]="null">(use default)</option>
             <option *ngFor="let p of profiles" [ngValue]="p.id">{{ p.name }}</option>
           </select>
         </div>
-      </div>
-    </div>
 
-    <!-- Section 2: EPG Data -->
-    <div class="form-section mt-4">
-      <h3 class="section-title">EPG & Metadata</h3>
-      <div class="grid-row">
-        <div class="form-group col-6">
-          <label>TVG-ID</label>
-          <div class="input-with-action" style="display: flex; gap: 4px; align-items: center;">
-            <input type="text" formControlName="tvg_id" class="tui-input" style="flex: 1;" placeholder="e.g. HBO.us">
-            <button type="button" class="btn-shortcut" (click)="copyFromEpg('tvg_id')" [disabled]="!selectedStation" title="Autofill from selected EPG">
-              <span class="material-icons">content_copy</span>
-            </button>
-          </div>
-        </div>
-        <div class="form-group col-6">
-          <label>Gracenote Station ID / LCN</label>
-          <div class="input-with-action" style="display: flex; gap: 4px; align-items: center;">
-            <input type="text" formControlName="tvc_guide_stationid" class="tui-input" style="flex: 1;" placeholder="e.g. 12345">
-            <button type="button" class="btn-shortcut" (click)="copyFromEpg('tvc_guide_stationid')" [disabled]="!selectedStation" title="Autofill from selected EPG">
-              <span class="material-icons">content_copy</span>
-            </button>
-            <button type="button" class="btn-action-small" (click)="fetchLcn()" [disabled]="!form.get('tvg_id')?.value" title="Fetch LCN from EPG Source">Fetch</button>
-          </div>
-        </div>
-      </div>
-      <div class="epg-info-banner mt-2" *ngIf="selectedStation">
-        <span class="info-text">Linked to EPG Station: <strong>{{ selectedStation.name }}</strong> ({{ selectedStation.call_sign || 'No Call Sign' }})</span>
-      </div>
-    </div>
-
-    <!-- Section 3: Visuals & Access -->
-    <div class="form-section mt-4">
-      <h3 class="section-title">Visuals & Access</h3>
-      <div class="logo-config-wrapper" style="display: flex; gap: 16px; align-items: flex-start;">
-        <div class="logo-preview-box" style="width: 80px; height: 80px; border: 1px solid #333; border-radius: 4px; display: flex; align-items: center; justify-content: center; background: #111; overflow: hidden; flex-shrink: 0;">
-          <img *ngIf="selectedLogoPreview" [src]="selectedLogoPreview" alt="Logo preview" (error)="onLogoError()" style="max-width: 100%; max-height: 100%; object-fit: contain;">
-          <div *ngIf="!selectedLogoPreview" class="no-logo-placeholder" style="color: #666; font-size: 11px;">No Logo</div>
-        </div>
-        <div class="logo-fields" style="flex: 1;">
-          <div class="search-select-row" style="display: flex; gap: 4px;">
-            <input type="text" [formControl]="logoSearchControl" class="tui-input search-small" placeholder="Search logos..." style="flex: 1; height: 32px; font-size: 13px;">
-            <select formControlName="logo_id" class="tui-select" style="flex: 2;">
-              <option [ngValue]="null">-- Select Logo --</option>
-              <option *ngFor="let l of filteredLogos" [ngValue]="l.id">{{ l.name }}</option>
-            </select>
-          </div>
-          <div class="upload-row mt-2" style="display: flex; gap: 4px;">
-            <input type="text" [formControl]="newLogoUrlControl" class="tui-input" placeholder="URL..." style="flex: 1; height: 32px; font-size: 13px;">
-            <button type="button" class="btn-action-small" (click)="addLogoFromUrl()" [disabled]="!newLogoUrlControl.value || addingLogo">Add</button>
-            <input type="file" #fileInput hidden accept="image/*" (change)="uploadLogoFile($event)">
-            <button type="button" class="btn-action-small" (click)="fileInput.click()" [disabled]="uploadingLogo">Upload</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="grid-row mt-4" style="display: flex; gap: 16px; align-items: center;">
-        <div class="form-group col-6" style="flex: 1;">
+        <div class="form-group mt-3">
           <label>User Level Access</label>
           <select formControlName="user_level" class="tui-select">
             <option *ngFor="let level of userLevels" [ngValue]="level.id">{{ level.name }}</option>
           </select>
         </div>
-        <div class="form-group col-6" style="flex: 1;">
-           <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px; margin-top: 24px;">
+      </div>
+
+      <!-- Column 2: Logo & Content -->
+      <div class="column centered-col">
+        <div class="form-group">
+          <div class="label-row">
+            <label>Logo</label>
+            <a class="shortcut-link" (click)="useEpgLogo()" *ngIf="selectedStation?.logo_uri">Use EPG Logo</a>
+          </div>
+          <input type="text" [formControl]="logoSearchControl" class="tui-input" placeholder="Search logos...">
+        </div>
+
+        <div class="logo-preview-area mt-2">
+          <img *ngIf="selectedLogoPreview" [src]="selectedLogoPreview" alt="Logo preview" (error)="onLogoError()">
+          <div *ngIf="!selectedLogoPreview" class="no-logo">No Logo</div>
+        </div>
+
+        <button type="button" class="btn-upload mt-3" (click)="fileInput.click()">
+           Upload or Create Logo
+        </button>
+        <input type="file" #fileInput hidden accept="image/*" (change)="uploadLogoFile($event)">
+
+        <div class="mature-toggle mt-4">
+           <label class="switch">
              <input type="checkbox" formControlName="is_adult">
-             <span class="label-text">Mature Content</span>
+             <span class="slider round"></span>
            </label>
+           <span class="label-text">Mature Content</span>
         </div>
       </div>
+
+      <!-- Column 3: EPG & IDs -->
+      <div class="column">
+        <div class="form-group">
+          <label>Channel # (blank to auto-assign)</label>
+          <input type="number" formControlName="channel_number" class="tui-input" placeholder="1">
+        </div>
+
+        <div class="form-group mt-3">
+          <div class="label-row">
+            <label>TVG-ID</label>
+            <a class="shortcut-link" (click)="useEpgTvgId()" *ngIf="selectedStation">Use EPG TVG-ID</a>
+          </div>
+          <input type="text" formControlName="tvg_id" class="tui-input" placeholder="NFLHD">
+        </div>
+
+        <div class="form-group mt-3">
+          <label>Gracenote StationId</label>
+          <input type="text" formControlName="tvc_guide_stationid" class="tui-input" placeholder="45399">
+        </div>
+
+        <div class="form-group mt-3">
+          <div class="label-row">
+            <label>EPG</label>
+            <div class="epg-actions">
+               <a class="shortcut-link" (click)="useDummyEpg()">Use Dummy</a>
+               <a class="shortcut-link match-link" (click)="autoMatchEpg()">
+                 <span class="material-icons">bolt</span> Auto Match
+               </a>
+            </div>
+          </div>
+          <div class="epg-selection-box">
+             <span class="selected-val">{{ selectedStation ? selectedStation.name : 'None selected' }}</span>
+             <button type="button" class="btn-clear" (click)="clearEpg()" *ngIf="selectedStation">&times;</button>
+          </div>
+        </div>
+      </div>
+
     </div>
 
-    <div class="dialog-footer" style="margin-top: 32px; display: flex; justify-content: flex-end; gap: 12px;">
-      <button type="button" class="btn-cancel" (click)="cancel()" style="padding: 8px 16px; background: #333; color: white; border: none; border-radius: 4px; cursor: pointer;">Cancel</button>
-      <button type="submit" class="btn-submit" [disabled]="form.invalid || submitting" style="padding: 8px 24px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
-        {{ submitting ? 'Creating...' : 'Create Channel' }}
+    <div class="dialog-footer">
+      <button type="submit" class="btn-submit" [disabled]="form.invalid || submitting">
+        {{ submitting ? 'Submitting...' : 'Submit' }}
       </button>
     </div>
   </form>

@@ -3,8 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators, FormControl } from '@angular/forms';
 import { ApiService } from '../../api.service';
 import { Subject } from 'rxjs';
-import { debounceTime, distinctUntilChanged, switchMap, map } from 'rxjs/operators';
-// Taiga UI 5 imports
+import { debounceTime, distinctUntilChanged, switchMap } from 'rxjs/operators';
 import { POLYMORPHEUS_CONTEXT } from '@taiga-ui/polymorpheus';
 import { TuiDialogContext } from '@taiga-ui/core';
 
@@ -52,7 +51,7 @@ export class CreateChannelDialogComponent implements OnInit {
   logos: any[] = [];
   filteredLogos: any[] = [];
   suggestions: any[] = [];
-  selectedStation: any = null; // Store the station selected from EPG suggestions
+  selectedStation: any = null; // Currently matched station from EPG suggestions
   
   selectedLogoPreview: string | null = null;
   addingLogo = false;
@@ -157,7 +156,7 @@ export class CreateChannelDialogComponent implements OnInit {
 
   selectSuggestion(station: any) {
     this.selectedStation = station;
-    // Auto-fill initially, but user can still use shortcuts later
+    // Set initially
     this.form.patchValue({
       name: station.name,
       tvg_id: station.call_sign || station.name,
@@ -168,38 +167,54 @@ export class CreateChannelDialogComponent implements OnInit {
   }
 
   /**
-   * Autofill Shortcut: Copies a value from the currently assigned EPG station.
-   * Does nothing if no station is assigned.
+   * Copy specific fields from the selected EPG station
    */
-  copyFromEpg(targetField: 'tvg_id' | 'tvc_guide_stationid' | 'name') {
-    if (!this.selectedStation) return;
-
-    let value = '';
-    if (targetField === 'tvg_id') {
-      value = this.selectedStation.call_sign || this.selectedStation.name;
-    } else if (targetField === 'tvc_guide_stationid') {
-      value = this.selectedStation.station_id || '';
-    } else if (targetField === 'name') {
-      value = this.selectedStation.name;
-    }
-
-    if (value) {
-      this.form.patchValue({ [targetField]: value });
-      this.cdr.markForCheck();
+  useEpgName() {
+    if (this.selectedStation) {
+      this.form.patchValue({ name: this.selectedStation.name });
     }
   }
 
-  searchEpgData() {
-    const val = this.form.get('name')?.value || this.form.get('tvg_id')?.value;
-    if (val && val.length > 2) {
-      this.api.suggestMatches(val).subscribe((res: any) => {
+  useEpgTvgId() {
+    if (this.selectedStation) {
+      this.form.patchValue({ tvg_id: this.selectedStation.call_sign || this.selectedStation.name });
+    }
+  }
+
+  useEpgLogo() {
+    if (this.selectedStation && this.selectedStation.logo_uri) {
+      // Find logo by URL or create one
+      // For now, let's look for a logo with similar name or just add via URL
+      this.newLogoUrlControl.setValue(this.selectedStation.logo_uri);
+      this.addLogoFromUrl();
+    }
+  }
+
+  useDummyEpg() {
+    this.form.patchValue({
+      tvg_id: 'dummy',
+      tvc_guide_stationid: 'dummy',
+      epg_data_id: null
+    });
+    this.selectedStation = { name: 'Dummy EPG', station_id: 'dummy' };
+    this.cdr.markForCheck();
+  }
+
+  autoMatchEpg() {
+    const name = this.form.get('name')?.value;
+    if (name) {
+      this.api.suggestMatches(name).subscribe((res: any) => {
         if (res && res.matches && res.matches.length > 0) {
-          const first = res.matches[0].station;
-          this.selectedStation = first;
-          this.cdr.markForCheck();
+          this.selectSuggestion(res.matches[0].station);
         }
       });
     }
+  }
+
+  clearEpg() {
+    this.selectedStation = null;
+    this.form.patchValue({ epg_data_id: null });
+    this.cdr.markForCheck();
   }
 
   fetchLcn() {
@@ -211,9 +226,6 @@ export class CreateChannelDialogComponent implements OnInit {
             this.form.patchValue({ tvc_guide_stationid: res.lcn });
             this.cdr.markForCheck();
           }
-        },
-        error: (err) => {
-          console.error('Failed to fetch LCN', err);
         }
       });
     }
