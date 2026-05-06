@@ -3,6 +3,7 @@ import {
   Play,
   Database,
   LayoutGrid,
+  Settings2,
   Settings as LucideSettings,
   ChartLine,
   Video,
@@ -25,6 +26,13 @@ export const NAV_ITEMS = {
     path: '/channels',
     adminOnly: false,
     hasBadge: true,
+  },
+  channelManager: {
+    id: 'channelManager',
+    label: 'Channel Manager',
+    icon: Settings2,
+    path: '/channel-manager',
+    adminOnly: true,
   },
   vods: {
     id: 'vods',
@@ -112,6 +120,7 @@ export const NAV_ITEMS = {
 
 export const DEFAULT_ADMIN_ORDER = [
   'channels',
+  'channelManager',
   'vods',
   'sources',
   'guide',
@@ -125,6 +134,7 @@ export const DEFAULT_ADMIN_ORDER = [
 
 export const DEFAULT_USER_ORDER = [
   'channels',
+  'channelManager',
   'guide',
   'settings',
 ];
