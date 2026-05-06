@@ -73,7 +73,7 @@
 
           <!-- Inline new group input (replaces browser prompt) -->
           <div class="new-group-inline mt-2" *ngIf="addingGroup">
-            <input type="text" [(ngModel)]="newGroupName" [ngModelOptions]="{standalone: true}" class="form-input" placeholder="New group name..." (keyup.enter)="confirmAddGroup()">
+            <input type="text" [(ngModel)]="newGroupName" [ngModelOptions]="{standalone: true}" class="form-input" placeholder="New group name..." (keyup.enter)="$event.preventDefault(); confirmAddGroup()">
             <button type="button" class="btn-confirm-group" (click)="confirmAddGroup()">✓</button>
             <button type="button" class="btn-cancel-group" (click)="addingGroup = false">✕</button>
           </div>
@@ -107,22 +107,25 @@
           </div>
         </div>
 
-        <!-- ─── Section: channel_data.db Lookup (collapsible) ─── -->
+        <!-- ─── Section: Channel Data Lookup (collapsible) ─── -->
         <div class="section-card">
           <div class="section-title clickable" (click)="dbBrowserExpanded = !dbBrowserExpanded">
-            <span class="material-icons">storage</span> channel_data.db Lookup
+            <span class="material-icons">storage</span> Channel Data Lookup
             <span class="material-icons chevron">{{ dbBrowserExpanded ? 'expand_less' : 'expand_more' }}</span>
           </div>
 
           <div *ngIf="dbBrowserExpanded" class="db-browser-section">
             <div class="db-search-row">
-              <input type="text" [formControl]="epgSearchControl" class="form-input" placeholder="Search channel_data.db..." (keyup.enter)="performEpgSearch(epgSearchControl.value || '')">
+              <!-- preventDefault() stops Enter from triggering the parent <form>'s
+                   ngSubmit (which would save the entire form). Instead, Enter
+                   only executes the Channel Data search. -->
+              <input type="text" [formControl]="epgSearchControl" class="form-input" placeholder="Search channel data..." (keyup.enter)="$event.preventDefault(); performEpgSearch(epgSearchControl.value || '')">
               <button type="button" class="btn-db-search" (click)="performEpgSearch(epgSearchControl.value || '')">
                 <span class="material-icons">search</span>
               </button>
             </div>
 
-            <div class="loading-text" *ngIf="searchingEPG">Searching channel_data.db...</div>
+            <div class="loading-text" *ngIf="searchingEPG">Searching channel data...</div>
 
             <!-- Results list -->
             <div class="db-results" *ngIf="!searchingEPG && dbSearchResults.length > 0">
@@ -203,7 +206,7 @@
 
             <!-- Right sub-column: EPG + Logo -->
             <div class="sub-col">
-              <!-- EPG Selector (actual EPG data, not channel_data.db) -->
+              <!-- EPG Selector (actual EPG data, not the Channel Data Lookup) -->
               <div class="form-group">
                 <div class="label-row">
                   <label>EPG Assignment</label>
