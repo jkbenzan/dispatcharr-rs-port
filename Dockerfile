@@ -1,20 +1,13 @@
-# STEP 1a: Build the React Frontend
+# STEP 1a: Build the Svelte Frontend
 FROM node:20-slim AS frontend-builder
 
-WORKDIR /app/frontend
-COPY frontend/package*.json ./
+WORKDIR /app/svelte-frontend
+COPY svelte-frontend/package*.json ./
 RUN npm ci
-COPY frontend/ ./
+COPY svelte-frontend/ ./
 RUN npm run build
 
-# STEP 1b: Build the Angular Channel Manager (mini-app)
-FROM node:20-slim AS angular-builder
 
-WORKDIR /app/angular-frontend
-COPY angular-frontend/package*.json ./
-RUN npm ci
-COPY angular-frontend/ ./
-RUN npx ng build --base-href /channel-manager/
 
 # STEP 2: Build the Rust Binary
 FROM rust:bookworm AS backend-builder
@@ -44,12 +37,11 @@ WORKDIR /app
 # Copy the compiled binary from the Rust builder stage
 COPY --from=backend-builder /app/target/release/dispatcharr-rs /usr/local/bin/
 
-# Copy the React frontend (main app)
-# Vite is configured to output to ../dist (relative to frontend/)
+# Copy the Svelte frontend (main app)
+# Vite is configured to output to ../dist (relative to svelte-frontend/)
 COPY --from=frontend-builder /app/dist /app/dist
 
-# Copy the Angular channel manager mini-app to /channel-manager/
-COPY --from=angular-builder /app/dist/browser /app/dist/channel-manager
+
 
 EXPOSE 8080
 

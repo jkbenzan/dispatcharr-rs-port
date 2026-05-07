@@ -6,7 +6,7 @@ A high-performance Rust rewrite of the Dispatcharr IPTV middleware.
 - Zero-copy stream proxying
 - Failover support
 - Async SQLite with SeaORM
-- API compatibility with existing React frontend
+- API compatibility with SvelteKit frontend
 
 ## Development
 1. `cp .env.example .env`

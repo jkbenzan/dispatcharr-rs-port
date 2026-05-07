@@ -22,8 +22,6 @@ dispatcharr-rs-port/
 │   ├── entities/               # SeaORM entity models
 │   └── ...
 ├── svelte-frontend/            # NEW: Unified SvelteKit frontend (Active Migration)
-├── frontend/                   # LEGACY: React frontend (to be retired)
-├── angular-frontend/           # LEGACY: Angular 18 frontend (to be retired)
 ├── dist/                       # Built frontend output (gitignored)
 ├── Dockerfile                  # Multi-stage build
 └── ARCHITECTURE.md             # ← You are here

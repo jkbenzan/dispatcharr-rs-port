@@ -608,7 +608,7 @@ async fn main() {
         .route("/api/channel-db/match/batch/", post(channel_db_api::batch_match))
         .route("/api/channel-db/update/check/", get(channel_db_api::check_update))
         .route("/api/channel-db/update/download/", post(channel_db_api::download_update))
-        // Serve the compiled React frontend for non-API routes
+        // Serve the compiled SvelteKit frontend for non-API routes
         .nest("/api/accounts", accounts_routes)
         .nest("/api/vod", vod_routes)
         .nest_service("/logos", logos_service)

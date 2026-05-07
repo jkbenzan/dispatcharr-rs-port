@@ -3,7 +3,7 @@
 # Note: Cargo.lock is intentionally NOT ignored for binaries.
 # Committing it ensures reproducible Docker builds.
 
-# Frontend build output (built by `npm run build` in frontend/)
+# Frontend build output (built by `npm run build` in svelte-frontend/)
 /dist
 
 # Data & Secrets
@@ -24,8 +24,8 @@ enhancedchannelmanager-main/
 channelidentifiarr/
 
 # Frontend build artifacts
-frontend/node_modules/
-frontend/dist/
+svelte-frontend/node_modules/
+svelte-frontend/.svelte-kit/
 
 # Scratch / one-off files
 channels.json
