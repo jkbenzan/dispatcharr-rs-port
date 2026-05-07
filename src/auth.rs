@@ -44,6 +44,44 @@ impl FromRequestParts<Arc<AppState>> for CurrentUser {
         let token = if let Some(auth) = auth_header {
             auth.split_whitespace().last().unwrap_or(auth)
         } else {
+            // BYPASS AUTH IF NOT PROVIDED (for local SvelteKit dev/migration)
+            let auth_enabled = std::env::var("DISPATCHARR_AUTH_ENABLED")
+                .map(|v| v.to_lowercase() == "true")
+                .unwrap_or(false);
+                
+            if !auth_enabled {
+                use sea_orm::{EntityTrait, QueryFilter, ColumnTrait};
+                let user = user::Entity::find()
+                    .filter(user::Column::IsSuperuser.eq(true))
+                    .one(&state.db)
+                    .await
+                    .unwrap_or_default();
+                    
+                if let Some(admin_user) = user {
+                    return Ok(CurrentUser(admin_user));
+                } else {
+                    let now = chrono::Utc::now().with_timezone(&chrono::FixedOffset::east_opt(0).unwrap());
+                    let mock_user = user::Model {
+                        id: 1,
+                        password: "".to_string(),
+                        last_login: None,
+                        is_superuser: true,
+                        username: "admin".to_string(),
+                        first_name: "Admin".to_string(),
+                        last_name: "User".to_string(),
+                        email: "".to_string(),
+                        is_staff: true,
+                        is_active: true,
+                        date_joined: now,
+                        avatar_config: None,
+                        user_level: 10,
+                        custom_properties: None,
+                        api_key: None,
+                        stream_limit: 10,
+                    };
+                    return Ok(CurrentUser(mock_user));
+                }
+            }
             return Err(StatusCode::UNAUTHORIZED);
         };
 
