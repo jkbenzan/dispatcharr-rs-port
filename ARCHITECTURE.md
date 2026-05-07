@@ -34,7 +34,8 @@ dispatcharr-rs-port/
 The entire frontend has been pivoted to **SvelteKit** to achieve a premium "Trakt-like" user experience. This unified frontend replaces the legacy React and Angular implementations and is now the primary UI on the `develop` and `main` branches.
 
 ### Media Consumption (Upcoming)
-- **TV Guide (EPG)**: High-performance timeline view at `/guide`. Features synchronized vertical scrolling, "Jump to Now" functionality, detailed program info modals, and **live channel playback** via a Hybrid Video Player (MPEG-TS/HLS). Uses paginated, lazy-loaded channel/EPG data via Intersection Observers to maintain high performance.
+- **TV Guide (EPG)**: High-performance timeline view at `/guide`. Features synchronized vertical scrolling, "Jump to Now" functionality, detailed program info modals, and **integrated channel playback**.
+- **Hybrid Playback System**: A "smart" video player architecture that auto-detects stream formats. It utilizes `mpegts.js` for raw MPEG-TS proxy streams and `hls.js` for HLS manifests, with native fallback for Safari/iOS to ensure broad device compatibility.
 - **VOD**: Trakt-inspired interface at `/vod` supporting infinite scroll pagination and dynamic categorization of Movies and Series. Includes TMDB ID resolving for rich poster metadata.
 - **DVR**: A placeholder UI skeleton at `/dvr` outlining upcoming features like Series Pass and Comskip Integration.
 
@@ -44,6 +45,7 @@ The entire frontend has been pivoted to **SvelteKit** to achieve a premium "Trak
 - **Theme/Accent System**: Uses CSS variables bound to `document.documentElement` attributes (`data-theme` and `data-accent`). Fully supports dynamic switching between light/dark modes and configurable brand colors (Trakt Red `#ed1c24` / Dispatcharr Green `#158f76`). Preferences persist via `localStorage`.
 - **Components**: Lightweight, native-feeling components (avoiding heavy UI libraries like Taiga).
   - *Primitives*: Reusable primitives like `Modal.svelte` handle backdrop blur, z-indexing, and keyboard escape.
+  - *Media*: `VideoPlayer.svelte` provides a unified interface for HLS and MPEG-TS playback with custom glassmorphic controls and automatic codec detection.
 - **Icons**: Lucide-Svelte.
 
 - **Layout Architecture**:
