@@ -1,15 +1,19 @@
 :root {
-  /* Trakt Color Palette */
-  --bg: #0a0a0a;
+  /* Default Theme (Dark) */
+  --bg: radial-gradient(circle at 15% 50%, rgba(30, 20, 20, 1), #0a0a0a 40%);
   --surface: #121212;
   --surface-bright: #1e1e1e;
-  --accent: #ed1c24;
-  --accent-dim: #9b1218;
   --text: #e0e0e0;
   --text-bright: #ffffff;
   --text-dim: #a0a0a0;
   --border: rgba(255, 255, 255, 0.08);
   --border-bright: rgba(255, 255, 255, 0.15);
+  
+  /* Default Accent (Red) */
+  --accent: #ed1c24;
+  --accent-dim: #9b1218;
+  --accent-transparent: rgba(237, 28, 36, 0.1);
+  --accent-transparent-hover: rgba(237, 28, 36, 0.15);
   
   /* Layout */
   --sidebar-width: 260px;
@@ -20,6 +24,27 @@
   --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
   --glass: blur(12px) saturate(180%);
   --glass-bg: rgba(18, 18, 18, 0.7);
+}
+
+/* Light Mode */
+[data-theme="light"] {
+  --bg: radial-gradient(circle at 15% 50%, rgba(220, 230, 240, 1), #f3f4f6 40%);
+  --surface: #ffffff;
+  --surface-bright: #f9fafb;
+  --text: #374151;
+  --text-bright: #111827;
+  --text-dim: #6b7280;
+  --border: rgba(0, 0, 0, 0.08);
+  --border-bright: rgba(0, 0, 0, 0.15);
+  --glass-bg: rgba(255, 255, 255, 0.7);
+}
+
+/* Green Accent */
+[data-accent="green"] {
+  --accent: #158f76;
+  --accent-dim: #0e6e5a;
+  --accent-transparent: rgba(21, 143, 118, 0.1);
+  --accent-transparent-hover: rgba(21, 143, 118, 0.15);
 }
 
 @font-face {

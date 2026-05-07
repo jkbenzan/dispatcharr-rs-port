@@ -43,6 +43,18 @@ export const api = {
   // =================== EPG ===================
   getEpgData: () => fetchApi('/api/epg/epgdata/'),
   getEpgSources: () => fetchApi('/api/epg/sources/'),
+  createEpgSource: (data: any) => fetchApi('/api/epg/sources/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  }),
+  updateEpgSource: (id: number, data: any) => fetchApi(`/api/epg/sources/${id}/`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  }),
+  deleteEpgSource: (id: number) => fetchApi(`/api/epg/sources/${id}/`, { method: 'DELETE' }),
+  refreshEpgSource: (id: number) => fetchApi(`/api/epg/refresh/${id}/`, { method: 'POST' }),
   getEPGLcnByTvgId: (tvgId: string) => fetchApi(`/api/epg/lcn?tvg_id=${encodeURIComponent(tvgId)}`),
   suggestMatches: (channelName: string) => fetchApi('/api/channel-db/match/suggest/', {
     method: 'POST',
@@ -68,6 +80,17 @@ export const api = {
 
   // =================== STREAMS ===================
   getPlaylists: () => fetchApi('/api/m3u/accounts/'),
+  addM3UAccount: (data: any) => fetchApi('/api/m3u/accounts/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  }),
+  updateM3UAccount: (id: number, data: any) => fetchApi(`/api/m3u/accounts/${id}/`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  }),
+  deleteM3UAccount: (id: number) => fetchApi(`/api/m3u/accounts/${id}/`, { method: 'DELETE' }),
   refreshM3UAccount: (id: number) => fetchApi(`/api/m3u/refresh/${id}/`, { method: 'POST' }),
   getStreamGroups: () => fetchApi('/api/channels/groups/'),
   getStreams: (params: Record<string, any> = {}) => {
@@ -114,5 +137,9 @@ export const api = {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
-  })
+  }),
+
+  // =================== ACTIVITY / LOGS ===================
+  getSystemEvents: (limit: number = 100, offset: number = 0) => 
+    fetchApi(`/api/core/system-events/?limit=${limit}&offset=${offset}`)
 };

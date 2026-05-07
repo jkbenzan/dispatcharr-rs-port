@@ -1,13 +1,13 @@
 # Dispatcharr-RS Architecture
 
 > **Living Document** — Update this file whenever a significant design decision is made.
-> Last updated: 2026-05-06
+> Last updated: 2026-05-07
 
 ---
 
 ## Overview
 
-Dispatcharr-RS is a Rust rewrite of the Dispatcharr IPTV middleware. The backend is an Axum-based API server, and the frontend is a **dual-framework** setup: a React main app and an Angular channel manager mini-app.
+Dispatcharr-RS is a Rust rewrite of the Dispatcharr IPTV middleware. The backend is an Axum-based API server. The frontend is currently undergoing a major migration from a dual-framework setup (React/Angular) to a unified **SvelteKit** application with a high-performance, **Trakt-inspired** dark aesthetic.
 
 ---
 
@@ -19,311 +19,74 @@ dispatcharr-rs-port/
 │   ├── main.rs                 # Server setup, routes, background workers
 │   ├── api.rs                  # REST API handlers
 │   ├── proxy.rs                # Stream proxy / broadcaster
-│   ├── middleware.rs            # Network access middleware
 │   ├── entities/               # SeaORM entity models
 │   └── ...
-├── frontend/                   # React frontend (main app, production)
-├── angular-frontend/           # Angular 18 channel manager (mini-app)
-├── enhancedchannelmanager-main/ # ECM reference project (gitignored, local only)
-├── Dispatcharr-main/           # Original Dispatcharr reference (gitignored, local only)
+├── svelte-frontend/            # NEW: Unified SvelteKit frontend (Active Migration)
+├── frontend/                   # LEGACY: React frontend (to be retired)
+├── angular-frontend/           # LEGACY: Angular 18 frontend (to be retired)
 ├── dist/                       # Built frontend output (gitignored)
-├── Dockerfile                  # Multi-stage build (React + Angular + Rust)
+├── Dockerfile                  # Multi-stage build
 └── ARCHITECTURE.md             # ← You are here
 ```
 
 ---
 
-## Frontend Architecture
+## Frontend Migration (SvelteKit)
 
-### Dual-Frontend Strategy
+We are pivoting the entire frontend to **SvelteKit** to achieve a premium "Trakt-like" user experience. This work is primarily happening on the `feature/svelte-migration` branch.
 
-| Path | Framework | Source | Purpose |
-|------|-----------|--------|---------|
-| `/` | React | `frontend/` | Main application (dashboard, EPG, M3U, settings, etc.) |
-| `/channel-manager/` | Angular 18 + Taiga UI | `angular-frontend/` | Channel manager mini-app (migration in progress) |
+### Design System (Trakt Aesthetic)
+- **Framework**: SvelteKit 2 + Svelte 5 (Runes).
+- **Styling**: Vanilla CSS/LESS with a custom-built design system.
+- **Theme/Accent System**: Uses CSS variables bound to `document.documentElement` attributes (`data-theme` and `data-accent`). Fully supports dynamic switching between light/dark modes and configurable brand colors (Trakt Red `#ed1c24` / Dispatcharr Green `#158f76`). Preferences persist via `localStorage`.
+- **Components**: Lightweight, native-feeling components (avoiding heavy UI libraries like Taiga).
+  - *Primitives*: Reusable primitives like `Modal.svelte` handle backdrop blur, z-indexing, and keyboard escape.
+- **Icons**: Lucide-Svelte.
 
-**Why two frameworks?** The channel manager is being incrementally migrated from React to Angular 18 with Taiga UI v5. Rather than a big-bang rewrite, it runs as a standalone mini-app at `/channel-manager/` while the rest of the React app remains untouched.
+- **Layout Architecture**:
+  - **Root Layout**: A fixed sidebar navigation with a responsive main content area. Includes a custom branding header with a "Powered by Rust" flare and a collapsible mode replacing the text with a themeable Dispatcharr logo SVG. Now enhanced with a glassmorphism effect (frosted glass) over a subtle radial gradient.
+  - **Channel Manager**: A split-pane interface with independent scrolling for Channels (left) and Streams (right), featuring a custom JS-based resizer.
+  - **Create Channel**: A massive 2-panel modal component leveraging the `Modal` primitive, fully integrating the Channel Data sidecar fuzzy lookups, EPG assignments, and Logo uploads without navigating away from the Channel Manager.
+  - **M3U / Streams Management**: A grid-based view at `/streams` for managing multiple M3U and XTREAM Codes providers. Includes robust creation/editing forms and handles bulk refresh operations.
+  - **Stream Checker**: A diagnostic dashboard at `/stream-checker` utilizing the backend bulk check workers. It features live progress polling, dynamic stream selection via providers, and real-time visualization of `ffprobe` and `ffmpeg` results.
+  - **Global Settings**: A modular sidebar-driven interface at `/settings` directly reading/writing to the backend `core_settings` table, mapping configuration JSON structures into bespoke UI controls (e.g. DVR padding, IP network CIDRs, Proxy failover thresholds).
+- **State Management**: Reactive stores using Svelte 5 `$state` and `$effect` for real-time WebSocket events and system status.
 
-### How it works
-
-- The **Dockerfile** has two Node.js build stages: one for React, one for Angular.
-- React's output goes to `dist/` (served at `/`).
-- Angular's output goes to `dist/channel-manager/` (served at `/channel-manager/`).
-- Angular's `index.html` has `<base href="/channel-manager/">` so routing and assets resolve correctly.
-- The Rust backend's `ServeDir::new("dist")` serves both — no special routing needed.
-
-### Angular Channel Manager Components
-
-```
-angular-frontend/src/app/
-├── channel-manager/
-│   ├── channel-manager.component.*    # Orchestrator (resizable two-pane layout only)
-│   ├── channels-pane/                 # Left pane: nested Group → Channel → Stream tree
-│   │   ├── channels-pane.ts           # Self-contained: data fetching, selection, actions, drag reorder
-│   │   ├── channels-pane.html         # Full nested tree template with checkboxes, kebab menus, drag handles
-│   │   └── channels-pane.less         # Styles for tree, kebab, drag indicators, hover actions
-│   ├── streams-pane/                  # Right pane: independent available stream catalog
-│   │   ├── streams-pane.ts            # Fetches all streams, handles selection & drag
-│   │   └── streams-pane.html          # Grouped stream list with checkboxes
-│   ├── video-player/                  # In-app floating video player
-│   │   └── video-player.component.ts  # Angular-native mpegts.js player (live) + HTML5 (VOD)
-│   └── channel-list-item/             # Legacy: absorbed into channels-pane template
-├── api.service.ts                     # HTTP client for all backend API calls
-└── websocket.service.ts               # WebSocket client for real-time updates
-```
-
-### Layout & Interaction
-
-- **Resizable panes**: Three-pane architecture. Left (Channels), Middle (Toolbar/Divider), Right (Streams). Default left pane width is 40%, clamped between 15% and 75%.
-- **Collapsible Toolbar**: The divider between panes doubles as a collapsible action toolbar. When collapsed, it acts as a standard drag handle. When expanded, it takes up 10% of the screen and displays channel management buttons (e.g., Create Channel).
-- **Nested tree**: Left pane renders **Group → Channel → Stream**. Only groups with channels are shown.
-- **Expand/collapse**: Per-group and per-channel expand arrows. Global expand all / collapse all buttons in header.
-- **Search**: Type-ahead search filters channels by name or number.
-- **Group filter**: Multi-select dropdown showing only groups with channels. Acts as a datagrid filter.
-
-### Group Row
-- Expand arrow + group name + channel count badge
-- **Kebab menu** (⋮) with:
-  - **Test Channels**: Collects all stream IDs across all channels in the group, submits to `POST /api/streams/bulk-check/`, and opens the Stream Checker SheetDialog (see below).
-- **Retrieval badge**: Pulsing icon appears when the SheetDialog is dismissed while a check is in progress. Click to re-open the sheet.
-
-### Channel Row
-- Checkbox + expand arrow + logo (resized to fit) + channel number + channel name + stream count badge
-- **Channel logo resolution**: The channel entity stores `logo_id` (FK to `dispatcharr_channels_logo`). The `get_channel_json()` function resolves `logo_id` → `logo_url` by looking up the logo table, injecting the URL directly into the channel JSON for frontend display.
-- **Kebab menu** (⋮) with:
-  - **Play Channel**: Opens in-app video player at `/stream/{channel_uuid}/`
-  - **Test Channel**: Submits channel's streams to `POST /api/streams/bulk-check/` and opens the Stream Checker SheetDialog.
-- **Retrieval badge**: Same as group row — pulsing icon for dismissed sheets.
-
-### Stream Row (sub-items under channel)
-- Checkbox + enumerated number (1, 2, 3...) + drag handle (≡) + logo + 3-row info cell + hover actions
-- **3-row info cell**: Stream name / Stats summary (resolution · codec · bitrate · status) / M3U account name
-- **Drag reorder**: Drag handle allows reordering streams within a channel. New order is persisted via `PATCH /api/channels/channels/:id/`
-- **Hover actions**: Preview stream (👁 opens in-app player) + Test stream (🔍 via `POST /api/streams/:id/check/`)
-
-### Selection System
-- **Channels Pane**: Checkboxes on channels and streams. Shift-click range selection on channels. Select All / Deselect All in header. Inline group-level select-all checkbox (with indeterminate state) for selecting all channels in a group.
-- **Streams Pane**: Self-managed selection state (no parent binding). Shift-click range selection. Select All / Deselect All in header. Inline selection count displayed in header row.
-- **Multi-select Drag**: When dragging a selected stream, all selected streams are included in the drag payload.
-- **Bulk Assignment**: Both panes emit `selectionChange` events to the parent `ChannelManagerComponent`. The "Assign Selected" button (visible in both collapsed and expanded toolbar states) activates when exactly 1 channel and ≥1 stream are selected. It calls `ChannelsPaneComponent.assignSelectedStreams()` which PATCHes the channel with the combined stream list.
-
-### Drag-and-Drop Stream Assignment
-- Streams in the Stream Pane are `draggable="true"` and set `application/json` data with selected stream IDs.
-- Channel rows in the Channels Pane accept drops: `(dragover)` / `(dragleave)` / `(drop)` handlers.
-- **Visual feedback**: A `box-shadow` inset border highlights the target channel during hover.
-- **Duplicate prevention**: Streams already assigned to the target channel are filtered out before assignment.
-- **Persistence**: The full stream ID list (existing + new) is sent via `PATCH /api/channels/channels/:id/` with `{ streams: [...] }`.
-- **Internal reorder**: Within the Channels Pane, streams can also be reordered within a single channel via drag handles (separate drag type using `text/plain`).
-
-### Layout Alignment
-- **Fixed-height header and filters**: Both Channels and Streams panes use identical CSS variable heights (`@pane-header-height: 42px`, `@pane-filters-height: 42px`) ensuring pixel-perfect horizontal alignment across the split-pane layout.
-- **Horizontal divider**: A styled `filters-divider` (rgba accent line) sits between the filter bar and scroll area on both panes, providing a clear visual boundary.
-- **Fixed header/filters**: The header, filters, and divider are `flex-shrink: 0` with explicit heights, so they remain fixed while only the `.scroll-area` (with `flex: 1; overflow-y: auto; min-height: 0`) scrolls independently per pane.
-
-### Stream Pane (Source View)
-- **Hierarchy**: M3U Provider → M3U Group → Stream Name.
-- **M3U Row**: Displays provider name, fetching status, last updated timestamp, and a manual "Refresh Now" button. All providers are shown even if they have 0 streams.
-- **Provider/Group Filter**: Searchable multi-select dropdowns that filter the tree.
-- **Custom M3U Filter**: Inside the Provider dropdown, a toggle (`showCustomM3U`, default `false`) controls visibility of providers whose name is "custom" (case-insensitive). This prevents custom/manually-added streams from cluttering the view by default, but users can opt in.
-- **Group Name Resolution**: `channel_group` is a numeric ID in the stream API response. The frontend resolves it to a human-readable name via `GET /api/channels/groups/`.
-- **Hide Assigned Toggle**: Filters out streams that are already assigned to at least one channel. Assigned status is determined by fetching all channels and collecting their stream IDs.
-- **Stream Preview**: Integrated "Preview Stream" button opens the in-app player.
-- **3-Row Info Cell**: Displays Stream Name, (Reserved), and M3U Account Name.
-- **Drag Handles**: Each stream row has a grab handle (`drag_indicator`) matching the Channels Pane style.
-- **Expand/Collapse All**: Header buttons to expand or collapse all M3U providers and groups.
-- **Expansion Persistence**: When the tree is rebuilt (e.g. after drag-and-drop), both panes preserve which groups/channels/M3Us were expanded.
-- **Assigned Badge**: Streams already assigned to a channel show a small link icon and are slightly dimmed.
-
-### In-App Video Player
-- Angular-native component using `mpegts.js` for live MPEG-TS stream playback
-- Native HTML5 `<video>` for VOD content
-- Displays as a centered modal overlay with loading spinner and error states
-- Used for both "Play Channel" and "Preview Stream" actions
-
-### Create Channel Modal
-- **Rendering**: Rendered as a **custom inline overlay** in the `ChannelManagerComponent` template, rather than via Taiga UI's `TuiDialogService`. This avoids the "double modal" issue where Taiga's dialog chrome (header, backdrop, sizing wrapper) wraps the component's own custom dialog UI, producing two overlapping dialog shells. The component emits a `(dialogClose)` event (boolean) instead of injecting `POLYMORPHEUS_CONTEXT` / `TuiDialogContext`.
-- **Dismissible**: Backdrop click and `Escape` key both close the dialog (cancel behavior).
-- **Layout**: 2-panel design inspired by channelidentifier's CreateChannelModal. Left panel contains the form organized into collapsible section cards. Right panel is an "Existing Channels" sidebar listing all current channels (number + name) loaded from `/api/channels/channels/summary/` with a live search filter.
-- **Responsive Design**: On screens < 768px, the sidebar hides and the two-column metadata layout collapses to single column to prevent horizontal overflow. On medium screens (769–1024px), the sidebar shrinks to 180px.
-- **Channel Configuration**: Channel Name input with live auto-suggest from `channel_data.db` (debounced 500ms). Channel Number input with three shortcut buttons: "Smart Range" (finds nearest gap), "First Available" (lowest unused number), "Highest + 1" (max + 1). Hint text explains automatic channel shifting behavior.
-- **Channel Groups**: Scrollable styled list with selection highlight, search filter, and "Only Custom" checkbox toggle. Each group row displays colored badges: green `custom` for user-created groups (no M3U association) and blue provider-name badges for M3U-imported groups. The backend enriches each group with `is_custom` (boolean) and `m3u_accounts` (array of provider names) by joining `dispatcharr_channels_channelgroupm3uaccount` → `m3u_m3uaccount`. The search filter matches against both group name and M3U account names. Inline group creation replaces the browser `prompt()` with a styled input + confirm/cancel buttons.
-- **Channel Data Lookup**: Collapsible section (collapsed by default) that allows explicit fuzzy searching of the third-party SQLite database (`channel_data.db`). Results are displayed in a scrollable list with logos. Selected matches can have individual fields (Name, TVG-ID, Station ID, Logo) or all fields applied to the form. This is **separate** from the EPG selector. The search input uses `(keydown.enter)="$event.preventDefault()"` to prevent the parent `<form>` from inherently submitting the dialog. The backend (`suggest_matches`) first searches with the parsed `clean_name`, then falls back to the original query if parsing produced different text and returned 0 results. Error feedback is shown inline: 503 (DB unavailable), empty results, or HTTP errors are surfaced in a styled warning banner instead of silently showing nothing.
-- **EPG Selector**: Searchable dropdown that queries the `epg_epgdata` table for actual EPG data entries (tvg_id, name, icon_url, source). Supports filtering by name or TVG-ID. Includes "Use Dummy" shortcut for placeholder EPG assignment. This controls the `epg_data_id` form field.
-- **Logo Handling**: Displays a real-time preview of the selected logo. Uploading a file shows an **immediate local preview** via `FileReader.readAsDataURL()` before the upload completes. Supports both file upload and URL import (used by db match "Apply Logo"). Features graceful error handling to clear local previews if the backend upload fails (e.g. invalid permissions/paths) preventing silent failures where the form appears to have a logo but none is saved.
-- **Create Channel**: Handles explicit single-channel creation with comprehensive form inputs (Name, Number, Group, Streaming Profile, User Level Access (defaults to Streamer), Mature toggle).
-
-### Stream Checker SheetDialog
-
-The stream checker is presented as a **Taiga UI SheetDialog** (from `@taiga-ui/addon-mobile`) that slides up from the bottom of the screen when any "Test" action is triggered. This replaces the previous approach of switching to the React Stream Checker tab.
-
-- **Two stop levels**: Collapsed (~6rem shows progress bar + label), expanded (~14rem shows stats + workers). Fully draggable to see the live activity log.
-- **Uses bulk-check backend**: All testing goes through `POST /api/streams/bulk-check/` which provides parallel testing by M3U provider, respects `stream_checker_parallel_providers` setting, and populates the shared `BulkCheckStatus` (visible in both Angular and React dashboards).
-- **Polls** `GET /api/streams/bulk-check/status/` every 1s while running.
-- **Cancel button**: Red stop button in the sheet header, visible while a check is running. Calls `POST /api/streams/bulk-check/cancel/` which sets a cooperative `AtomicBool` flag on the backend. Workers check this flag before each stream — the current in-progress ffprobe/ffmpeg call completes, but no new streams start. Shows a "Cancelling..." badge until workers finish.
-- **Auto-sort**: After check completes, auto-sorts channels via `POST /api/channels/bulk-sort-streams/`.
-- **Dismissible**: User can swipe/drag down to dismiss. A **pulsing retrieval badge** appears on the source row (group or channel) to re-open the sheet.
-- **Persistence**: Badge and sheet state persist until another check is started or the component is destroyed (page refresh/reboot).
-- **Edge case**: If a bulk check is already running (from React UI or another action), the sheet shows the existing check's progress instead of starting a new one.
-
-### Taiga UI v5 Integration Notes
-
-Taiga UI v5 significantly overhauled its dependency injection and provider system compared to v3/v4. To prevent fatal `NG0201: No provider found` errors during bootstrap:
-- **`provideTaiga()`**: Must be included in the `providers` array in `app.config.ts` to supply core tokens like `TUI_OPTIONS`.
-- **`@taiga-ui/addon-mobile`**: Required for `TuiSheetDialog` component used in the Stream Checker SheetDialog.
-- **Form Inputs**: Certain complex structural components from older Taiga versions (like `<tui-textfield>`) require strict modular imports (`TuiTextfieldModule` or similar textfield providers) which can fail in a purely standalone component tree. As a workaround, standard native HTML `<input>` and `<select>` elements are used in place of `<tui-textfield>` wrappers. They integrate seamlessly with existing CSS classes (`search-input`, `filter-select`) while entirely bypassing the provider crash.
+### Build & Serving
+- **Adapter**: `@sveltejs/adapter-static` configured in SPA mode.
+- **Output**: Generates to the root `dist/` folder.
+- **Rust Integration**: Served by Axum via `ServeDir::new("dist")` with `index.html` fallback for client-side routing.
 
 ---
 
-## Channel Data Database (Sidecar Integration)
+## Backend Architecture
 
-To enrich channels with metadata (like correct logos, station identifiers, and EPG mapping heuristics), Dispatcharr-RS integrates a **third-party, read-only SQLite database** (`channel_data.db`) containing TV station metadata (powered by Gracenote data). 
+### Streaming Engine (Broadcaster)
+The backend has evolved from a direct-pipe proxy to a multiplexing broadcaster:
+- **Multiplexing**: Multiple users watching the same channel share a single upstream connection.
+- **Failover**: Automatic stream failover based on user-defined sorting rules.
+- **Caching**: Ring-buffer implementation for instant playback starts.
 
-- **Sidecar Architecture**: Rather than bloating the core PostgreSQL schema with millions of immutable station rows, this data lives in an external SQLite file.
-- **Graceful Fallback**: The backend dynamically mounts the database at startup via an `Arc<RwLock<ChannelDb>>` injected into the Axum state. If the database file is missing or invalid, the backend continues to function normally, but the `/api/channel-db/*` endpoints will gracefully return `503 Service Unavailable`.
-- **Fuzzy Matching (`channel_match.rs`)**: A custom string-similarity heuristic is implemented using Jaro-Winkler distance (from the `strsim` crate). It parses user channel names (removing "HD", "FHD", country codes), and scores them against the SQLite station data based on call sign, common names, and available video resolutions.
-- **Hot-swapping**: The database connection can be locked and re-opened at runtime, allowing the server to download updated database files and seamlessly swap them without restarting the application.
+### Channel Data Sidecar
+Enriches channels with metadata via a read-only SQLite database (`channel_data.db`).
+- **Fuzzy Matching**: Jaro-Winkler string similarity for matching local channels to station metadata.
+- **Graceful Degradation**: 503 response if the sidecar DB is missing or corrupted.
 
 ---
 
 ## Logo Management
-
-Dispatcharr supports fetching and syncing channel logos from a configurable GitHub repository (e.g., `https://github.com/tv-logo/tv-logos.git`).
-- **Configurable Repository**: The repository URL is stored in the application settings.
-- **Periodic Sync**: A background task clones/pulls the repository to local disk and scans for image files.
-- **Searchable Index**: The parsed logos are inserted into the `dispatcharr_channels_logo` database table, allowing them to be searched via `/api/channels/logos/` and selected natively within the Angular UI (e.g., inside the Create Channel dialog).
+- **Sync**: Background task clones/pulls a GitHub logo repository.
+- **Resolution**: `get_channel_json()` resolves FKs to public URLs for the frontend.
 
 ---
 
-## Backend API Routes
-
-> **Critical:** The Angular frontend calls the Rust backend directly. These URL paths must match exactly.
-
-### Channel Endpoints
-
-| Method | Path | Handler | Notes |
-|--------|------|---------|-------|
-| GET | `/api/channels/channels/` | `get_channels` | Paginated, includes `streams` array. Supports `?search=`, `?channel_group=`, `?ordering=`, `?page_size=` (default 50, max 5000) |
-| POST | `/api/channels/channels/` | `create_channel` | Create a new channel manually |
-| GET | `/api/channels/channels/summary/` | `get_channels_summary` | Lightweight: id, name, logo_id, channel_number only |
-| PATCH/PUT | `/api/channels/channels/:id/` | `update_channel` | Update channel fields including `streams` array |
-| GET | `/api/channels/groups/` | `get_channel_groups` | Returns array of `{id, name, is_custom, m3u_accounts}`. `is_custom` is true when the group has no rows in `channelgroupm3uaccount`. `m3u_accounts` is an array of human-readable M3U provider names. |
-| POST | `/api/channels/groups/` | `create_channel_group` | Create a new channel group manually |
-
-### Stream Endpoints
-
-| Method | Path | Handler | Notes |
-|--------|------|---------|-------|
-| GET | `/api/channels/streams/` | `get_streams` | Paginated. Supports `?m3u_account=`, `?channel_group=`, `?search=` |
-| GET | `/api/channels/streams/filter-options/` | `get_stream_filter_options` | Filter metadata |
-
-### Other Key Endpoints
-
-| Method | Path | Handler | Notes |
-|--------|------|---------|-------|
-| GET | `/api/m3u/accounts/` | `get_m3u_accounts` | M3U provider accounts |
-| GET | `/api/channels/logos/` | `get_logos` | List Channel logos |
-| POST | `/api/channels/logos/` | `create_logo` | Import logo from external URL (used by Apply Logo DB match) |
-| POST | `/api/channels/logos/upload` | `upload_logo` | Upload multipart logo file (explicitly supports no trailing slash to avoid 404/405 errors) |
-
-### Stream Checker & Sorting Endpoints
-
-| Method | Path | Handler | Notes |
-|--------|------|---------|-------|
-| POST | `/api/streams/:id/check/` | `test_stream` | Test a single stream (ffprobe + ffmpeg). Returns updated `stream_stats`. |
-| POST | `/api/streams/bulk-check/` | `start_bulk_check` | Start checking multiple streams. Body: `{ stream_ids: [] }` |
-| GET | `/api/streams/bulk-check/status/` | `get_bulk_check_status` | Poll bulk check progress (is_running, completed, total, workers) |
-| POST | `/api/streams/bulk-check/cancel/` | `cancel_bulk_check` | Cooperative cancel — sets `AtomicBool` flag, workers stop before next stream |
-| POST | `/api/channels/bulk-sort-streams/` | `bulk_sort_streams` | Sort streams by scoring rules. Body: `{ channel_ids: [] }` |
-| GET | `/api/stream-checker/sorting-rules/` | `list_sorting_rules` | List all sorting rules |
-| POST | `/api/stream-checker/sorting-rules/` | `create_sorting_rule` | Create a sorting rule |
-
-### Channel Data Database Endpoints
-| Method | Path | Handler | Notes |
-|--------|------|---------|-------|
-| GET | `/api/channel-db/health/` | `health` | Status and station count |
-| GET | `/api/channel-db/search/stations/` | `search_stations` | Query third party TV station data |
-| POST | `/api/channel-db/match/suggest/` | `suggest_matches` | Fuzzy match local channel against metadata |
-| GET | `/api/channel-db/lineups/search-by-zip/` | `search_lineups_by_zip` | Find local MSO lineups |
-
-> ⚠️ **Common pitfall:** The original Django API used `/api/channels/` for channels. The Rust port uses `/api/channels/channels/` (double "channels"). Streams are at `/api/channels/streams/` not `/api/streams/`. Stream _checking_ routes are at `/api/streams/` (single).
+## Docker Build Process
+The build is being updated to prioritize the SvelteKit output:
+1. **SvelteKit Stage**: `npm run build` outputs to `dist/`.
+2. **Rust Stage**: `cargo build --release`.
+3. **Final Stage**: Combines the binary with the `dist/` folder.
 
 ---
 
-## Drag and Drop (Stream → Channel Assignment)
-
-The channel manager uses **native HTML5 drag and drop** (not Angular CDK).
-
-### Flow
-
-1. **Drag start** (`streams-pane.ts`): Sets `event.dataTransfer.setData('application/json', JSON.stringify(streamIds))`
-2. **Drag over** (`channels-pane.ts`): Calls `event.preventDefault()` to allow drop
-3. **Drop** (`channels-pane.ts`): Reads stream IDs from `getData('application/json')`, merges with existing channel streams, calls `PATCH /api/channels/channels/:id/`
-
-### Why native instead of Angular CDK?
-
-Angular CDK's `cdkDropList` is designed for list-to-list transfers within flat containers. The channel manager has a complex nested structure (groups → channels → streams) that CDK couldn't handle without excessive workarounds.
-
----
-
-## Data Flow: Channel Grouping
-
-The channels pane displays channels organized by group, matching the ECM layout.
-
-1. **Fetch in parallel:** `GET /api/channels/groups/` and `GET /api/channels/channels/summary/`
-2. **Client-side grouping:** Channels are grouped by `channel_group_id`, matched against group names
-3. **Filter:** Only groups that contain at least one channel are displayed (empty groups are hidden)
-4. **Search:** Full-text search across channels by name/number, displaying the matching channels and their corresponding groups.
-
----
-
-## Docker Build
-
-```dockerfile
-# Stage 1a: React frontend (main app)
-frontend/ → npm run build → dist/
-
-# Stage 1b: Angular channel manager (mini-app)
-angular-frontend/ → npx ng build --base-href /channel-manager/ → /app/dist/browser/ → /app/dist/channel-manager/
-
-# Stage 2: Rust binary
-cargo build --release
-
-# Stage 3: Production image
-debian:bookworm-slim + binary + both dist/ outputs
-```
-
-> ⚠️ **Critical:** The `--base-href /channel-manager/` flag is **required** in the Docker build. Without it, the Angular `index.html` emits `<script src="/main-XXX.js">` (root-relative), which the Rust server resolves to the React SPA fallback, returning HTML instead of JavaScript. The browser then rejects it with a MIME type error and the app shows a black screen.
-
----
-
-## Future Work / Decisions Pending
-
-- [ ] **Light/dark theme toggle** — CSS currently uses hardcoded dark colors. Extract to CSS variables for theme switching.
-- [ ] **Full Angular migration** — Once the channel manager is stable, decide whether to migrate remaining React pages or keep the dual setup.
-- [ ] **Bundle size** — Angular bundle exceeds the 500kB warning. Consider lazy loading or chunk splitting.
-- [ ] **Toast notifications** — Replace `console.log` confirmations with Taiga UI notification service.
-- [ ] **Advanced ECM features** — Bulk CSV import/export, EPG assignment modals, undo/redo history.
-- [ ] **HLS DVR Segmentation** — Transition from single-file TS recording to FFmpeg HLS segmentation to enable "Watch While Recording" (parity with Dispatcharr 0.24.0).
-- [ ] **Delta Stats Refresh** — Implement a lightweight "since" cursor endpoint for stream stats to reduce payload size and frontend re-renders (parity with Dispatcharr 0.24.0).
-- [ ] **Richer EPG Metadata** — Extract Season/Episode (SxxExx) and program subtitles from XMLTV sources (parity with Dispatcharr 0.21.0).
-- [ ] **API Key Authentication** — Add support for permanent API keys to allow programmatic access without JWT tokens (parity with Dispatcharr 0.20.0).
-
----
-
-## Reference Projects
-
-These are local-only reference copies (gitignored):
-
-- **`Dispatcharr-main/`** — Original Python/Django Dispatcharr
-- **`enhancedchannelmanager-main/`** — ECM project (React) — the target for channel manager parity
-
----
-
-## Testing and Deployment Workflow
-
-> **Note:** The user does not build and test locally.
-
-The standardized workflow for testing changes is:
-1. **Push** code changes to the Git repository.
-2. **Build and Publish** the Docker image to Docker Hub (typically via CI/CD or remote build server).
-3. **Update Image** on the Unraid server to pull the latest Docker Hub image and test the changes in the live environment.
+## Active Branch: `feature/svelte-migration`
+Current focus: Porting the Channel Manager (Groups, Channels, Streams) and the Create Channel Dialog into Svelte components while maintaining functional parity with the legacy Angular/React versions.
