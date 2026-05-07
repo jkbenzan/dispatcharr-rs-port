@@ -212,31 +212,43 @@
 
             <!-- Right sub-column: EPG + Logo -->
             <div class="sub-col">
-              <!-- EPG Selector (actual EPG data, not the Channel Data Lookup) -->
+              <!-- EPG Assignment (actual EPG data, not the Channel Data Lookup) -->
               <div class="form-group">
                 <div class="label-row">
                   <label>EPG Assignment</label>
                   <div class="epg-actions">
                     <a class="shortcut-link" (click)="useDummyEpg()">Use Dummy</a>
+                    <a class="shortcut-link" (click)="selectEpg(null)" *ngIf="form.get('epg_data_id')?.value">Clear</a>
                   </div>
                 </div>
-                <div class="epg-dropdown-wrapper" (clickOutside)="epgDropdownOpen = false">
-                  <div class="epg-selector" (click)="epgDropdownOpen = !epgDropdownOpen">
-                    <span class="epg-selected-text">{{ selectedEpgDisplay }}</span>
-                    <span class="material-icons epg-arrow">{{ epgDropdownOpen ? 'expand_less' : 'expand_more' }}</span>
-                  </div>
-                  <div class="epg-dropdown" *ngIf="epgDropdownOpen">
-                    <input type="text" [formControl]="epgFilterControl" class="epg-search-input" placeholder="Search EPG entries..." (click)="$event.stopPropagation()">
-                    <div class="epg-option none-option" (click)="selectEpg(null)">
-                      <span>None</span>
+                
+                <div class="epg-two-level-selector">
+                  <div class="epg-controls-row">
+                    <div class="epg-source-col">
+                      <label class="sub-label">Source</label>
+                      <select class="form-select" [(ngModel)]="selectedEpgSourceId" (ngModelChange)="filterEpgData()" [ngModelOptions]="{standalone: true}">
+                        <option [ngValue]="null">Select Source...</option>
+                        <option *ngFor="let source of epgSources" [ngValue]="source.id">{{ source.name }}</option>
+                      </select>
                     </div>
+                    <div class="epg-filter-col">
+                      <label class="sub-label">Filter</label>
+                      <input type="text" [formControl]="epgFilterControl" class="form-input" placeholder="Search...">
+                    </div>
+                  </div>
+                  
+                  <div class="epg-results-box" *ngIf="selectedEpgSourceId !== null">
                     <div class="epg-option"
                          *ngFor="let epg of filteredEpgData"
+                         [class.selected]="epg.id === form.get('epg_data_id')?.value"
                          (click)="selectEpg(epg)">
                       <span class="epg-opt-name">{{ epg.name }}</span>
-                      <span class="epg-opt-tvgid">{{ epg.tvg_id }}</span>
+                      <span class="epg-opt-tvgid" *ngIf="epg.tvg_id">({{ epg.tvg_id }})</span>
                     </div>
                     <div class="epg-option disabled" *ngIf="filteredEpgData.length === 0">No EPG entries match.</div>
+                  </div>
+                  <div class="epg-results-box empty-state" *ngIf="selectedEpgSourceId === null">
+                    <span>Please select an EPG source to view channels.</span>
                   </div>
                 </div>
               </div>

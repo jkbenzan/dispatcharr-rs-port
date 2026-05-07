@@ -72,8 +72,10 @@ export class CreateChannelDialogComponent implements OnInit {
   filteredGroups: any[] = [];            // filtered by search + custom toggle
   profiles: any[] = [];
   logos: any[] = [];
+  epgSources: any[] = [];
+  selectedEpgSourceId: number | null = null;
   epgData: any[] = [];                   // all EPG data records from epg_epgdata table
-  filteredEpgData: any[] = [];           // filtered by search in EPG dropdown
+  filteredEpgData: any[] = [];           // filtered by source and search in EPG dropdown
   existingChannels: any[] = [];          // from channels summary
   filteredExistingChannels: any[] = [];  // filtered by sidebar search
 
@@ -136,12 +138,17 @@ export class CreateChannelDialogComponent implements OnInit {
       this.cdr.markForCheck();
     });
 
+    // Load EPG sources
+    this.api.getEpgSources().subscribe((res: any) => {
+      this.epgSources = res.results || res;
+      this.cdr.markForCheck();
+    });
+
     // Load EPG data for the EPG assignment dropdown
     this.api.getEpgData().subscribe({
       next: (res: any) => {
         this.epgData = res.results || res;
-        this.filteredEpgData = this.epgData.slice(0, 100); // render first 100
-        this.cdr.markForCheck();
+        this.filterEpgData();
       },
       error: () => {
         // EPG data might not be available — degrade gracefully
@@ -155,16 +162,8 @@ export class CreateChannelDialogComponent implements OnInit {
     this.epgFilterControl.valueChanges.pipe(
       debounceTime(200),
       distinctUntilChanged()
-    ).subscribe(val => {
-      const search = (val || '').toLowerCase();
-      if (!search) {
-        this.filteredEpgData = this.epgData.slice(0, 100);
-      } else {
-        this.filteredEpgData = this.epgData
-          .filter(e => e.name.toLowerCase().includes(search) || e.tvg_id.toLowerCase().includes(search))
-          .slice(0, 100);
-      }
-      this.cdr.markForCheck();
+    ).subscribe(() => {
+      this.filterEpgData();
     });
 
     // Logo ID change → update preview
@@ -398,7 +397,21 @@ export class CreateChannelDialogComponent implements OnInit {
       this.form.patchValue({ name: this.selectedMatch.name });
     }
     if (field === 'tvg_id' || field === 'all') {
-      this.form.patchValue({ tvg_id: this.selectedMatch.call_sign || this.selectedMatch.name });
+      const targetTvgId = this.selectedMatch.call_sign || this.selectedMatch.name;
+      const targetStationId = this.selectedMatch.station_id;
+      
+      this.form.patchValue({ tvg_id: targetTvgId });
+
+      // Auto-match EPG
+      const match = this.epgData.find(e => 
+        (e.tvg_id && e.tvg_id === targetTvgId) || 
+        (targetStationId && e.tvg_id === targetStationId)
+      );
+      if (match) {
+        this.selectedEpgSourceId = match.epg_source_id || match.epg_source;
+        this.form.patchValue({ epg_data_id: match.id });
+        this.filterEpgData();
+      }
     }
     if (field === 'tvc_guide_stationid' || field === 'all') {
       this.form.patchValue({ tvc_guide_stationid: this.selectedMatch.station_id });
@@ -428,6 +441,33 @@ export class CreateChannelDialogComponent implements OnInit {
     this.epgDropdownOpen = false;
     this.cdr.markForCheck();
   }
+
+  filterEpgData() {
+    const search = (this.epgFilterControl.value || '').toLowerCase();
+    
+    // First filter by selected source
+    let list = this.epgData;
+    if (this.selectedEpgSourceId !== null) {
+      list = list.filter(e => e.epg_source_id === this.selectedEpgSourceId || e.epg_source === this.selectedEpgSourceId);
+    } else {
+      // If no source is selected, display nothing (forcing user to pick a source)
+      this.filteredEpgData = [];
+      this.cdr.markForCheck();
+      return;
+    }
+
+    // Then filter by text
+    if (search) {
+      list = list.filter(e => 
+        (e.name && e.name.toLowerCase().includes(search)) || 
+        (e.tvg_id && e.tvg_id.toLowerCase().includes(search))
+      );
+    }
+    
+    this.filteredEpgData = list.slice(0, 100);
+    this.cdr.markForCheck();
+  }
+
 
   useDummyEpg() {
     this.form.patchValue({ tvg_id: 'dummy', tvc_guide_stationid: 'dummy', epg_data_id: null });

@@ -582,53 +582,38 @@
   gap: 10px;
 }
 
-/* EPG Dropdown */
-.epg-dropdown-wrapper {
-  position: relative;
+/* EPG Two-Level Selector */
+.epg-two-level-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.epg-selector {
+.epg-controls-row {
+  display: flex;
+  gap: 15px;
+}
+
+.epg-source-col, .epg-filter-col {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 5px;
+}
+
+.epg-results-box {
   background: @surface-dark;
   border: 1px solid @border;
-  padding: 9px 12px;
   border-radius: 6px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  cursor: pointer;
-  transition: border-color 0.2s;
-
-  &:hover { border-color: @accent; }
-
-  .epg-selected-text { font-size: 14px; color: @text; }
-  .epg-arrow { font-size: 20px; color: @text-dim; }
-}
-
-.epg-dropdown {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  background: @surface-dark;
-  border: 1px solid @accent;
-  border-radius: 6px;
-  z-index: 300;
-  max-height: 250px;
+  max-height: 200px;
   overflow-y: auto;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
-  animation: fadeIn 0.15s ease;
 
-  .epg-search-input {
-    width: 100%;
-    box-sizing: border-box;
-    padding: 8px 12px;
-    background: @surface;
-    border: none;
-    border-bottom: 1px solid @border;
-    color: @text-bright;
+  &.empty-state {
+    padding: 20px;
+    text-align: center;
+    color: @text-dim;
     font-size: 13px;
-    &:focus { outline: none; }
-    &::placeholder { color: @text-dim; }
+    font-style: italic;
   }
 
   .epg-option {
@@ -639,9 +624,12 @@
     align-items: center;
     transition: background 0.1s;
     border-bottom: 1px solid rgba(56, 56, 84, 0.2);
+    &:last-child { border-bottom: none; }
+    
     &:hover { background: @surface-light; }
+    &.selected { background: fade(@accent, 20%); border-left: 3px solid @accent; padding-left: 9px; }
     &.none-option { color: @text-dim; font-style: italic; }
-    &.disabled { color: @text-dim; cursor: default; font-style: italic; }
+    &.disabled { color: @text-dim; cursor: default; font-style: italic; &:hover { background: transparent; } }
 
     .epg-opt-name { font-size: 13px; color: @text; }
     .epg-opt-tvgid { font-size: 11px; color: @text-dim; }
