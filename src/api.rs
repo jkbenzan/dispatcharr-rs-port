@@ -160,7 +160,7 @@ pub async fn create_logo(
         ..Default::default()
     };
     let inserted = logo.insert(&state.db).await.map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
-    Ok(axum::Json(logo_to_json(inserted.try_into_model().unwrap())))
+    Ok(axum::Json(logo_to_json(inserted)))
 }
 
 #[derive(serde::Deserialize)]
