@@ -50,6 +50,8 @@ We are pivoting the entire frontend to **SvelteKit** to achieve a premium "Trakt
   - **M3U / Streams Management**: A grid-based view at `/streams` for managing multiple M3U and XTREAM Codes providers. Includes robust creation/editing forms and handles bulk refresh operations.
   - **Stream Checker**: A diagnostic dashboard at `/stream-checker` utilizing the backend bulk check workers. It features live progress polling, dynamic stream selection via providers, and real-time visualization of `ffprobe` and `ffmpeg` results.
   - **Global Settings**: A modular sidebar-driven interface at `/settings` directly reading/writing to the backend `core_settings` table, mapping configuration JSON structures into bespoke UI controls (e.g. DVR padding, IP network CIDRs, Proxy failover thresholds).
+  - **Activity & Logs**: A real-time terminal interface at `/activity` streaming live system events from the WebSocket backend, complete with a hybrid JSON-viewer for inspecting raw payload details.
+  - **Integrations & Plugins**: Placeholder UI skeletons at `/integrations` and `/plugins` for future webhook, API token, and custom parser management.
 - **State Management**: Reactive stores using Svelte 5 `$state` and `$effect` for real-time WebSocket events and system status.
 
 ### Build & Serving

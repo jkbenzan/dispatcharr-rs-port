@@ -141,5 +141,9 @@ export const api = {
 
   // =================== ACTIVITY / LOGS ===================
   getSystemEvents: (limit: number = 100, offset: number = 0) => 
-    fetchApi(`/api/core/system-events/?limit=${limit}&offset=${offset}`)
+    fetchApi(`/api/core/system-events/?limit=${limit}&offset=${offset}`),
+
+  // =================== INTEGRATIONS & PLUGINS ===================
+  getIntegrations: () => fetchApi('/api/connect/integrations/'),
+  getPlugins: () => fetchApi('/api/plugins/plugins/')
 };
