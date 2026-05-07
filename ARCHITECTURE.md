@@ -37,7 +37,7 @@ We are pivoting the entire frontend to **SvelteKit** to achieve a premium "Trakt
 
 ### Media Consumption (Upcoming)
 - **TV Guide (EPG)**: An absolute-positioned, CSS-grid-based timeline view at `/guide`. Features paginated, lazy-loaded channel/EPG data using Intersection Observers, ensuring we only fetch EPG blocks for channels currently rendered in the viewport, maintaining the "relative time" and efficiency guardrails.
-- **VOD**: Stubs remain for Movies/Series capabilities.
+- **VOD**: Trakt-inspired interface at `/vod` supporting infinite scroll pagination and dynamic categorization of Movies and Series. Includes TMDB ID resolving for rich poster metadata.
 - **DVR**: A placeholder UI skeleton at `/dvr` outlining upcoming features like Series Pass and Comskip Integration.
 
 ### Design System (Trakt Aesthetic)

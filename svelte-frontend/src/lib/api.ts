@@ -152,5 +152,21 @@ export const api = {
     fetchApi(`/api/epg/grid/?start=${start}&end=${end}`, {
       method: 'POST',
       body: JSON.stringify({ channel_uuids })
-    })
+    }),
+
+  // =================== VOD ===================
+  getVodCategories: () => fetchApi('/api/vod/categories/'),
+  getVodMovies: (limit: number = 24, offset: number = 0, search: string = '') => {
+    // Backend uses page and page_size for VOD
+    const page = Math.floor(offset / limit) + 1;
+    let url = `/api/vod/movies/?page=${page}&page_size=${limit}`;
+    if (search) url += `&search=${encodeURIComponent(search)}`;
+    return fetchApi(url);
+  },
+  getVodSeries: (limit: number = 24, offset: number = 0, search: string = '') => {
+    const page = Math.floor(offset / limit) + 1;
+    let url = `/api/vod/series/?page=${page}&page_size=${limit}`;
+    if (search) url += `&search=${encodeURIComponent(search)}`;
+    return fetchApi(url);
+  }
 };
