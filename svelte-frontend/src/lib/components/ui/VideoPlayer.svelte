@@ -45,7 +45,6 @@
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           loading = false;
           if (autoplay) videoElement.play().catch(() => {
-            // Autoplay blocked
             playing = false;
           });
         });
@@ -56,18 +55,18 @@
           }
         });
       } else if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
-        // Native HLS (Safari)
         videoElement.src = src;
         videoElement.addEventListener('loadedmetadata', () => {
           loading = false;
           if (autoplay) videoElement.play();
         });
       } else {
-        error = "Your browser does not support HLS playback.";
+        error = "HLS playback is not supported in this browser.";
         loading = false;
       }
     } else if (isTs) {
-      if (mpegts.getFeatureList().mse) {
+      // Use mpegts.isSupported() as it's more comprehensive than just checking .mse
+      if (mpegts.isSupported()) {
         mpegPlayer = mpegts.createPlayer({
           type: 'mse',
           isLive: true,
@@ -78,6 +77,7 @@
         mpegPlayer.load();
         
         mpegPlayer.on(mpegts.Events.ERROR, (type: any, detail: any) => {
+          console.error('MPEG-TS Error:', type, detail);
           error = `Stream Error: ${type} (${detail})`;
           loading = false;
         });
@@ -87,17 +87,25 @@
           if (autoplay) videoElement.play().catch(() => {});
         });
 
-        // Some streams don't trigger metadata arrived early enough
+        // Fallback for metadata delay
         setTimeout(() => {
-          if (loading) loading = false;
+          if (loading && !error) loading = false;
         }, 3000);
 
       } else {
-        error = "Your browser does not support MPEG-TS (MSE) playback.";
-        loading = false;
+        // Fallback: try native playback anyway, some browsers might handle it or mpegts check might be too strict
+        console.warn('mpegts.isSupported() returned false, attempting native fallback...');
+        videoElement.src = src;
+        videoElement.addEventListener('canplay', () => {
+          loading = false;
+          if (autoplay) videoElement.play();
+        });
+        videoElement.addEventListener('error', () => {
+          error = "MPEG-TS playback is not supported in this browser. Try using a Chromium-based browser or open in an external player.";
+          loading = false;
+        });
       }
     } else {
-      // Generic fallback
       videoElement.src = src;
       videoElement.addEventListener('canplay', () => {
         loading = false;
@@ -190,7 +198,12 @@
     <div class="overlay error-overlay">
       <AlertCircle size={48} color="var(--accent)" />
       <span class="error-text">{error}</span>
-      <button class="btn btn-secondary" onclick={initPlayer}>Try Again</button>
+      <div class="error-actions">
+        <button class="btn btn-secondary" onclick={initPlayer}>Try Again</button>
+        <a href={src} class="btn btn-primary" target="_blank" rel="noopener noreferrer">
+          Open in External Player
+        </a>
+      </div>
     </div>
   {/if}
 
@@ -288,6 +301,13 @@
     color: #fca5a5;
     font-size: 14px;
     max-width: 300px;
+    margin-bottom: 8px;
+  }
+
+  .error-actions {
+    display: flex;
+    gap: 12px;
+    align-items: center;
   }
 
   .controls-overlay {
