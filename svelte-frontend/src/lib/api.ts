@@ -145,5 +145,12 @@ export const api = {
 
   // =================== INTEGRATIONS & PLUGINS ===================
   getIntegrations: () => fetchApi('/api/connect/integrations/'),
-  getPlugins: () => fetchApi('/api/plugins/plugins/')
+  getPlugins: () => fetchApi('/api/plugins/plugins/'),
+
+  // =================== TV GUIDE / EPG ===================
+  getEpgGrid: (start: string, end: string, channel_uuids: string[]) => 
+    fetchApi(`/api/epg/grid/?start=${start}&end=${end}`, {
+      method: 'POST',
+      body: JSON.stringify({ channel_uuids })
+    })
 };

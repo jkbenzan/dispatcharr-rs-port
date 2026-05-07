@@ -501,8 +501,8 @@ async fn main() {
         .route("/api/epg/import", post(api::refresh_epg_import))
         .route("/api/epg/import/", post(api::refresh_epg_import))
         .route("/api/epg/epgdata/", get(api::get_epgdata))
-        .route("/api/epg/grid", get(epg_api::get_epg_grid))
-        .route("/api/epg/grid/", get(epg_api::get_epg_grid))
+        .route("/api/epg/grid", post(epg_api::get_epg_grid))
+        .route("/api/epg/grid/", post(epg_api::get_epg_grid))
         .route("/api/epg/programs/:id", get(epg_api::get_program_detail))
         .route("/api/epg/programs/:id/", get(epg_api::get_program_detail))
         .route(

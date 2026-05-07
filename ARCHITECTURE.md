@@ -35,6 +35,10 @@ dispatcharr-rs-port/
 
 We are pivoting the entire frontend to **SvelteKit** to achieve a premium "Trakt-like" user experience. This work is primarily happening on the `feature/svelte-migration` branch.
 
+### Media Consumption (Upcoming)
+- **TV Guide (EPG)**: An absolute-positioned, CSS-grid-based timeline view at `/guide`. Features paginated, lazy-loaded channel/EPG data using Intersection Observers, ensuring we only fetch EPG blocks for channels currently rendered in the viewport, maintaining the "relative time" and efficiency guardrails.
+- **VOD & DVR**: Stubs remain for Movies/Series and DVR capabilities.
+
 ### Design System (Trakt Aesthetic)
 - **Framework**: SvelteKit 2 + Svelte 5 (Runes).
 - **Styling**: Vanilla CSS/LESS with a custom-built design system.

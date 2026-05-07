@@ -50,6 +50,7 @@ fn serialize_program(program: crate::entities::epg_program::Model) -> Value {
 pub async fn get_epg_grid(
     State(state): State<Arc<AppState>>,
     axum::extract::Query(params): axum::extract::Query<HashMap<String, String>>,
+    Json(payload): Json<Value>,
 ) -> Json<Value> {
     let started_at = Instant::now();
     tracing::info!("EPG grid request started with params: {:?}", params);
@@ -69,25 +70,51 @@ pub async fn get_epg_grid(
 
     tracing::info!("EPG grid range: {} to {}", start_time, end_time);
 
-    let programs = crate::entities::epg_program::Entity::find()
-        .filter(crate::entities::epg_program::Column::EndTime.gt(start_time))
-        .filter(crate::entities::epg_program::Column::StartTime.lt(end_time))
-        .all(&state.db)
-        .await
-        .unwrap_or_default();
+    let channel_uuids = payload
+        .get("channel_uuids")
+        .and_then(|v: &Value| v.as_array());
 
-    let mut serialized_programs = Vec::with_capacity(programs.len());
-    for p in programs {
-        serialized_programs.push(serialize_program(p));
+    let mut query = crate::entities::channel::Entity::find();
+
+    if let Some(uuids) = channel_uuids {
+        let uuids_str: Vec<String> = uuids
+            .iter()
+            .filter_map(|v: &Value| v.as_str().map(|s: &str| s.to_string()))
+            .collect::<Vec<String>>();
+        let mut uuid_vals = vec![];
+        for u_str in uuids_str.into_iter() {
+            if let Ok(u) = uuid::Uuid::parse_str(&u_str) {
+                uuid_vals.push(u);
+            }
+        }
+        query = query.filter(crate::entities::channel::Column::Uuid.is_in(uuid_vals));
     }
 
-    let channels = crate::entities::channel::Entity::find()
-        .all(&state.db)
-        .await
-        .unwrap_or_default();
+    let channels = query.all(&state.db).await.unwrap_or_default();
     let _channel_count = channels.len();
 
     let epg_data_ids: Vec<i64> = channels.iter().filter_map(|ch| ch.epg_data_id).collect();
+
+    // Now filter programs specifically for these epg_ids
+    let programs = if epg_data_ids.is_empty() {
+        vec![]
+    } else {
+        crate::entities::epg_program::Entity::find()
+            .filter(crate::entities::epg_program::Column::EpgId.is_in(epg_data_ids.clone()))
+            .filter(crate::entities::epg_program::Column::EndTime.gt(start_time))
+            .filter(crate::entities::epg_program::Column::StartTime.lt(end_time))
+            .all(&state.db)
+            .await
+            .unwrap_or_default()
+    };
+
+    let mut program_by_epg_id: HashMap<i64, Vec<crate::entities::epg_program::Model>> = HashMap::new();
+    for p in programs {
+        program_by_epg_id.entry(p.epg_id).or_default().push(p);
+    }
+
+    let mut serialized_programs = Vec::with_capacity(500);
+
     let epg_data_by_id: HashMap<i64, crate::entities::epg_data::Model> = if epg_data_ids.is_empty() {
         HashMap::new()
     } else {
@@ -136,11 +163,31 @@ pub async fn get_epg_grid(
     for ch in channels {
         let needs_dummy = match ch.epg_data_id {
             None => true,
-            Some(epg_id) => epg_data_by_id
-                .get(&epg_id)
-                .and_then(|row| row.epg_source_id)
-                .map(|source_id| dummy_source_ids.contains(&source_id))
-                .unwrap_or(false),
+            Some(epg_id) => {
+                // If we have real programs for this epg_id, add them to serialized_programs
+                if let Some(real_programs) = program_by_epg_id.get(&epg_id) {
+                    for program in real_programs {
+                        let mut prog_json = serialize_program(program.clone());
+                        prog_json["channel_uuid"] = json!(ch.uuid.to_string());
+                        
+                        if let Some(epg_data_row) = epg_data_by_id.get(&epg_id) {
+                            prog_json["epg"] = json!({
+                                "id": epg_data_row.id,
+                                "tvg_id": epg_data_row.tvg_id,
+                                "name": epg_data_row.name,
+                            });
+                        }
+                        
+                        serialized_programs.push(prog_json);
+                    }
+                }
+
+                epg_data_by_id
+                    .get(&epg_id)
+                    .and_then(|row| row.epg_source_id)
+                    .map(|source_id| dummy_source_ids.contains(&source_id))
+                    .unwrap_or(false)
+            }
         };
 
         if needs_dummy {
@@ -162,6 +209,7 @@ pub async fn get_epg_grid(
 
                 dummy_programs.push(json!({
                     "id": format!("dummy-{}-{}-{}", ch.id, block_start.timestamp(), block_end.timestamp()),
+                    "channel_uuid": ch.uuid.to_string(),
                     "epg": {"tvg_id": dummy_tvg_id, "name": ch.name},
                     "start_time": block_start.to_rfc3339(),
                     "end_time": block_end.to_rfc3339(),
