@@ -16,6 +16,8 @@ fn parse_id(val: &serde_json::Value) -> Option<i64> {
         None
     } else if let Some(n) = val.as_i64() {
         Some(n)
+    } else if let Some(n) = val.as_f64() {
+        Some(n as i64)
     } else if let Some(s) = val.as_str() {
         if s.is_empty() { None } else { s.parse::<i64>().ok() }
     } else {
@@ -141,6 +143,26 @@ pub async fn delete_logo(
         .await;
     Json(json!({"success": true}))
 }
+#[derive(serde::Deserialize)]
+pub struct CreateLogoRequest {
+    name: String,
+    url: String,
+}
+
+pub async fn create_logo(
+    axum::extract::State(state): axum::extract::State<std::sync::Arc<crate::AppState>>,
+    axum::Json(payload): axum::Json<CreateLogoRequest>,
+) -> Result<Json<Value>, axum::http::StatusCode> {
+    use sea_orm::ActiveModelTrait;
+    let logo = crate::entities::logo::ActiveModel {
+        name: sea_orm::Set(payload.name),
+        url: sea_orm::Set(payload.url),
+        ..Default::default()
+    };
+    let inserted = logo.insert(&state.db).await.map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(axum::Json(logo_to_json(inserted.try_into_model().unwrap())))
+}
+
 #[derive(serde::Deserialize)]
 pub struct UpdateLogoRequest {
     name: Option<String>,
@@ -3816,7 +3838,7 @@ pub async fn create_channel(
         uuid: Set(Uuid::new_v4()),
         auto_created: Set(false),
         is_adult: Set(payload.get("is_adult").and_then(|v| v.as_bool()).unwrap_or(false)),
-        user_level: Set(payload.get("user_level").and_then(|v| v.as_i64()).unwrap_or(1) as i32),
+        user_level: Set(parse_id(payload.get("user_level").unwrap_or(&serde_json::Value::Null)).unwrap_or(1) as i32),
         created_at: Set(chrono::Utc::now().into()),
         updated_at: Set(chrono::Utc::now().into()),
         ..Default::default()
@@ -3894,6 +3916,25 @@ pub async fn update_channel(
     }
     if let Some(logo) = payload.get("logo_id") {
         active.logo_id = sea_orm::Set(parse_id(logo));
+        updated = true;
+    }
+
+    if let Some(user_level) = payload.get("user_level") {
+        if let Some(l) = parse_id(user_level) {
+            active.user_level = sea_orm::Set(l as i32);
+            updated = true;
+        }
+    }
+    if let Some(is_adult) = payload.get("is_adult").and_then(|v| if v.is_boolean() { v.as_bool() } else { None }) {
+        active.is_adult = sea_orm::Set(is_adult);
+        updated = true;
+    }
+    if let Some(tvg_id) = payload.get("tvg_id").and_then(|v| v.as_str()) {
+        active.tvg_id = sea_orm::Set(Some(tvg_id.to_string()));
+        updated = true;
+    }
+    if let Some(tvc) = payload.get("tvc_guide_stationid").and_then(|v| v.as_str()) {
+        active.tvc_guide_stationid = sea_orm::Set(Some(tvc.to_string()));
         updated = true;
     }
 

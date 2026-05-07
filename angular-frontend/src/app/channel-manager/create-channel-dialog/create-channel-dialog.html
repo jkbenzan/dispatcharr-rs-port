@@ -119,7 +119,7 @@
               <!-- preventDefault() stops Enter from triggering the parent <form>'s
                    ngSubmit (which would save the entire form). Instead, Enter
                    only executes the Channel Data search. -->
-              <input type="text" [formControl]="epgSearchControl" class="form-input" placeholder="Search channel data..." (keyup.enter)="$event.preventDefault(); performEpgSearch(epgSearchControl.value || '')">
+              <input type="text" [formControl]="epgSearchControl" class="form-input" placeholder="Search channel data..." (keydown.enter)="$event.preventDefault(); performEpgSearch(epgSearchControl.value || '')">
               <button type="button" class="btn-db-search" (click)="performEpgSearch(epgSearchControl.value || '')">
                 <span class="material-icons">search</span>
               </button>
