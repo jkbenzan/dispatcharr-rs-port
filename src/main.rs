@@ -272,7 +272,7 @@ async fn main() {
 
     // SPA Routing: Serve index.html if the user hits a route like /channels directly
     let spa_service = ServeDir::new("dist").fallback(ServeFile::new("dist/index.html"));
-    let logos_service = ServeDir::new("/data/logos");
+    let logos_service = ServeDir::new("data/logos");
 
     let accounts_routes = Router::new()
         .route(

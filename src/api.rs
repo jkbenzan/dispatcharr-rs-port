@@ -71,7 +71,7 @@ pub async fn upload_logo(
     let final_name = name.unwrap_or_else(|| final_filename.clone());
 
     // Ensure the logos directory exists
-    let logos_dir = "/data/logos";
+    let logos_dir = "data/logos";
     if !std::path::Path::new(logos_dir).exists() {
         std::fs::create_dir_all(logos_dir).map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?;
     }
@@ -131,7 +131,7 @@ pub async fn delete_logo(
     if delete_file {
         if let Ok(Some(logo)) = crate::entities::logo::Entity::find_by_id(id).one(&state.db).await {
             let filename = logo.url.trim_start_matches("/logos/");
-            let file_path = format!("/data/logos/{}", filename);
+            let file_path = format!("data/logos/{}", filename);
             let _ = std::fs::remove_file(file_path);
         }
     }
@@ -188,7 +188,7 @@ pub async fn bulk_delete_logos(
             
         for logo in logos {
             let filename = logo.url.trim_start_matches("/logos/");
-            let file_path = format!("/data/logos/{}", filename);
+            let file_path = format!("data/logos/{}", filename);
             let _ = std::fs::remove_file(file_path);
         }
     }
@@ -235,7 +235,7 @@ pub async fn cleanup_unused_logos(
     if delete_files {
         for logo in unused_logos {
             let filename = logo.url.trim_start_matches("/logos/");
-            let file_path = format!("/data/logos/{}", filename);
+            let file_path = format!("data/logos/{}", filename);
             if std::fs::remove_file(file_path).is_ok() {
                 local_files_deleted += 1;
             }

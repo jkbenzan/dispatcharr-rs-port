@@ -32,7 +32,7 @@ export class CreateChannelDialogComponent implements OnInit {
     channel_number: [null as number | null],
     channel_group_id: [null as number | null],
     stream_profile_id: [null as number | null],
-    user_level: [1],
+    user_level: [3],
     logo_id: [null as number | null],
     is_adult: [false],
     tvg_id: [''],
@@ -518,6 +518,7 @@ export class CreateChannelDialogComponent implements OnInit {
       },
       error: () => {
         this.uploadingLogo = false;
+        this.selectedLogoPreview = null; // Clear preview if upload fails
         this.cdr.markForCheck();
       }
     });
