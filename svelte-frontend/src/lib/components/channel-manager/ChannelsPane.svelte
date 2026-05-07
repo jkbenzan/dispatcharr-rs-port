@@ -106,6 +106,37 @@
 			return matched.length > 0 ? { ...g, channels: matched, expanded: true } : null;
 		}).filter((g): g is GroupView => g !== null)
 	);
+	let crossPaneDropTargetId = $state<number | null>(null);
+
+	async function handleChannelDrop(e: DragEvent, channel: ChannelView) {
+		e.preventDefault();
+		crossPaneDropTargetId = null;
+
+		const data = e.dataTransfer?.getData('application/json');
+		if (!data) return;
+
+		try {
+			const streamIds = JSON.parse(data);
+			if (!Array.isArray(streamIds)) return;
+
+			// Add streams to channel
+			const currentIds = channel.streams.map(s => s.id);
+			const newIds = [...currentIds, ...streamIds.filter(id => !currentIds.includes(id))];
+			
+			await api.updateChannel(channel.id, { streams: newIds });
+			await loadData(); // Refresh to show new streams
+		} catch (err) {
+			console.error('Failed to drop streams:', err);
+		}
+	}
+
+	function handleChannelDragOver(e: DragEvent, channel: ChannelView) {
+		if (e.dataTransfer?.types.includes('application/json')) {
+			e.preventDefault();
+			e.dataTransfer.dropEffect = 'copy';
+			crossPaneDropTargetId = channel.id;
+		}
+	}
 </script>
 
 <div class="channels-pane">
@@ -137,7 +168,13 @@
 				{#if group.expanded}
 					<div class="channels-list">
 						{#each group.channels as channel}
-							<div class="channel-row">
+							<div 
+								class="channel-row" 
+								class:drop-target={crossPaneDropTargetId === channel.id}
+								ondragover={(e) => handleChannelDragOver(e, channel)}
+								ondragleave={() => crossPaneDropTargetId = null}
+								ondrop={(e) => handleChannelDrop(e, channel)}
+							>
 								<div class="channel-info">
 									<div class="channel-logo">
 										{#if channel.logo_url}
@@ -237,11 +274,16 @@
 		justify-content: space-between;
 		padding: 8px 16px 8px 40px;
 		cursor: pointer;
-		transition: background 0.2s;
+		transition: background 0.2s, border-color 0.2s;
 
 		&:hover { 
 			background: rgba(255, 255, 255, 0.03); 
 			.channel-actions { opacity: 1; }
+		}
+
+		&.drop-target {
+			background: rgba(237, 28, 36, 0.15);
+			outline: 1px dashed var(--accent);
 		}
 	}
 

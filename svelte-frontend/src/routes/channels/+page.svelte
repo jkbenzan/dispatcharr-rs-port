@@ -1,9 +1,12 @@
 <script lang="ts">
 	import ChannelsPane from '$lib/components/channel-manager/ChannelsPane.svelte';
+	import StreamsPane from '$lib/components/channel-manager/StreamsPane.svelte';
+	import CreateChannelModal from '$lib/components/channel-manager/CreateChannelModal.svelte';
 	import { Plus, LayoutGrid, ListFilter } from 'lucide-svelte';
 
 	let leftWidth = $state(40); // %
 	let isResizing = $state(false);
+	let showCreateModal = $state(false);
 
 	function startResizing(e: MouseEvent) {
 		isResizing = true;
@@ -39,7 +42,7 @@
 	
 	<div class="actions">
 		<button class="btn btn-secondary"><ListFilter size={18} /> Filters</button>
-		<button class="btn btn-primary"><Plus size={18} /> Create Channel</button>
+		<button class="btn btn-primary" onclick={() => showCreateModal = true}><Plus size={18} /> Create Channel</button>
 	</div>
 </div>
 
@@ -51,15 +54,11 @@
 	<div class="resizer" onmousedown={startResizing}></div>
 	
 	<div class="pane right" style:width="{100 - leftWidth}%">
-		<div class="streams-placeholder">
-			<div class="empty-state">
-				<LayoutGrid size={48} />
-				<h3>Streams Pane</h3>
-				<p>Coming soon in the Svelte migration.</p>
-			</div>
-		</div>
+		<StreamsPane />
 	</div>
 </div>
+
+<CreateChannelModal bind:show={showCreateModal} onCreated={() => window.location.reload()} />
 
 <style lang="less">
 	.page-header {
