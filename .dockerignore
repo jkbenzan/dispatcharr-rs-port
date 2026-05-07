@@ -5,7 +5,8 @@ target/
 dist/
 
 # Node dependencies (rebuilt inside Docker)
-Dispatcharr-main/frontend/node_modules/
+svelte-frontend/node_modules/
+svelte-frontend/.svelte-kit/
 
 # Dev/local files
 .env

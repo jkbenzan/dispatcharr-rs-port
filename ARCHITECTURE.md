@@ -29,12 +29,12 @@ dispatcharr-rs-port/
 
 ---
 
-## Frontend Migration (SvelteKit)
+## SvelteKit Frontend Migration
 
-We are pivoting the entire frontend to **SvelteKit** to achieve a premium "Trakt-like" user experience. This work is primarily happening on the `feature/svelte-migration` branch.
+The entire frontend has been pivoted to **SvelteKit** to achieve a premium "Trakt-like" user experience. This unified frontend replaces the legacy React and Angular implementations and is now the primary UI on the `develop` and `main` branches.
 
 ### Media Consumption (Upcoming)
-- **TV Guide (EPG)**: An absolute-positioned, CSS-grid-based timeline view at `/guide`. Features paginated, lazy-loaded channel/EPG data using Intersection Observers, ensuring we only fetch EPG blocks for channels currently rendered in the viewport, maintaining the "relative time" and efficiency guardrails.
+- **TV Guide (EPG)**: High-performance timeline view at `/guide`. Features synchronized vertical scrolling between channels and the grid, "Jump to Now" functionality, detailed program info modals, and custom date/time selection for browsing future schedules. Uses paginated, lazy-loaded channel/EPG data via Intersection Observers to maintain high performance with large datasets.
 - **VOD**: Trakt-inspired interface at `/vod` supporting infinite scroll pagination and dynamic categorization of Movies and Series. Includes TMDB ID resolving for rich poster metadata.
 - **DVR**: A placeholder UI skeleton at `/dvr` outlining upcoming features like Series Pass and Comskip Integration.
 
@@ -86,12 +86,7 @@ Enriches channels with metadata via a read-only SQLite database (`channel_data.d
 ---
 
 ## Docker Build Process
-The build is being updated to prioritize the SvelteKit output:
+The build prioritizes the SvelteKit output:
 1. **SvelteKit Stage**: `npm run build` outputs to `dist/`.
 2. **Rust Stage**: `cargo build --release`.
 3. **Final Stage**: Combines the binary with the `dist/` folder.
-
----
-
-## Active Branch: `feature/svelte-migration`
-Current focus: Porting the Channel Manager (Groups, Channels, Streams) and the Create Channel Dialog into Svelte components while maintaining functional parity with the legacy Angular/React versions.

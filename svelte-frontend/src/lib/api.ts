@@ -151,6 +151,7 @@ export const api = {
   getEpgGrid: (start: string, end: string, channel_uuids: string[]) => 
     fetchApi(`/api/epg/grid/?start=${start}&end=${end}`, {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ channel_uuids })
     }),
 
