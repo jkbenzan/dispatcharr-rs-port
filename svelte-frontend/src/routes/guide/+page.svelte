@@ -2,7 +2,8 @@
   import { onMount, onDestroy } from 'svelte';
   import { api } from '$lib/api';
   import Modal from '$lib/components/ui/Modal.svelte';
-  import { Calendar, Clock, ArrowLeft, ArrowRight, RefreshCw, Info } from 'lucide-svelte';
+  import VideoPlayer from '$lib/components/ui/VideoPlayer.svelte';
+  import { Calendar, Clock, ArrowLeft, ArrowRight, RefreshCw, Info, Play } from 'lucide-svelte';
   
   // State
   let channels: any[] = $state([]);
@@ -61,6 +62,11 @@
   // Detail Modal State
   let showDetailsModal = $state(false);
   let selectedProgram = $state<any>(null);
+
+  // Playback State
+  let showPlayerModal = $state(false);
+  let playingChannel = $state<any>(null);
+  let streamUrl = $derived(playingChannel ? `/api/proxy/stream/${playingChannel.uuid}` : '');
 
   async function loadChannelsAndEpg(isLoadMore = false) {
     if (isLoadMore) loadingMore = true;
@@ -164,6 +170,11 @@
     showDetailsModal = true;
   }
 
+  function playChannel(channel: any) {
+    playingChannel = channel;
+    showPlayerModal = true;
+  }
+
   // Effect to reload when date/time changes
   $effect(() => {
     if (selectedDate && selectedTime) {
@@ -264,10 +275,14 @@
         <div class="channels-column" bind:this={channelsColumn}>
           <div class="channel-header-spacer"></div>
           {#each channels as channel}
-            <div class="channel-cell">
+            <div class="channel-cell" role="button" tabindex="0" onclick={() => playChannel(channel)} onkeydown={(e) => e.key === 'Enter' && playChannel(channel)}>
               <div class="logo-wrapper">
                 {#if channel.logo_url}
                   <img src={channel.logo_url} alt={channel.name} class="channel-logo" onerror={(e) => (e.currentTarget as HTMLImageElement).style.display='none'} />
+                {:else}
+                  <div class="logo-placeholder">
+                    <Play size={20} fill="currentColor" />
+                  </div>
                 {/if}
               </div>
               <div class="channel-info">
@@ -383,6 +398,19 @@
       </div>
     </div>
   {/if}
+</Modal>
+
+<!-- Player Modal -->
+<Modal bind:show={showPlayerModal} title={playingChannel?.name || 'Live Stream'} width="900px">
+  <div class="player-container">
+    {#if showPlayerModal && streamUrl}
+      <VideoPlayer 
+        src={streamUrl} 
+        title={playingChannel?.name}
+        autoplay={true}
+      />
+    {/if}
+  </div>
 </Modal>
 
 <style lang="less">
@@ -509,6 +537,16 @@
     padding: 0 16px;
     gap: 12px;
     background: var(--surface);
+    cursor: pointer;
+    transition: background 0.2s;
+
+    &:hover {
+      background: var(--surface-bright);
+      
+      .channel-name {
+        color: var(--accent);
+      }
+    }
 
     .logo-wrapper {
       width: 44px;
@@ -520,6 +558,13 @@
       border-radius: 6px;
       overflow: hidden;
       flex-shrink: 0;
+    }
+
+    .logo-placeholder {
+      color: rgba(255, 255, 255, 0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
     .channel-logo {
@@ -810,5 +855,13 @@
       display: flex;
       justify-content: flex-end;
     }
+  }
+
+  .player-container {
+    background: #000;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    aspect-ratio: 16 / 9;
   }
 </style>

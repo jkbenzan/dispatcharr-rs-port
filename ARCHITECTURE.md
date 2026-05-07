@@ -34,7 +34,7 @@ dispatcharr-rs-port/
 The entire frontend has been pivoted to **SvelteKit** to achieve a premium "Trakt-like" user experience. This unified frontend replaces the legacy React and Angular implementations and is now the primary UI on the `develop` and `main` branches.
 
 ### Media Consumption (Upcoming)
-- **TV Guide (EPG)**: High-performance timeline view at `/guide`. Features synchronized vertical scrolling between channels and the grid, "Jump to Now" functionality, detailed program info modals, and custom date/time selection for browsing future schedules. Uses paginated, lazy-loaded channel/EPG data via Intersection Observers to maintain high performance with large datasets.
+- **TV Guide (EPG)**: High-performance timeline view at `/guide`. Features synchronized vertical scrolling, "Jump to Now" functionality, detailed program info modals, and **live channel playback** via a Hybrid Video Player (MPEG-TS/HLS). Uses paginated, lazy-loaded channel/EPG data via Intersection Observers to maintain high performance.
 - **VOD**: Trakt-inspired interface at `/vod` supporting infinite scroll pagination and dynamic categorization of Movies and Series. Includes TMDB ID resolving for rich poster metadata.
 - **DVR**: A placeholder UI skeleton at `/dvr` outlining upcoming features like Series Pass and Comskip Integration.
 

@@ -15,7 +15,10 @@ Items queued for future implementation. Add notes and priority as needed.
 
 ## Backend / Rust
 
-*(none yet)*
+- [ ] **HLS Streaming Endpoint**
+  Implement `/api/streams/:id?format=hls` to transcode or repackage MPEG-TS streams into HLS for better mobile/native compatibility. Use `ffmpeg-sidecar` for the process.
+- [ ] **VOD Category Filtering**
+  Update `get_vod_movies` and `get_vod_series` to support filtering by `category_id`.
 
 ---
 
