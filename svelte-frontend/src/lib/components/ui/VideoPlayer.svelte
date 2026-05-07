@@ -68,7 +68,7 @@
       // Use mpegts.isSupported() as it's more comprehensive than just checking .mse
       if (mpegts.isSupported()) {
         mpegPlayer = mpegts.createPlayer({
-          type: 'mse',
+          type: 'mpegts',
           isLive: true,
           url: src,
           cors: true
