@@ -127,13 +127,13 @@ export const api = {
   }),
 
   // =================== SETTINGS ===================
-  getSettings: () => fetchApi('/api/settings/'),
-  updateSetting: (id: number, data: any) => fetchApi(`/api/settings/${id}/`, {
+  getSettings: () => fetchApi('/api/core/settings/'),
+  updateSetting: (id: number, data: any) => fetchApi(`/api/core/settings/${id}/`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
   }),
-  createSetting: (data: any) => fetchApi('/api/settings/', {
+  createSetting: (data: any) => fetchApi('/api/core/settings/', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)

@@ -204,9 +204,19 @@
 								<span class="help-text">Available tokens: {'{show}, {season}, {episode}, {title}, {start}'}</span>
 							</div>
 							<div class="form-group full-width">
+								<label>TV Show Fallback Template</label>
+								<input type="text" bind:value={formData['dvr_settings'].tv_fallback_template} />
+								<span class="help-text">Used when season/episode info is missing. Available tokens: {'{show}, {start}'}</span>
+							</div>
+							<div class="form-group full-width">
 								<label>Movie Template</label>
 								<input type="text" bind:value={formData['dvr_settings'].movie_template} />
 								<span class="help-text">Available tokens: {'{title}, {year}, {start}'}</span>
+							</div>
+							<div class="form-group full-width">
+								<label>Movie Fallback Template</label>
+								<input type="text" bind:value={formData['dvr_settings'].movie_fallback_template} />
+								<span class="help-text">Used when year info is missing. Available tokens: {'{title}, {start}'}</span>
 							</div>
 						</div>
 
@@ -221,6 +231,16 @@
 								<label>Buffering Timeout (s)</label>
 								<input type="number" bind:value={formData['proxy_settings'].buffering_timeout} min="1" />
 								<span class="help-text">Time to wait for first byte before failing over.</span>
+							</div>
+							<div class="form-group">
+								<label>Buffering Speed</label>
+								<input type="number" step="0.1" bind:value={formData['proxy_settings'].buffering_speed} min="0.1" />
+								<span class="help-text">Multiplier for internal read speed.</span>
+							</div>
+							<div class="form-group">
+								<label>Chunk TTL (s)</label>
+								<input type="number" bind:value={formData['proxy_settings'].redis_chunk_ttl} min="1" />
+								<span class="help-text">Time to keep stream chunks in memory.</span>
 							</div>
 							<div class="form-group">
 								<label>Channel Shutdown Delay (s)</label>
@@ -290,6 +310,13 @@
 								<label>
 									<span>Terminate on Limit Exceeded</span>
 									<input type="checkbox" bind:checked={formData['user_limit_settings'].terminate_on_limit_exceeded} />
+									<div class="switch"></div>
+								</label>
+							</div>
+							<div class="form-group switch-group mt">
+								<label>
+									<span>Prioritize Single Client Channels</span>
+									<input type="checkbox" bind:checked={formData['user_limit_settings'].prioritize_single_client_channels} />
 									<div class="switch"></div>
 								</label>
 							</div>
