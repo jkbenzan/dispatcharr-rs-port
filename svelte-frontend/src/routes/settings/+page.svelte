@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { Settings, Server, Globe, HardDrive, Shield, Users, Database, MonitorPlay, Save, CheckCircle2 } from 'lucide-svelte';
 	import { api } from '$lib/api';
+	import { loadUiSettings } from '$lib/settings.svelte';
 
 	let activeTab = $state('ui_settings');
 	let settingsList: any[] = $state([]);
@@ -43,6 +44,9 @@
 					name: original.name,
 					value: formData[key]
 				});
+				if (key === 'ui_settings') {
+					await loadUiSettings();
+				}
 				savedMessage = 'Saved ' + tabs.find(t => t.id === key)?.label;
 				setTimeout(() => savedMessage = '', 3000);
 			}

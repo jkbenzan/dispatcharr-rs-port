@@ -78,9 +78,22 @@
 		return '#60a5fa'; // default info blue
 	}
 
+	import { uiSettings } from '$lib/settings.svelte';
+
 	function formatDate(isoString: string): string {
 		const d = new Date(isoString);
-		return d.toLocaleTimeString([], { hour12: false }) + '.' + d.getMilliseconds().toString().padStart(3, '0');
+		
+		let timeStr = '';
+		try {
+			timeStr = d.toLocaleTimeString([], { 
+				hour12: uiSettings.time_format === '12h',
+				timeZone: uiSettings.time_zone !== 'UTC' ? uiSettings.time_zone : undefined
+			});
+		} catch (e) {
+			timeStr = d.toLocaleTimeString([], { hour12: uiSettings.time_format === '12h' });
+		}
+		
+		return timeStr + '.' + d.getMilliseconds().toString().padStart(3, '0');
 	}
 
 	function formatDetails(details: any): string {

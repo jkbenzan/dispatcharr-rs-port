@@ -100,3 +100,14 @@ html, body {
   from { opacity: 0; transform: translateY(5px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+
+/* Table Size Settings */
+:root[data-table-size="compact"] table th, :root[data-table-size="compact"] table td {
+  padding: 8px 12px !important;
+  font-size: 13px;
+}
+:root[data-table-size="comfortable"] table th, :root[data-table-size="comfortable"] table td {
+  padding: 20px 24px !important;
+  font-size: 15px;
+}

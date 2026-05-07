@@ -174,11 +174,11 @@
 		}
 	}
 
+	import { formatDateTime } from '$lib/settings.svelte';
+
 	function formatDate(isoStr?: string) {
 		if (!isoStr) return 'Never';
-		return new Date(isoStr).toLocaleString(undefined, {
-			month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-		});
+		return formatDateTime(isoStr);
 	}
 </script>
 

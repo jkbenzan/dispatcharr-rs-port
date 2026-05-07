@@ -2,12 +2,14 @@
 	import '../app.css';
 	import { onMount } from 'svelte';
 	import { connectWS } from '$lib/ws.svelte';
+	import { loadUiSettings } from '$lib/settings.svelte';
 	import { Home, Tv, Library, Settings, Activity, Search, Sun, Moon, Palette, HardDrive, Link, Puzzle, HeartPulse, CalendarDays, Film } from 'lucide-svelte';
 
 	let { children } = $props();
 
 	onMount(() => {
 		connectWS();
+		loadUiSettings();
 	});
 
 	const navItems = [
