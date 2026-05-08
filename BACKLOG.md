@@ -66,3 +66,5 @@ Items queued for future implementation and audit phases.
 
 - [ ] **Database Initialization Script**
   Create a DB initialization script to automate schema setup and initial permission configuration for new installs.
+- [ ] **GitHub Logo Library Sync**
+  Implement a background task to clone and periodically pull external logo repositories (e.g., `iptv-org/logos`) to provide a searchable library for channel icon procurement.

@@ -33,7 +33,7 @@ dispatcharr-rs-port/
 
 The entire frontend has been pivoted to **SvelteKit** to achieve a premium "Trakt-like" user experience. This unified frontend replaces the legacy React and Angular implementations and is now the primary UI on the `develop` and `main` branches.
 
-### Media Consumption (Upcoming)
+### Media Consumption & Feature Status
 - **TV Guide (EPG)**: High-performance timeline view at `/guide`. Features synchronized vertical scrolling, "Jump to Now" functionality, detailed program info modals, and **integrated channel playback** via a Hybrid Video Player (MPEG-TS/HLS) with automatic external player fallback.
 - **Hybrid Playback System**: A "smart" video player architecture that auto-detects stream formats. It utilizes `mpegts.js` for raw MPEG-TS proxy streams and `hls.js` for HLS manifests, with native fallback for Safari/iOS to ensure broad device compatibility.
 - **VOD**: Trakt-inspired interface at `/vod` supporting infinite scroll pagination and dynamic categorization of Movies and Series. Includes TMDB ID resolving for rich poster metadata.
@@ -86,9 +86,10 @@ Enriches channels with metadata via a read-only SQLite database (`channel_data.d
 
 ---
 
-## Logo Management
-- **Sync**: Background task clones/pulls a GitHub logo repository.
-- **Resolution**: `get_channel_json()` resolves FKs to public URLs for the frontend.
+## Logo & Asset Management
+- **Logo Libraries (Upcoming)**: A planned feature to support syncing from external GitHub repositories (e.g., `iptv-org/logos`) to act as a procurement library for channel icons.
+- **Resolution**: Backend resolves logo foreign keys to either public URLs or local static paths (`/logos/`) during channel serialization.
+- **Storage**: Local uploads are stored in the `data/logos/` directory and served via Axum's static service.
 
 ---
 
