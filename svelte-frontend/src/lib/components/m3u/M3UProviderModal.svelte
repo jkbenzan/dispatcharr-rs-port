@@ -168,18 +168,18 @@
 					await loadSystemData();
 					
 					// If we have any data at all, we can stop waiting
-					const hasChannels = filteredGroups.length > 0;
+					const hasCategories = filteredGroups.length > 0;
 					const hasVod = filteredMovies.length > 0 || filteredSeries.length > 0;
 					
-					if (hasChannels || (enableVod && hasVod)) {
+					if (hasCategories || (enableVod && hasVod)) {
 						break;
 					}
 					attempts++;
 				}
 				
 				syncing = false;
-				activeTab = 'channels';
-				toast.success('Provider synced! You can now configure groups.');
+				activeTab = 'categories';
+				toast.success('Provider synced! You can now configure categories.');
 				return;
 			}
 
@@ -239,12 +239,12 @@
 			</button>
 			<button 
 				class="sidebar-item" 
-				class:active={activeTab === 'channels'} 
-				onclick={() => activeTab = 'channels'}
+				class:active={activeTab === 'categories'} 
+				onclick={() => activeTab = 'categories'}
 				disabled={!provider}
 			>
 				<Tv size={18} />
-				<span>Live Channels</span>
+				<span>Channel Categories</span>
 			</button>
 			<button 
 				class="sidebar-item" 
@@ -357,12 +357,12 @@
 					</div>
 
 					<div class="settings-list">
-						{#if activeTab === 'channels'}
+						{#if activeTab === 'categories'}
 							{#each filteredGroups as group}
 								<div class="setting-item">
 									<div class="setting-info">
 										<span class="setting-name">{group.name}</span>
-										<span class="setting-sub">{group.stream_count || 0} channels found</span>
+										<span class="setting-sub">{group.stream_count || 0} streams found</span>
 									</div>
 									<div class="setting-controls">
 										<button 

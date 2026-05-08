@@ -20,7 +20,7 @@ Dispatcharr is a high-performance M3U/XC/EPG proxy and management system built w
 ## Frontend (Svelte)
 - **State Management**: Svelte 5 Runes ($state, $derived, $effect).
 - **M3U Provider Management**:
-    - Modal for adding/editing providers with tabbed interface (General, Live Channels, VOD Movies, VOD Series).
+    - Modal for adding/editing providers with tabbed interface (General, Channel Categories, VOD Movies, VOD Series).
     - **Sync Overlay**: Provides real-time feedback during initial provider synchronization.
     - **Reactive Tabs**: Groups and Categories are filtered based on the selected provider and discovered in real-time.
 
