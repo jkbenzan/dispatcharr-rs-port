@@ -579,6 +579,7 @@ async fn main() {
             get(api::get_streams).post(api::create_stream),
         )
         .route("/api/core/system-events/", get(api::get_system_events))
+        .route("/api/core/system-events/clear/", delete(api::clear_system_events))
         .route("/api/connect/integrations/", get(api::get_paginated_object))
         .route("/api/plugins/plugins/", get(api::get_paginated_object))
         // --- OUTPUTS & PROVISIONING ---

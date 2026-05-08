@@ -11,6 +11,8 @@
 	} = $props();
 
 	let loading = $state(false);
+	let syncing = $state(false);
+	let syncStatus = $state('');
 	let error = $state('');
 	let activeTab = $state('general');
 	let searchQuery = $state('');
@@ -37,7 +39,7 @@
 	// Filtered lists
 	const filteredGroups = $derived(
 		allChannelGroups.filter(g => 
-			(g.m3u_accounts?.some((acc: any) => acc.id === provider?.id) || g.is_custom) &&
+			g.m3u_accounts?.some((acc: any) => Number(acc.id) === Number(provider?.id)) &&
 			g.name.toLowerCase().includes(searchQuery.toLowerCase())
 		)
 	);
@@ -45,7 +47,7 @@
 	const filteredMovies = $derived(
 		allVodCategories.filter(c => 
 			c.category_type === 'movie' && 
-			c.m3u_accounts?.includes(provider?.id) &&
+			c.m3u_accounts?.some((acc: any) => Number(acc.m3u_account) === Number(provider?.id)) &&
 			c.name.toLowerCase().includes(searchQuery.toLowerCase())
 		)
 	);
@@ -53,7 +55,7 @@
 	const filteredSeries = $derived(
 		allVodCategories.filter(c => 
 			c.category_type === 'series' && 
-			c.m3u_accounts?.includes(provider?.id) &&
+			c.m3u_accounts?.some((acc: any) => Number(acc.m3u_account) === Number(provider?.id)) &&
 			c.name.toLowerCase().includes(searchQuery.toLowerCase())
 		)
 	);
@@ -144,7 +146,33 @@
 			};
 
 			// Save basic info
-			await onSave(payload, provider?.id);
+			const result = await onSave(payload, provider?.id);
+
+			// If it was a new provider, we need to wait for the initial sync to discover groups
+			if (!provider?.id && result?.id) {
+				provider = result; // Update local reference for subsequent tabs
+				syncing = true;
+				syncStatus = 'Synchronizing with provider...';
+				
+				// Poll for discovered groups
+				let attempts = 0;
+				const maxAttempts = 30; // 30 seconds max
+				
+				while (attempts < maxAttempts) {
+					await new Promise(r => setTimeout(r, 1000));
+					await loadSystemData();
+					
+					if (filteredGroups.length > 0 || filteredMovies.length > 0 || filteredSeries.length > 0) {
+						break;
+					}
+					attempts++;
+				}
+				
+				syncing = false;
+				activeTab = 'channels';
+				toast.success('Provider synced! You can now configure groups.');
+				return;
+			}
 
 			// If editing, save group settings too
 			if (provider?.id) {
@@ -160,8 +188,6 @@
 				};
 				await api.updateM3UGroupSettings(provider.id, groupPayload);
 				toast.success('Provider settings updated successfully');
-			} else {
-				toast.success('Provider added successfully. Synchronizing groups...');
 			}
 
 			show = false;
@@ -239,6 +265,14 @@
 		</aside>
 
 		<div class="modal-content">
+			{#if syncing}
+				<div class="sync-overlay">
+					<RefreshCw class="animate-spin" size={48} />
+					<h3>{syncStatus}</h3>
+					<p>Fetching groups and categories from the provider...</p>
+				</div>
+			{/if}
+
 			{#if activeTab === 'general'}
 				<form id="provider-form" onsubmit={handleSubmit} class="tab-pane">
 					<div class="form-group">
@@ -379,9 +413,9 @@
 					<button type="button" class="btn-cancel" onclick={() => show = false} disabled={loading}>
 						Cancel
 					</button>
-					<button type="submit" form="provider-form" class="btn-submit" disabled={loading || !name}>
+					<button type="submit" form="provider-form" class="btn-submit" disabled={loading || syncing || !name}>
 						<Save size={18} />
-						<span>{loading ? 'Saving...' : 'Save Provider'}</span>
+						<span>{loading ? 'Saving...' : syncing ? 'Syncing...' : 'Save Provider'}</span>
 					</button>
 				</div>
 			</div>
@@ -457,7 +491,8 @@
 		flex: 1;
 		display: flex;
 		flex-direction: column;
-		min-width: 0;
+		overflow: hidden;
+		position: relative;
 	}
 
 	.tab-pane {
@@ -678,5 +713,41 @@
 				}
 			}
 		}
+	}
+
+	.sync-overlay {
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background: var(--surface);
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 16px;
+		z-index: 10;
+		text-align: center;
+		padding: 40px;
+
+		h3 {
+			margin: 0;
+			color: var(--text-bright);
+		}
+
+		p {
+			color: var(--text-dim);
+			margin: 0;
+		}
+	}
+
+	.animate-spin {
+		animation: spin 1s linear infinite;
+	}
+
+	@keyframes spin {
+		from { transform: rotate(0deg); }
+		to { transform: rotate(360deg); }
 	}
 </style>

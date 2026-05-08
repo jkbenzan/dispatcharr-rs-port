@@ -312,30 +312,23 @@ pub async fn get_paginated_object() -> Json<Value> {
     }))
 }
 
-pub async fn get_system_events(
-    State(state): State<Arc<AppState>>,
-    Query(params): Query<HashMap<String, String>>,
-) -> Json<Value> {
-    let limit: u64 = params.get("limit").and_then(|l| l.parse().ok()).unwrap_or(100);
-    let offset: u64 = params.get("offset").and_then(|o| o.parse().ok()).unwrap_or(0);
+	Json(json!({
+		"count": count,
+		"total": count,
+		"next": null,
+		"previous": null,
+		"events": events,
+		"results": events
+	}))
+}
 
-    let count = core_systemevent::Entity::find().count(&state.db).await.unwrap_or(0);
-    let events = core_systemevent::Entity::find()
-        .order_by_desc(core_systemevent::Column::Timestamp)
-        .limit(limit)
-        .offset(offset)
-        .all(&state.db)
-        .await
-        .unwrap_or_default();
-
-    Json(json!({
-        "count": count,
-        "total": count,
-        "next": null,
-        "previous": null,
-        "events": events,
-        "results": events
-    }))
+pub async fn clear_system_events(
+	State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+	let _ = core_systemevent::Entity::delete_many()
+		.exec(&state.db)
+		.await;
+	StatusCode::NO_CONTENT
 }
 
 // --------------------------------------------------------

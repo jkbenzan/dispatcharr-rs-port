@@ -65,9 +65,14 @@
 		}
 	});
 
-	function clearLogs() {
-		historicalEvents = [];
-		wsStore.messages = [];
+	async function clearLogs() {
+		try {
+			await api.clearSystemEvents();
+			historicalEvents = [];
+			wsStore.messages = [];
+		} catch (e) {
+			console.error('Failed to clear logs', e);
+		}
 	}
 
 	function getSeverityColor(type: string): string {

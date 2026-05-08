@@ -52,12 +52,14 @@
 	}
 
 	async function handleSaveM3u(payload: any, id?: number) {
+		let result;
 		if (id) {
-			await api.updateM3UAccount(id, payload);
+			result = await api.updateM3UAccount(id, payload);
 		} else {
-			await api.addM3UAccount(payload);
+			result = await api.addM3UAccount(payload);
 		}
 		await loadM3uProviders();
+		return result;
 	}
 
 	async function handleDeleteM3u(id: number) {

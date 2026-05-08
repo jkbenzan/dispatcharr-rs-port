@@ -153,6 +153,7 @@ export const api = {
   // =================== ACTIVITY / LOGS ===================
   getSystemEvents: (limit: number = 100, offset: number = 0) => 
     fetchApi(`/api/core/system-events/?limit=${limit}&offset=${offset}`),
+  clearSystemEvents: () => fetchApi('/api/core/system-events/clear/', { method: 'DELETE' }),
 
   // =================== INTEGRATIONS & PLUGINS ===================
   getIntegrations: () => fetchApi('/api/connect/integrations/'),

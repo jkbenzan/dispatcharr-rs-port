@@ -64,6 +64,10 @@ The entire frontend has been pivoted to **SvelteKit** to achieve a premium "Trak
     - **Granular Configuration**: Once discovered, users can configure:
       - **Live Channels**: Enable/Disable specific groups and toggle **Auto-Sync** (automatically adds new channels from the provider within that group to the local database).
       - **VOD Segmentation**: VOD categories are automatically segmented into **Movies** and **Series** based on the provider's metadata, allowing for independent management of large VOD libraries.
+    - **Synchronous Discovery Workflow**: When a new provider is added, the UI enters a **Syncing State**, polling the backend until initial groups and categories are discovered. This ensures the configuration modal always presents the user with actionable data immediately after creation.
+
+  - **Activity & Logs**: A real-time terminal interface at `/activity` streaming live system events from the WebSocket backend, complete with a hybrid JSON-viewer for inspecting raw payload details.
+    - **Persistence**: Implements a persistent "Clear" operation via `DELETE /api/core/system-events/clear/`, ensuring that purged logs do not reappear after a system refresh or M3U ingestion cycle.
 
 ### Authentication & Security
 - **JWT Authorization**: All protected backend routes require a valid JWT in the `Authorization` header, validated via the `CurrentUser` Axum extractor.
