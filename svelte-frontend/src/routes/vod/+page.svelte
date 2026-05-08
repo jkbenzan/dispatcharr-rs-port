@@ -43,17 +43,12 @@
     try {
       let res;
       if (activeTab === 'movies') {
-        res = await api.getVodMovies(limit, offset, searchQuery);
+        res = await api.getVodMovies(limit, offset, searchQuery, activeCategoryId);
       } else {
-        res = await api.getVodSeries(limit, offset, searchQuery);
+        res = await api.getVodSeries(limit, offset, searchQuery, activeCategoryId);
       }
       
       if (res && res.results) {
-        // Filter by category if one is active. The backend API for VOD doesn't natively support category filtering yet,
-        // so if there's an active category we might have to filter client-side or we wait for backend support.
-        // For now, if a category is selected, we'll just show all since backend doesn't filter.
-        // TODO: Update backend to support `&category_id=`
-        
         let fetchedItems = res.results;
         
         if (!isLoadMore) {

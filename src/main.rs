@@ -30,6 +30,8 @@ mod middleware;
 mod stream_checker;
 mod vod;
 mod xtream_codes;
+mod logo_sync;
+mod trakt;
 
 // Ensure ffmpeg/ffprobe are available, downloading them if needed.
 fn ensure_ffmpeg() {
@@ -525,6 +527,7 @@ async fn main() {
         .route("/api/channels/logos/:id", get(api::get_logo).delete(api::delete_logo).put(api::update_logo))
         .route("/api/channels/logos/upload/", post(api::upload_logo))
         .route("/api/channels/logos/upload", post(api::upload_logo))
+        .route("/api/channels/logos/search-libraries/", get(api::search_logo_libraries))
         .route("/api/channels/logos/bulk-delete/", delete(api::bulk_delete_logos))
         .route("/api/channels/logos/cleanup/", post(api::cleanup_unused_logos))
         .route("/api/channels/streams/ids/", get(api::get_stream_ids))
@@ -822,7 +825,26 @@ async fn main() {
         }
     });
 
+    // Spawn Logo Sync Worker
+    let logo_state = state.clone();
+    tokio::spawn(async move {
+        loop {
+            // Sync immediately on startup, then every 24 hours
+            crate::logo_sync::sync_logo_repositories(logo_state.clone()).await;
+            tokio::time::sleep(tokio::time::Duration::from_secs(60 * 60 * 24)).await;
+        }
+    });
 
+    // Spawn Trakt.tv background sync (runs every 6 hours)
+    let state_trakt = state.clone();
+    tokio::spawn(async move {
+        loop {
+            if let Err(e) = crate::trakt::run_trakt_sync(state_trakt.clone()).await {
+                tracing::error!("❌ Trakt.tv sync error: {:?}", e);
+            }
+            tokio::time::sleep(tokio::time::Duration::from_secs(6 * 3600)).await;
+        }
+    });
 
     // Spawn a secondary listener on port 8001 specifically for WebSockets
     // This provides backward compatibility with the old Django/Daphne Nginx configuration.

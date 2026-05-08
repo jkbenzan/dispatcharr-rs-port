@@ -46,6 +46,14 @@ pub async fn get_logos(
     Json(json!(mapped))
 }
 
+pub async fn search_logo_libraries(
+    Query(params): Query<HashMap<String, String>>,
+) -> Json<Value> {
+    let query = params.get("search").cloned().unwrap_or_default();
+    let results = crate::logo_sync::search_logo_libraries(&query);
+    Json(json!(results))
+}
+
 pub async fn upload_logo(
     axum::extract::State(state): axum::extract::State<std::sync::Arc<crate::AppState>>,
     mut multipart: axum::extract::Multipart,
@@ -527,11 +535,14 @@ async fn get_channel_json(
         }
     }
 
+    let backend = db.get_database_backend();
+    let placeholder = if backend == sea_orm::DatabaseBackend::Postgres { "$1" } else { "?" };
+
     // Fetch groups
     let groups = db
         .query_all(sea_orm::Statement::from_sql_and_values(
-            sea_orm::DatabaseBackend::Postgres,
-            "SELECT channelgroup_id FROM dispatcharr_channels_channel_groups WHERE channel_id = $1",
+            backend,
+            &format!("SELECT channelgroup_id FROM dispatcharr_channels_channel_groups WHERE channel_id = {}", placeholder),
             vec![id.into()],
         ))
         .await
@@ -544,8 +555,8 @@ async fn get_channel_json(
 
     // Fetch profiles
     let profiles = db.query_all(sea_orm::Statement::from_sql_and_values(
-        sea_orm::DatabaseBackend::Postgres,
-        "SELECT channelprofile_id FROM dispatcharr_channels_channel_channel_profiles WHERE channel_id = $1",
+        backend,
+        &format!("SELECT channelprofile_id FROM dispatcharr_channels_channel_channel_profiles WHERE channel_id = {}", placeholder),
         vec![id.into()]
     )).await.unwrap_or_default();
     let profile_ids: Vec<i64> = profiles
@@ -556,8 +567,8 @@ async fn get_channel_json(
 
     // Fetch EPG sources
     let epg = db.query_all(sea_orm::Statement::from_sql_and_values(
-        sea_orm::DatabaseBackend::Postgres,
-        "SELECT epgsource_id FROM dispatcharr_channels_channel_epg_sources WHERE channel_id = $1",
+        backend,
+        &format!("SELECT epgsource_id FROM dispatcharr_channels_channel_epg_sources WHERE channel_id = {}", placeholder),
         vec![id.into()]
     )).await.unwrap_or_default();
     let epg_ids: Vec<i64> = epg
@@ -2018,12 +2029,15 @@ async fn epg_source_json(db: &sea_orm::DatabaseConnection, source: epg_source::M
         .await
         .unwrap_or(0);
 
+    let backend = db.get_database_backend();
+    let placeholder = if backend == sea_orm::DatabaseBackend::Postgres { "$1" } else { "?" };
+
     let channel_count = db
         .query_one(Statement::from_sql_and_values(
-            sea_orm::DatabaseBackend::Postgres,
-            "SELECT COUNT(*) AS count FROM dispatcharr_channels_channel c \
+            backend,
+            &format!("SELECT COUNT(*) AS count FROM dispatcharr_channels_channel c \
              JOIN epg_epgdata e ON c.epg_data_id = e.id \
-             WHERE e.epg_source_id = $1",
+             WHERE e.epg_source_id = {}", placeholder),
             vec![source.id.into()],
         ))
         .await
@@ -2185,6 +2199,7 @@ pub async fn add_m3u_account(
     match m3u_account::Entity::insert(new_acc).exec(&state.db).await {
         Ok(res) => {
             let account_id = res.last_insert_id;
+            tracing::info!("✅ Created M3U Account ID: {}", account_id);
             if let Ok(Some(acc)) = m3u_account::Entity::find_by_id(account_id)
                 .one(&state.db)
                 .await
@@ -2284,16 +2299,20 @@ pub async fn add_m3u_account(
                 acc_json["streams"] = json!([]);
                 (StatusCode::OK, Json(acc_json))
             } else {
+                tracing::error!("❌ Failed to retrieve newly created account with ID: {}", account_id);
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({"error": "Failed to retrieve saved account"})),
+                    Json(json!({"error": "Failed to retrieve newly created account"})),
                 )
             }
         }
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": e.to_string()})),
-        ),
+        Err(e) => {
+            tracing::error!("❌ Failed to insert M3U account: {:?}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("Failed to insert M3U account: {}", e)})),
+            )
+        }
     }
 }
 
@@ -3064,150 +3083,103 @@ pub async fn delete_m3u_account(
     use sea_orm::Statement;
     use sea_orm::{ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter};
 
+    let backend = state.db.get_database_backend();
+    let placeholder = if backend == sea_orm::DatabaseBackend::Postgres { "$1" } else { "?" };
+
     // channelstream using raw sql
-    if let Err(e) = state.db.execute(Statement::from_sql_and_values(
-        sea_orm::DatabaseBackend::Postgres,
-        "DELETE FROM dispatcharr_channels_channelstream WHERE stream_id IN (SELECT id FROM dispatcharr_channels_stream WHERE m3u_account_id = $1)",
+    let _ = state.db.execute(Statement::from_sql_and_values(
+        backend,
+        &format!("DELETE FROM dispatcharr_channels_channelstream WHERE stream_id IN (SELECT id FROM dispatcharr_channels_stream WHERE m3u_account_id = {})", placeholder),
         vec![account_id.into()]
-    )).await {
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": format!("Failed to delete channelstream by stream: {}", e)})));
-    }
+    )).await.map_err(|e| tracing::warn!("⚠️ Skipped channelstream by stream deletion: {}", e));
 
     // channelstream by channel
-    if let Err(e) = state.db.execute(Statement::from_sql_and_values(
-        sea_orm::DatabaseBackend::Postgres,
-        "DELETE FROM dispatcharr_channels_channelstream WHERE channel_id IN (SELECT id FROM dispatcharr_channels_channel WHERE auto_created_by_id = $1)",
+    let _ = state.db.execute(Statement::from_sql_and_values(
+        backend,
+        &format!("DELETE FROM dispatcharr_channels_channelstream WHERE channel_id IN (SELECT id FROM dispatcharr_channels_channel WHERE auto_created_by_id = {})", placeholder),
         vec![account_id.into()]
-    )).await {
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": format!("Failed to delete channelstream by channel: {}", e)})));
-    }
+    )).await.map_err(|e| tracing::warn!("⚠️ Skipped channelstream by channel deletion: {}", e));
 
     // channelprofilemembership
-    if let Err(e) = state.db.execute(Statement::from_sql_and_values(
-        sea_orm::DatabaseBackend::Postgres,
-        "DELETE FROM dispatcharr_channels_channelprofilemembership WHERE channel_id IN (SELECT id FROM dispatcharr_channels_channel WHERE auto_created_by_id = $1)",
+    let _ = state.db.execute(Statement::from_sql_and_values(
+        backend,
+        &format!("DELETE FROM dispatcharr_channels_channelprofilemembership WHERE channel_id IN (SELECT id FROM dispatcharr_channels_channel WHERE auto_created_by_id = {})", placeholder),
         vec![account_id.into()]
-    )).await {
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": format!("Failed to delete channelprofilemembership: {}", e)})));
-    }
+    )).await.map_err(|e| tracing::warn!("⚠️ Skipped channelprofilemembership deletion (table might not exist): {}", e));
 
     // channel
-    if let Err(e) = crate::entities::channel::Entity::delete_many()
+    let _ = crate::entities::channel::Entity::delete_many()
         .filter(crate::entities::channel::Column::AutoCreatedById.eq(account_id))
         .exec(&state.db)
         .await
-    {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("Failed to delete auto-created channels: {}", e)})),
-        );
-    }
+        .map_err(|e| tracing::warn!("⚠️ Skipped channels deletion: {}", e));
 
     // stream
-    if let Err(e) = crate::entities::stream::Entity::delete_many()
+    let _ = crate::entities::stream::Entity::delete_many()
         .filter(crate::entities::stream::Column::M3uAccountId.eq(account_id))
         .exec(&state.db)
         .await
-    {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("Failed to delete stream: {}", e)})),
-        );
-    }
+        .map_err(|e| tracing::warn!("⚠️ Skipped streams deletion: {}", e));
 
     // channelgroupm3uaccount
-    if let Err(e) = crate::entities::channel_group_m3u_account::Entity::delete_many()
+    let _ = crate::entities::channel_group_m3u_account::Entity::delete_many()
         .filter(crate::entities::channel_group_m3u_account::Column::M3uAccountId.eq(account_id))
         .exec(&state.db)
         .await
-    {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("Failed to delete channel_group_m3u_account: {}", e)})),
-        );
-    }
+        .map_err(|e| tracing::warn!("⚠️ Skipped channelgroupm3uaccount deletion: {}", e));
 
     // m3u_account_profile
-    if let Err(e) = crate::entities::m3u_account_profile::Entity::delete_many()
+    let _ = crate::entities::m3u_account_profile::Entity::delete_many()
         .filter(crate::entities::m3u_account_profile::Column::M3uAccountId.eq(account_id))
         .exec(&state.db)
         .await
-    {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("Failed to delete m3u_account_profile: {}", e)})),
-        );
-    }
+        .map_err(|e| tracing::warn!("⚠️ Skipped m3u_account_profile deletion: {}", e));
 
     // m3u_filter
-    if let Err(e) = crate::entities::m3u_filter::Entity::delete_many()
+    let _ = crate::entities::m3u_filter::Entity::delete_many()
         .filter(crate::entities::m3u_filter::Column::M3uAccountId.eq(account_id))
         .exec(&state.db)
         .await
-    {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("Failed to delete m3u_filter: {}", e)})),
-        );
-    }
+        .map_err(|e| tracing::warn!("⚠️ Skipped m3u_filter deletion: {}", e));
 
     // vod_m3uepisoderelation
-    if let Err(e) = crate::entities::vod_m3uepisoderelation::Entity::delete_many()
+    let _ = crate::entities::vod_m3uepisoderelation::Entity::delete_many()
         .filter(crate::entities::vod_m3uepisoderelation::Column::M3uAccountId.eq(account_id))
         .exec(&state.db)
         .await
-    {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("Failed to delete vod_m3uepisoderelation: {}", e)})),
-        );
-    }
+        .map_err(|e| tracing::warn!("⚠️ Skipped vod_m3uepisoderelation deletion: {}", e));
 
     // vod_m3umovierelation
-    if let Err(e) = crate::entities::vod_m3umovierelation::Entity::delete_many()
+    let _ = crate::entities::vod_m3umovierelation::Entity::delete_many()
         .filter(crate::entities::vod_m3umovierelation::Column::M3uAccountId.eq(account_id))
         .exec(&state.db)
         .await
-    {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("Failed to delete vod_m3umovierelation: {}", e)})),
-        );
-    }
+        .map_err(|e| tracing::warn!("⚠️ Skipped vod_m3umovierelation deletion: {}", e));
 
     // vod_m3useriesrelation
-    if let Err(e) = crate::entities::vod_m3useriesrelation::Entity::delete_many()
+    let _ = crate::entities::vod_m3useriesrelation::Entity::delete_many()
         .filter(crate::entities::vod_m3useriesrelation::Column::M3uAccountId.eq(account_id))
         .exec(&state.db)
         .await
-    {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("Failed to delete vod_m3useriesrelation: {}", e)})),
-        );
-    }
+        .map_err(|e| tracing::warn!("⚠️ Skipped vod_m3useriesrelation deletion: {}", e));
 
     // vod_m3uvodcategoryrelation
-    if let Err(e) = crate::entities::vod_m3uvodcategoryrelation::Entity::delete_many()
+    let _ = crate::entities::vod_m3uvodcategoryrelation::Entity::delete_many()
         .filter(crate::entities::vod_m3uvodcategoryrelation::Column::M3uAccountId.eq(account_id))
         .exec(&state.db)
         .await
-    {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("Failed to delete vod_m3uvodcategoryrelation: {}", e)})),
-        );
-    }
+        .map_err(|e| tracing::warn!("⚠️ Skipped vod_m3uvodcategoryrelation deletion: {}", e));
 
     match m3u_account::Entity::delete_by_id(account_id)
         .exec(&state.db)
         .await
     {
-        Ok(_) => (StatusCode::NO_CONTENT, Json(json!({}))),
+        Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"error": e.to_string()})),
-        ),
+        )
+            .into_response(),
     }
 }
 
@@ -3268,13 +3240,10 @@ pub async fn update_m3u_group_settings(
 
                         if !streams_to_delete.is_empty() {
                             // Remove from channel assignments first
-                            let _ = state.db.execute(
-                                sea_orm::Statement::from_sql_and_values(
-                                    sea_orm::DatabaseBackend::Postgres,
-                                    "DELETE FROM dispatcharr_channels_channelstream WHERE stream_id = ANY($1)",
-                                    vec![streams_to_delete.clone().into()],
-                                )
-                            ).await;
+                            let _ = crate::entities::channel_stream::Entity::delete_many()
+                                .filter(crate::entities::channel_stream::Column::StreamId.is_in(streams_to_delete.clone()))
+                                .exec(&state.db)
+                                .await;
                             // Delete the streams themselves
                             let _ = stream::Entity::delete_many()
                                 .filter(stream::Column::Id.is_in(streams_to_delete))

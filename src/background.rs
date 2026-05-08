@@ -40,6 +40,7 @@ pub struct MaintenanceSettings {
     pub batch_size: usize,
     pub extended_test_enabled: bool,
     pub extended_test_duration_seconds: u32,
+    pub auto_prune_failed_count: i32,
 }
 
 impl Default for MaintenanceSettings {
@@ -52,6 +53,7 @@ impl Default for MaintenanceSettings {
             batch_size: 50,
             extended_test_enabled: false,
             extended_test_duration_seconds: 60,
+            auto_prune_failed_count: 3,
         }
     }
 }

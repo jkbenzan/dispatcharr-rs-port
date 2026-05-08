@@ -57,6 +57,7 @@ bytes = "1.11.1"
 
 # Fuzzy string matching (channel name → station matching)
 strsim = "0.11"
+walkdir = "2.5"
 
 [profile.release]
 opt-level = 'z'

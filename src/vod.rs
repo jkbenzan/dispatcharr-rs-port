@@ -3,12 +3,12 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use sea_orm::{EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect};
+use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, QueryTrait};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::sync::Arc;
 
-use crate::entities::{vod_category, vod_movie, vod_series};
+use crate::entities::{vod_category, vod_movie, vod_series, vod_m3umovierelation, vod_m3useriesrelation};
 use crate::AppState;
 
 #[derive(Deserialize)]
@@ -16,6 +16,7 @@ pub struct Pagination {
     pub page: Option<u64>,
     pub page_size: Option<u64>,
     pub search: Option<String>,
+    pub category_id: Option<i64>,
 }
 
 pub async fn get_vod_all(
@@ -43,6 +44,27 @@ pub async fn get_vod_all(
                     sea_orm::sea_query::Expr::col(vod_series::Column::Name),
                 ))
                 .like(format!("%{}%", search)),
+            ),
+        );
+    }
+
+    if let Some(cat_id) = params.category_id {
+        movies_q = movies_q.filter(
+            vod_movie::Column::Id.in_subquery(
+                vod_m3umovierelation::Entity::find()
+                    .select_only()
+                    .column(vod_m3umovierelation::Column::MovieId)
+                    .filter(vod_m3umovierelation::Column::CategoryId.eq(cat_id))
+                    .into_query(),
+            ),
+        );
+        series_q = series_q.filter(
+            vod_series::Column::Id.in_subquery(
+                vod_m3useriesrelation::Entity::find()
+                    .select_only()
+                    .column(vod_m3useriesrelation::Column::SeriesId)
+                    .filter(vod_m3useriesrelation::Column::CategoryId.eq(cat_id))
+                    .into_query(),
             ),
         );
     }
@@ -168,6 +190,18 @@ pub async fn get_vod_movies(
         );
     }
 
+    if let Some(cat_id) = params.category_id {
+        q = q.filter(
+            vod_movie::Column::Id.in_subquery(
+                vod_m3umovierelation::Entity::find()
+                    .select_only()
+                    .column(vod_m3umovierelation::Column::MovieId)
+                    .filter(vod_m3umovierelation::Column::CategoryId.eq(cat_id))
+                    .into_query(),
+            ),
+        );
+    }
+
     let count = q.clone().count(&state.db).await.unwrap_or(0);
 
     let movies = q
@@ -210,6 +244,18 @@ pub async fn get_vod_series(
                     sea_orm::sea_query::Expr::col(vod_series::Column::Name),
                 ))
                 .like(format!("%{}%", search)),
+            ),
+        );
+    }
+
+    if let Some(cat_id) = params.category_id {
+        query = query.filter(
+            vod_series::Column::Id.in_subquery(
+                vod_m3useriesrelation::Entity::find()
+                    .select_only()
+                    .column(vod_m3useriesrelation::Column::SeriesId)
+                    .filter(vod_m3useriesrelation::Column::CategoryId.eq(cat_id))
+                    .into_query(),
             ),
         );
     }

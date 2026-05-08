@@ -1,13 +1,16 @@
 const BASE_URL = '/api';
 
 async function fetchApi(path: string, options: RequestInit = {}) {
-  // In dev, Vite handles proxying. In prod, the Rust server serves the files.
   const response = await fetch(path, options);
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
     throw new Error(errorData.message || `API Error: ${response.status} ${response.statusText}`);
   }
-  return response.json();
+  
+  if (response.status === 204) return {};
+  
+  const text = await response.text();
+  return text ? JSON.parse(text) : {};
 }
 
 export const api = {
@@ -160,17 +163,19 @@ export const api = {
 
   // =================== VOD ===================
   getVodCategories: () => fetchApi('/api/vod/categories/'),
-  getVodMovies: (limit: number = 24, offset: number = 0, search: string = '') => {
+  getVodMovies: (limit: number = 24, offset: number = 0, search: string = '', categoryId: number | null = null) => {
     // Backend uses page and page_size for VOD
     const page = Math.floor(offset / limit) + 1;
     let url = `/api/vod/movies/?page=${page}&page_size=${limit}`;
     if (search) url += `&search=${encodeURIComponent(search)}`;
+    if (categoryId) url += `&category_id=${categoryId}`;
     return fetchApi(url);
   },
-  getVodSeries: (limit: number = 24, offset: number = 0, search: string = '') => {
+  getVodSeries: (limit: number = 24, offset: number = 0, search: string = '', categoryId: number | null = null) => {
     const page = Math.floor(offset / limit) + 1;
     let url = `/api/vod/series/?page=${page}&page_size=${limit}`;
     if (search) url += `&search=${encodeURIComponent(search)}`;
+    if (categoryId) url += `&category_id=${categoryId}`;
     return fetchApi(url);
   }
 };

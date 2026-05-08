@@ -20,9 +20,9 @@ Items queued for future implementation and audit phases.
 
 ## Phase 3: Processing & Mapping (Channel Manager & Stream Checker)
 
-- [ ] **Stream Checker: Extended Performance Testing**
+- [x] **Stream Checker: Extended Performance Testing**
   Add an option to run longer tests (2-5 minutes) to monitor for buffering or bit-rate drops after the initial connection.
-- [ ] **Stream Checker: Static/Fake Stream Detection**
+- [x] **Stream Checker: Static/Fake Stream Detection**
   Integrate FFmpeg/FFprobe filters to detect frozen images or black screens to identify non-functional but "active" streams.
 - [ ] **Stream Checker: Auto-Pruning**
   Implement logic to automatically delete or disable streams that consistently fail health checks or are flagged as fake.

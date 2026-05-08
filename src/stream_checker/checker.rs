@@ -4,7 +4,9 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder, QuerySelect, Set,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -17,7 +19,7 @@ use crate::entities::stream;
 use crate::entities::stream_sorting_rule;
 use crate::AppState;
 use futures_util::stream::{self as future_stream, StreamExt};
-use sea_orm::{ActiveValue, QueryOrder};
+use sea_orm::ActiveValue;
 use std::collections::HashMap;
 use std::process::Command as StdCommand;
 
@@ -615,6 +617,9 @@ pub async fn start_bulk_check(
         max_concurrent = 1;
     }
 
+    let m_settings = crate::settings::get_maintenance_settings(&state.db).await;
+    let duration = if m_settings.extended_test_enabled { Some(m_settings.extended_test_duration_seconds) } else { None };
+
     // Fetch account names
     let mut account_names = HashMap::new();
     let accounts = crate::entities::m3u_account::Entity::find()
@@ -645,7 +650,7 @@ pub async fn start_bulk_check(
 
     tokio::spawn(async move {
         // Build the stream of provider groups
-        let groups_stream = future_stream::iter(m3u_groups.into_iter());
+        let groups_stream = futures_util::stream::iter(m3u_groups.into_iter());
 
         groups_stream
             .for_each_concurrent(max_concurrent, |(account_id, streams)| {
@@ -688,7 +693,7 @@ pub async fn start_bulk_check(
                             }
                         }
 
-                        let res = check_single_stream(&state_c, stream_obj.id, None).await;
+                        let res = check_single_stream(&state_c, stream_obj.id, duration).await;
 
                         {
                             let mut st = state_c.bulk_check_status.write().await;
@@ -1030,6 +1035,41 @@ pub async fn bulk_sort_streams(
     }
 }
 
+pub async fn update_stream_health(
+    db: &DatabaseConnection,
+    stream: &stream::Model,
+    is_success: bool,
+    threshold: i32,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let mut active: stream::ActiveModel = stream.clone().into();
+    let mut props = stream.custom_properties.clone().unwrap_or_else(|| json!({}));
+    
+    let mut stats = props.get("stream_stats").cloned().unwrap_or_else(|| json!({}));
+    let mut failure_count = stats.get("consecutive_failures").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+
+    if is_success {
+        failure_count = 0;
+    } else {
+        failure_count += 1;
+        if threshold > 0 && failure_count >= threshold {
+            info!("[Maintenance] Pruning stream {}: reached {} consecutive failures.", stream.id, failure_count);
+            active.is_stale = sea_orm::Set(true);
+        }
+    }
+
+    if let Some(obj) = stats.as_object_mut() {
+        obj.insert("consecutive_failures".to_string(), json!(failure_count));
+    }
+    
+    if let Some(obj) = props.as_object_mut() {
+        obj.insert("stream_stats".to_string(), stats);
+    }
+
+    active.custom_properties = sea_orm::Set(Some(props));
+    active.update(db).await?;
+    Ok(())
+}
+
 pub async fn run_automated_maintenance(state: Arc<AppState>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use chrono::{DateTime, Utc, Duration};
 
@@ -1078,14 +1118,17 @@ pub async fn run_automated_maintenance(state: Arc<AppState>) -> Result<(), Box<d
     for s in stale_streams {
 
         let stream_id = s.id;
-        // Run check (always use default short test for automated background checks)
-        match check_single_stream(&state, stream_id, None).await {
+        let duration = if settings.extended_test_enabled { Some(settings.extended_test_duration_seconds) } else { None };
+
+        match check_single_stream(&state, stream_id, duration).await {
             Ok(_) => {
                 success_count += 1;
+                let _ = update_stream_health(&state.db, &s, true, settings.auto_prune_failed_count).await;
             }
             Err(e) => {
                 failure_count += 1;
                 error!("[Maintenance] Check failed for stream {}: {:?}", stream_id, e);
+                let _ = update_stream_health(&state.db, &s, false, settings.auto_prune_failed_count).await;
             }
         }
 
