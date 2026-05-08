@@ -289,6 +289,7 @@ async fn parse_m3u_from_file(
     let mut current_extinf: Option<stream::ActiveModel> = None;
     let mut streams_batch = vec![];
     let mut group_id_map: HashMap<String, i64> = HashMap::new();
+    let mut group_counts: HashMap<i64, i32> = HashMap::new();
     let mut current_hashes = Vec::new();
 
     let file = std::fs::File::open(file_path)?;
@@ -446,6 +447,10 @@ async fn parse_m3u_from_file(
                     // Skip inserting this stream
                     continue;
                 }
+                
+                if let sea_orm::ActiveValue::Set(Some(cg_id)) = &stream_model.channel_group_id {
+                    *group_counts.entry(*cg_id).or_insert(0) += 1;
+                }
                 // --- End M3UFilter Logic ---
 
                 // Skip streams whose group is disabled for this account
@@ -481,6 +486,28 @@ async fn parse_m3u_from_file(
     if !streams_batch.is_empty() {
         if let Err(e) = stream::Entity::insert_many(streams_batch).exec(db).await {
             println!("[M3U Sync] ERROR inserting final stream batch: {:?}", e);
+        }
+    }
+
+    // --- Update Group Stream Counts ---
+    for (cg_id, count) in group_counts {
+        let mapping = channel_group_m3u_account::Entity::find()
+            .filter(channel_group_m3u_account::Column::ChannelGroupId.eq(cg_id))
+            .filter(channel_group_m3u_account::Column::M3uAccountId.eq(account_id))
+            .one(db)
+            .await
+            .unwrap_or(None);
+        
+        if let Some(m) = mapping {
+            let mut cp = match m.custom_properties.as_ref() {
+                Some(serde_json::Value::Object(map)) => map.clone(),
+                _ => serde_json::Map::new(),
+            };
+            cp.insert("stream_count".to_string(), serde_json::Value::Number(count.into()));
+
+            let mut active: channel_group_m3u_account::ActiveModel = m.into();
+            active.custom_properties = Set(Some(serde_json::Value::Object(cp)));
+            let _ = active.update(db).await;
         }
     }
 
@@ -1170,6 +1197,16 @@ pub async fn fetch_and_parse_xc_categories(
             Err(_) => vec![],
         };
 
+    // Fetch Live Streams to tally counts
+    let live_streams = match crate::xtream_codes::get_live_streams(&client, &server_url, &username, &password).await {
+        Ok(s) => s,
+        Err(_) => vec![],
+    };
+    let mut live_counts = std::collections::HashMap::new();
+    for s in live_streams {
+        *live_counts.entry(s.category_id.clone()).or_insert(0) += 1;
+    }
+
     for cat in live_categories {
         let group_name = cat.category_name;
         let cg = match channel_group::Entity::find()
@@ -1195,6 +1232,10 @@ pub async fn fetch_and_parse_xc_categories(
             }
         };
 
+        let count = live_counts.get(&cat.category_id).cloned().unwrap_or(0);
+        let mut cp = serde_json::Map::new();
+        cp.insert("stream_count".to_string(), serde_json::Value::Number(count.into()));
+
         let existing_mapping = channel_group_m3u_account::Entity::find()
             .filter(channel_group_m3u_account::Column::ChannelGroupId.eq(cg.id))
             .filter(channel_group_m3u_account::Column::M3uAccountId.eq(account_id))
@@ -1202,7 +1243,11 @@ pub async fn fetch_and_parse_xc_categories(
             .await
             .unwrap_or(None);
 
-        if existing_mapping.is_none() {
+        if let Some(m) = existing_mapping {
+            let mut active: channel_group_m3u_account::ActiveModel = m.into();
+            active.custom_properties = Set(Some(serde_json::Value::Object(cp)));
+            let _ = active.update(db).await;
+        } else {
             let new_mapping = channel_group_m3u_account::ActiveModel {
                 enabled: Set(false),
                 channel_group_id: Set(cg.id),
@@ -1210,6 +1255,7 @@ pub async fn fetch_and_parse_xc_categories(
                 auto_channel_sync: Set(false),
                 is_stale: Set(false),
                 last_seen: Set(Utc::now().into()),
+                custom_properties: Set(Some(serde_json::Value::Object(cp))),
                 ..Default::default()
             };
             let _ = channel_group_m3u_account::Entity::insert(new_mapping)
@@ -1231,6 +1277,16 @@ pub async fn fetch_and_parse_xc_categories(
             Ok(c) => c,
             Err(_) => vec![],
         };
+
+    // Fetch VOD Streams to tally counts
+    let vod_streams = match crate::xtream_codes::get_vod_streams(&client, &server_url, &username, &password).await {
+        Ok(s) => s,
+        Err(_) => vec![],
+    };
+    let mut vod_counts = std::collections::HashMap::new();
+    for s in vod_streams {
+        *vod_counts.entry(s.category_id.clone()).or_insert(0) += 1;
+    }
 
     for cat in vod_categories {
         let vc = match vod_category::Entity::find()
@@ -1263,19 +1319,29 @@ pub async fn fetch_and_parse_xc_categories(
             }
         };
 
+        let count = vod_counts.get(&cat.category_id).cloned().unwrap_or(0);
+        let mut cp = serde_json::Map::new();
+        cp.insert("stream_count".to_string(), serde_json::Value::Number(count.into()));
+
         let relation = vod_m3uvodcategoryrelation::Entity::find()
             .filter(vod_m3uvodcategoryrelation::Column::CategoryId.eq(vc.id))
             .filter(vod_m3uvodcategoryrelation::Column::M3uAccountId.eq(account_id))
             .one(db)
             .await
             .unwrap_or(None);
-        if relation.is_none() {
+
+        if let Some(r) = relation {
+            let mut active: vod_m3uvodcategoryrelation::ActiveModel = r.into();
+            active.custom_properties = Set(Some(serde_json::Value::Object(cp)));
+            let _ = active.update(db).await;
+        } else {
             let new_rel = vod_m3uvodcategoryrelation::ActiveModel {
                 enabled: Set(false),
                 m3u_account_id: Set(account_id),
                 category_id: Set(vc.id),
                 created_at: Set(Utc::now().into()),
                 updated_at: Set(Utc::now().into()),
+                custom_properties: Set(Some(serde_json::Value::Object(cp))),
                 ..Default::default()
             };
             let _ = vod_m3uvodcategoryrelation::Entity::insert(new_rel)
@@ -1302,6 +1368,16 @@ pub async fn fetch_and_parse_xc_categories(
         Ok(c) => c,
         Err(_) => vec![],
     };
+
+    // Fetch Series to tally counts
+    let series_list = match crate::xtream_codes::get_series(&client, &server_url, &username, &password).await {
+        Ok(s) => s,
+        Err(_) => vec![],
+    };
+    let mut series_counts = std::collections::HashMap::new();
+    for s in series_list {
+        *series_counts.entry(s.category_id.clone()).or_insert(0) += 1;
+    }
 
     for cat in series_categories {
         let vc = match vod_category::Entity::find()
@@ -1334,19 +1410,29 @@ pub async fn fetch_and_parse_xc_categories(
             }
         };
 
+        let count = series_counts.get(&cat.category_id).cloned().unwrap_or(0);
+        let mut cp = serde_json::Map::new();
+        cp.insert("stream_count".to_string(), serde_json::Value::Number(count.into()));
+
         let relation = vod_m3uvodcategoryrelation::Entity::find()
             .filter(vod_m3uvodcategoryrelation::Column::CategoryId.eq(vc.id))
             .filter(vod_m3uvodcategoryrelation::Column::M3uAccountId.eq(account_id))
             .one(db)
             .await
             .unwrap_or(None);
-        if relation.is_none() {
+
+        if let Some(r) = relation {
+            let mut active: vod_m3uvodcategoryrelation::ActiveModel = r.into();
+            active.custom_properties = Set(Some(serde_json::Value::Object(cp)));
+            let _ = active.update(db).await;
+        } else {
             let new_rel = vod_m3uvodcategoryrelation::ActiveModel {
                 enabled: Set(false),
                 m3u_account_id: Set(account_id),
                 category_id: Set(vc.id),
                 created_at: Set(Utc::now().into()),
                 updated_at: Set(Utc::now().into()),
+                custom_properties: Set(Some(serde_json::Value::Object(cp))),
                 ..Default::default()
             };
             let _ = vod_m3uvodcategoryrelation::Entity::insert(new_rel)

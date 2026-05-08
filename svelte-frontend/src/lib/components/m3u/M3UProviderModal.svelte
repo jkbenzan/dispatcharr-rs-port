@@ -362,7 +362,9 @@
 								<div class="setting-item">
 									<div class="setting-info">
 										<span class="setting-name">{group.name}</span>
-										<span class="setting-sub">{group.stream_count || 0} streams found</span>
+										<span class="setting-sub">
+											{(group.m3u_accounts?.find(a => Number(a.id) === Number(provider?.id))?.stream_count || 0)} streams found
+										</span>
 									</div>
 									<div class="setting-controls">
 										<button 
@@ -388,6 +390,9 @@
 								<div class="setting-item">
 									<div class="setting-info">
 										<span class="setting-name">{cat.name}</span>
+										<span class="setting-sub">
+											{(cat.m3u_accounts?.find(a => Number(a.m3u_account) === Number(provider?.id))?.stream_count || 0)} streams found
+										</span>
 									</div>
 									<div class="setting-controls">
 										<button 
@@ -405,6 +410,9 @@
 								<div class="setting-item">
 									<div class="setting-info">
 										<span class="setting-name">{cat.name}</span>
+										<span class="setting-sub">
+											{(cat.m3u_accounts?.find(a => Number(a.m3u_account) === Number(provider?.id))?.stream_count || 0)} streams found
+										</span>
 									</div>
 									<div class="setting-controls">
 										<button 

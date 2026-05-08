@@ -1382,7 +1382,11 @@ pub async fn get_channel_groups(State(state): State<Arc<AppState>>) -> Json<Valu
             .or_default()
             .push(json!({
                 "id": m.m3u_account_id,
-                "name": name
+                "name": name,
+                "stream_count": m.custom_properties.as_ref()
+                    .and_then(|cp| cp.get("stream_count"))
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0)
             }));
     }
 

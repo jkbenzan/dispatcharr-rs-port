@@ -147,6 +147,10 @@ pub async fn get_vod_categories(
         entry.push(json!({
             "m3u_account": r.m3u_account_id,
             "enabled": r.enabled,
+            "stream_count": r.custom_properties.as_ref()
+                .and_then(|cp| cp.get("stream_count"))
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0)
         }));
     }
 
