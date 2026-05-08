@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { Plus, RefreshCw, Edit2, Trash2, Link, Server, Clock, AlertCircle, FileText } from 'lucide-svelte';
 	import { api } from '$lib/api';
+	import { toast } from '$lib/toast.svelte';
 	import M3UProviderModal from '$lib/components/m3u/M3UProviderModal.svelte';
 	import EpgProviderModal from '$lib/components/epg/EpgProviderModal.svelte';
 
@@ -65,7 +66,7 @@
 				await api.deleteM3UAccount(id);
 				await loadM3uProviders();
 			} catch (err: any) {
-				alert(err.message || 'Failed to delete provider');
+				toast.error(err.message || 'Failed to delete provider');
 			}
 		}
 	}
@@ -73,9 +74,9 @@
 	async function handleRefreshM3u(id: number) {
 		try {
 			await api.refreshM3UAccount(id);
-			alert('Refresh triggered successfully. Monitor activity log for progress.');
+			toast.success('Refresh triggered successfully. Monitor activity log for progress.');
 		} catch (err: any) {
-			alert(err.message || 'Failed to refresh provider');
+			toast.error(err.message || 'Failed to refresh provider');
 		}
 	}
 
@@ -83,9 +84,9 @@
 		if (confirm('Start staggered refresh for all active M3U providers? This will process them one by one.')) {
 			try {
 				await api.refreshAllM3uAccounts();
-				alert('Bulk refresh started.');
+				toast.info('Bulk refresh started.');
 			} catch (err: any) {
-				alert(err.message || 'Failed to start bulk refresh');
+				toast.error(err.message || 'Failed to start bulk refresh');
 			}
 		}
 	}
@@ -129,7 +130,7 @@
 				await api.deleteEpgSource(id);
 				await loadEpgSources();
 			} catch (err: any) {
-				alert(err.message || 'Failed to delete EPG source');
+				toast.error(err.message || 'Failed to delete EPG source');
 			}
 		}
 	}
@@ -137,9 +138,9 @@
 	async function handleRefreshEpg(id: number) {
 		try {
 			await api.refreshEpgSource(id);
-			alert('EPG Refresh triggered successfully.');
+			toast.success('EPG Refresh triggered successfully.');
 		} catch (err: any) {
-			alert(err.message || 'Failed to refresh EPG source');
+			toast.error(err.message || 'Failed to refresh EPG source');
 		}
 	}
 
@@ -147,9 +148,9 @@
 		if (confirm('Start staggered refresh for all active EPG sources?')) {
 			try {
 				await api.refreshAllEpgSources();
-				alert('Bulk EPG refresh started.');
+				toast.info('Bulk EPG refresh started.');
 			} catch (err: any) {
-				alert(err.message || 'Failed to start bulk refresh');
+				toast.error(err.message || 'Failed to start bulk refresh');
 			}
 		}
 	}
@@ -181,7 +182,7 @@
 				await api.deleteM3UAccount(id);
 				await loadProviders();
 			} catch (err: any) {
-				alert(err.message || 'Failed to delete provider');
+				toast.error(err.message || 'Failed to delete provider');
 			}
 		}
 	}
@@ -190,9 +191,9 @@
 		try {
 			await api.refreshM3UAccount(id);
 			// Show temporary success or just let WS events update status
-			alert('Refresh triggered successfully. Monitor activity log for progress.');
+			toast.success('Refresh triggered successfully. Monitor activity log for progress.');
 		} catch (err: any) {
-			alert(err.message || 'Failed to refresh provider');
+			toast.error(err.message || 'Failed to refresh provider');
 		}
 	}
 

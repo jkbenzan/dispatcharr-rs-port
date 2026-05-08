@@ -1,6 +1,7 @@
-<script lang="ts">
+import { api } from '$lib/api';
+	import { toast } from '$lib/toast.svelte';
 	import Modal from '$lib/components/ui/Modal.svelte';
-	import { Save, AlertCircle } from 'lucide-svelte';
+	import { Save, AlertCircle, Search, Server, Tv, Film, Clapperboard, Check, X, RefreshCw } from 'lucide-svelte';
 
 	let {
 		show = $bindable(false),
@@ -10,6 +11,12 @@
 
 	let loading = $state(false);
 	let error = $state('');
+	let activeTab = $state('general');
+	let searchQuery = $state('');
+
+	// System Data
+	let allChannelGroups = $state<any[]>([]);
+	let allVodCategories = $state<any[]>([]);
 
 	// Form state
 	let name = $state('');
@@ -21,6 +28,34 @@
 	let maxStreams = $state(1);
 	let refreshInterval = $state(24);
 	let staleStreamDays = $state(7);
+
+	// Provider-specific settings (mappings)
+	let groupSettings = $state<Record<number, { enabled: boolean; auto_channel_sync: boolean }>>({});
+	let categorySettings = $state<Record<number, { enabled: boolean }>>({});
+
+	// Filtered lists
+	const filteredGroups = $derived(
+		allChannelGroups.filter(g => 
+			(g.m3u_accounts?.some((acc: any) => acc.id === provider?.id) || g.is_custom) &&
+			g.name.toLowerCase().includes(searchQuery.toLowerCase())
+		)
+	);
+
+	const filteredMovies = $derived(
+		allVodCategories.filter(c => 
+			c.category_type === 'movie' && 
+			c.m3u_accounts?.includes(provider?.id) &&
+			c.name.toLowerCase().includes(searchQuery.toLowerCase())
+		)
+	);
+
+	const filteredSeries = $derived(
+		allVodCategories.filter(c => 
+			c.category_type === 'series' && 
+			c.m3u_accounts?.includes(provider?.id) &&
+			c.name.toLowerCase().includes(searchQuery.toLowerCase())
+		)
+	);
 
 	// Effect to populate form when provider changes or modal opens
 	$effect(() => {
@@ -35,6 +70,26 @@
 				maxStreams = provider.max_streams || 1;
 				refreshInterval = provider.refresh_interval || 24;
 				staleStreamDays = provider.stale_stream_days || 7;
+
+				// Initialize mappings from provider data
+				const gSettings: Record<number, any> = {};
+				if (provider.channel_groups) {
+					provider.channel_groups.forEach((g: any) => {
+						gSettings[g.channel_group] = {
+							enabled: g.enabled,
+							auto_channel_sync: g.auto_channel_sync
+						};
+					});
+				}
+				groupSettings = gSettings;
+
+				const cSettings: Record<number, any> = {};
+				if (provider.vod_categories) {
+					provider.vod_categories.forEach((c: any) => {
+						cSettings[c.id] = { enabled: c.enabled };
+					});
+				}
+				categorySettings = cSettings;
 			} else {
 				// Reset form
 				name = '';
@@ -46,10 +101,28 @@
 				maxStreams = 1;
 				refreshInterval = 24;
 				staleStreamDays = 7;
+				groupSettings = {};
+				categorySettings = {};
+				activeTab = 'general';
 			}
 			error = '';
+			loadSystemData();
 		}
 	});
+
+	async function loadSystemData() {
+		try {
+			const [groups, categories] = await Promise.all([
+				api.getStreamGroups(),
+				api.getVodCategories()
+			]);
+			allChannelGroups = groups || [];
+			// Categories backend returns { results: [] }
+			allVodCategories = categories?.results || [];
+		} catch (err) {
+			console.error('Failed to load system groups:', err);
+		}
+	}
 
 	async function handleSubmit(e: Event) {
 		e.preventDefault();
@@ -69,108 +142,429 @@
 				is_active: true
 			};
 
+			// Save basic info
 			await onSave(payload, provider?.id);
+
+			// If editing, save group settings too
+			if (provider?.id) {
+				const groupPayload = {
+					group_settings: Object.entries(groupSettings).map(([id, settings]) => ({
+						channel_group: parseInt(id),
+						...settings
+					})),
+					category_settings: Object.entries(categorySettings).map(([id, settings]) => ({
+						id: parseInt(id),
+						...settings
+					}))
+				};
+				await api.updateM3UGroupSettings(provider.id, groupPayload);
+				toast.success('Provider settings updated successfully');
+			} else {
+				toast.success('Provider added successfully. Synchronizing groups...');
+			}
+
 			show = false;
 		} catch (err: any) {
 			error = err.message || 'Failed to save provider';
+			toast.error(error);
 		} finally {
 			loading = false;
 		}
 	}
+
+	function toggleGroup(groupId: number, field: 'enabled' | 'auto_channel_sync') {
+		const current = groupSettings[groupId] || { enabled: false, auto_channel_sync: false };
+		const next = { ...current, [field]: !current[field] };
+		
+		// If we enable auto-sync, we must also enable the group
+		if (field === 'auto_channel_sync' && next.auto_channel_sync) {
+			next.enabled = true;
+		}
+		
+		groupSettings[groupId] = next;
+	}
+
+	function toggleCategory(catId: number) {
+		const current = categorySettings[catId] || { enabled: false };
+		categorySettings[catId] = { ...current, enabled: !current.enabled };
+	}
 </script>
 
-<Modal bind:show title={provider ? 'Edit Provider' : 'Add Provider'} width="600px">
-	<form onsubmit={handleSubmit} class="provider-form">
-		{#if error}
-			<div class="error-banner">
-				<AlertCircle size={18} />
-				<span>{error}</span>
-			</div>
-		{/if}
-
-		<div class="form-group">
-			<label for="name">Provider Name</label>
-			<input type="text" id="name" bind:value={name} placeholder="e.g. My Premium IPTV" required />
-		</div>
-
-		<div class="form-row">
-			<div class="form-group">
-				<label for="accountType">Account Type</label>
-				<select id="accountType" bind:value={accountType}>
-					<option value="m3u">Standard M3U Playlist</option>
-					<option value="xc">XTREAM Codes</option>
-				</select>
-			</div>
-			
-			<div class="form-group">
-				<label for="maxStreams">Max Connections</label>
-				<input type="number" id="maxStreams" bind:value={maxStreams} min="1" required />
-			</div>
-		</div>
-
-		{#if accountType === 'm3u'}
-			<div class="form-group">
-				<label for="m3uUrl">Playlist URL</label>
-				<input type="url" id="m3uUrl" bind:value={m3uUrl} placeholder="http://example.com/playlist.m3u" required />
-			</div>
-		{:else}
-			<div class="form-group">
-				<label for="serverUrl">Server URL</label>
-				<input type="url" id="serverUrl" bind:value={serverUrl} placeholder="http://example.com:8080" required />
-			</div>
-			<div class="form-row">
-				<div class="form-group">
-					<label for="username">Username</label>
-					<input type="text" id="username" bind:value={username} required />
-				</div>
-				<div class="form-group">
-					<label for="password">Password</label>
-					<input type="password" id="password" bind:value={password} required />
-				</div>
-			</div>
-		{/if}
-
-		<div class="form-row">
-			<div class="form-group">
-				<label for="refreshInterval">Auto-Refresh Interval (Hours)</label>
-				<input type="number" id="refreshInterval" bind:value={refreshInterval} min="0" placeholder="0 = Disabled" />
-			</div>
-			<div class="form-group">
-				<label for="staleStreamDays">Stale Stream Cleanup (Days)</label>
-				<input type="number" id="staleStreamDays" bind:value={staleStreamDays} min="1" />
-			</div>
-		</div>
-
-		<div class="form-actions">
-			<button type="button" class="btn-cancel" onclick={() => show = false} disabled={loading}>
-				Cancel
+<Modal bind:show title={provider ? `Edit Provider: ${name}` : 'Add Provider'} width="800px">
+	<div class="modal-layout">
+		<aside class="modal-sidebar">
+			<button 
+				class="sidebar-item" 
+				class:active={activeTab === 'general'} 
+				onclick={() => activeTab = 'general'}
+			>
+				<Server size={18} />
+				<span>General</span>
 			</button>
-			<button type="submit" class="btn-submit" disabled={loading || !name}>
-				<Save size={18} />
-				<span>{loading ? 'Saving...' : 'Save Provider'}</span>
+			<button 
+				class="sidebar-item" 
+				class:active={activeTab === 'channels'} 
+				onclick={() => activeTab = 'channels'}
+				disabled={!provider}
+			>
+				<Tv size={18} />
+				<span>Live Channels</span>
 			</button>
+			<button 
+				class="sidebar-item" 
+				class:active={activeTab === 'movies'} 
+				onclick={() => activeTab = 'movies'}
+				disabled={!provider}
+			>
+				<Film size={18} />
+				<span>VOD Movies</span>
+			</button>
+			<button 
+				class="sidebar-item" 
+				class:active={activeTab === 'series'} 
+				onclick={() => activeTab = 'series'}
+				disabled={!provider}
+			>
+				<Clapperboard size={18} />
+				<span>VOD Series</span>
+			</button>
+
+			{#if !provider}
+				<div class="sidebar-hint">
+					<AlertCircle size={14} />
+					<p>Groups can be configured after initial sync.</p>
+				</div>
+			{/if}
+		</aside>
+
+		<div class="modal-content">
+			{#if activeTab === 'general'}
+				<form id="provider-form" onsubmit={handleSubmit} class="tab-pane">
+					<div class="form-group">
+						<label for="name">Provider Name</label>
+						<input type="text" id="name" bind:value={name} placeholder="e.g. My Premium IPTV" required />
+					</div>
+
+					<div class="form-row">
+						<div class="form-group">
+							<label for="accountType">Account Type</label>
+							<select id="accountType" bind:value={accountType}>
+								<option value="m3u">Standard M3U Playlist</option>
+								<option value="xc">XTREAM Codes</option>
+							</select>
+						</div>
+						
+						<div class="form-group">
+							<label for="maxStreams">Max Connections</label>
+							<input type="number" id="maxStreams" bind:value={maxStreams} min="1" required />
+						</div>
+					</div>
+
+					{#if accountType === 'm3u'}
+						<div class="form-group">
+							<label for="m3uUrl">Playlist URL</label>
+							<input type="url" id="m3uUrl" bind:value={m3uUrl} placeholder="http://example.com/playlist.m3u" required />
+						</div>
+					{:else}
+						<div class="form-group">
+							<label for="serverUrl">Server URL</label>
+							<input type="url" id="serverUrl" bind:value={serverUrl} placeholder="http://example.com:8080" required />
+						</div>
+						<div class="form-row">
+							<div class="form-group">
+								<label for="username">Username</label>
+								<input type="text" id="username" bind:value={username} required />
+							</div>
+							<div class="form-group">
+								<label for="password">Password</label>
+								<input type="password" id="password" bind:value={password} required />
+							</div>
+						</div>
+					{/if}
+
+					<div class="form-row">
+						<div class="form-group">
+							<label for="refreshInterval">Auto-Refresh Interval (Hours)</label>
+							<input type="number" id="refreshInterval" bind:value={refreshInterval} min="0" placeholder="0 = Disabled" />
+						</div>
+						<div class="form-group">
+							<label for="staleStreamDays">Stale Stream Cleanup (Days)</label>
+							<input type="number" id="staleStreamDays" bind:value={staleStreamDays} min="1" />
+						</div>
+					</div>
+				</form>
+			{:else}
+				<div class="tab-pane">
+					<div class="pane-header">
+						<div class="search-box">
+							<Search size={16} />
+							<input type="text" placeholder="Search categories..." bind:value={searchQuery} />
+						</div>
+					</div>
+
+					<div class="settings-list">
+						{#if activeTab === 'channels'}
+							{#each filteredGroups as group}
+								<div class="setting-item">
+									<div class="setting-info">
+										<span class="setting-name">{group.name}</span>
+										<span class="setting-sub">{group.stream_count || 0} channels found</span>
+									</div>
+									<div class="setting-controls">
+										<button 
+											class="toggle-btn" 
+											class:active={groupSettings[group.id]?.enabled}
+											onclick={() => toggleGroup(group.id, 'enabled')}
+										>
+											{groupSettings[group.id]?.enabled ? 'Enabled' : 'Disabled'}
+										</button>
+										<button 
+											class="toggle-btn" 
+											class:active={groupSettings[group.id]?.auto_channel_sync}
+											onclick={() => toggleGroup(group.id, 'auto_channel_sync')}
+										>
+											<RefreshCw size={14} />
+											<span>Auto-Sync</span>
+										</button>
+									</div>
+								</div>
+							{/each}
+						{:else if activeTab === 'movies'}
+							{#each filteredMovies as cat}
+								<div class="setting-item">
+									<div class="setting-info">
+										<span class="setting-name">{cat.name}</span>
+									</div>
+									<div class="setting-controls">
+										<button 
+											class="toggle-btn" 
+											class:active={categorySettings[cat.id]?.enabled}
+											onclick={() => toggleCategory(cat.id)}
+										>
+											{categorySettings[cat.id]?.enabled ? 'Enabled' : 'Disabled'}
+										</button>
+									</div>
+								</div>
+							{/each}
+						{:else if activeTab === 'series'}
+							{#each filteredSeries as cat}
+								<div class="setting-item">
+									<div class="setting-info">
+										<span class="setting-name">{cat.name}</span>
+									</div>
+									<div class="setting-controls">
+										<button 
+											class="toggle-btn" 
+											class:active={categorySettings[cat.id]?.enabled}
+											onclick={() => toggleCategory(cat.id)}
+										>
+											{categorySettings[cat.id]?.enabled ? 'Enabled' : 'Disabled'}
+										</button>
+									</div>
+								</div>
+							{/each}
+						{/if}
+					</div>
+				</div>
+			{/if}
+
+			<div class="modal-footer">
+				<div class="footer-status">
+					{#if error}
+						<span class="status-error"><AlertCircle size={14} /> {error}</span>
+					{/if}
+				</div>
+				<div class="footer-actions">
+					<button type="button" class="btn-cancel" onclick={() => show = false} disabled={loading}>
+						Cancel
+					</button>
+					<button type="submit" form="provider-form" class="btn-submit" disabled={loading || !name}>
+						<Save size={18} />
+						<span>{loading ? 'Saving...' : 'Save Provider'}</span>
+					</button>
+				</div>
+			</div>
 		</div>
-	</form>
+	</div>
 </Modal>
 
 <style lang="less">
-	.provider-form {
+	.modal-layout {
+		display: flex;
+		height: 550px;
+		background: var(--surface);
+	}
+
+	.modal-sidebar {
+		width: 220px;
+		border-right: 1px solid var(--border);
+		padding: 20px 12px;
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		background: rgba(0, 0, 0, 0.1);
+
+		.sidebar-item {
+			display: flex;
+			align-items: center;
+			gap: 12px;
+			padding: 10px 14px;
+			border-radius: var(--radius);
+			border: none;
+			background: transparent;
+			color: var(--text-dim);
+			font-size: 14px;
+			font-weight: 500;
+			cursor: pointer;
+			transition: all 0.2s;
+			text-align: left;
+
+			&:hover:not(:disabled) {
+				background: rgba(255, 255, 255, 0.05);
+				color: var(--text-bright);
+			}
+
+			&.active {
+				background: var(--accent);
+				color: white;
+			}
+
+			&:disabled {
+				opacity: 0.3;
+				cursor: not-allowed;
+			}
+		}
+
+		.sidebar-hint {
+			margin-top: auto;
+			padding: 12px;
+			background: rgba(255, 255, 255, 0.03);
+			border-radius: var(--radius);
+			display: flex;
+			gap: 8px;
+			color: var(--text-dim);
+			
+			p {
+				font-size: 11px;
+				line-height: 1.4;
+				margin: 0;
+			}
+		}
+	}
+
+	.modal-content {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+	}
+
+	.tab-pane {
+		flex: 1;
 		padding: 24px;
+		overflow-y: auto;
 		display: flex;
 		flex-direction: column;
 		gap: 20px;
 	}
 
-	.error-banner {
-		background: rgba(237, 28, 36, 0.1);
-		border: 1px solid var(--accent);
-		color: var(--accent);
+	.pane-header {
+		margin-bottom: 8px;
+	}
+
+	.search-box {
+		position: relative;
+		display: flex;
+		align-items: center;
+
+		svg {
+			position: absolute;
+			left: 12px;
+			color: var(--text-dim);
+		}
+
+		input {
+			width: 100%;
+			background: rgba(0, 0, 0, 0.2);
+			border: 1px solid var(--border);
+			padding: 10px 12px 10px 38px;
+			border-radius: 20px;
+			color: var(--text-bright);
+			font-size: 14px;
+
+			&:focus {
+				outline: none;
+				border-color: var(--accent);
+			}
+		}
+	}
+
+	.settings-list {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+
+	.setting-item {
+		background: rgba(255, 255, 255, 0.03);
+		border: 1px solid var(--border);
 		padding: 12px 16px;
 		border-radius: var(--radius);
 		display: flex;
 		align-items: center;
-		gap: 12px;
-		font-size: 14px;
+		justify-content: space-between;
+		gap: 16px;
+
+		.setting-info {
+			display: flex;
+			flex-direction: column;
+			gap: 2px;
+			min-width: 0;
+
+			.setting-name {
+				font-size: 14px;
+				font-weight: 500;
+				color: var(--text-bright);
+				white-space: nowrap;
+				overflow: hidden;
+				text-overflow: ellipsis;
+			}
+
+			.setting-sub {
+				font-size: 12px;
+				color: var(--text-dim);
+			}
+		}
+
+		.setting-controls {
+			display: flex;
+			gap: 8px;
+		}
+	}
+
+	.toggle-btn {
+		padding: 6px 12px;
+		border-radius: 4px;
+		border: 1px solid var(--border);
+		background: transparent;
+		color: var(--text-dim);
+		font-size: 12px;
+		font-weight: 500;
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		transition: all 0.2s;
+
+		&.active {
+			background: var(--accent);
+			border-color: var(--accent);
+			color: white;
+		}
+
+		&:hover:not(.active) {
+			background: rgba(255, 255, 255, 0.05);
+		}
 	}
 
 	.form-row {
@@ -210,10 +604,6 @@
 				border-color: var(--accent);
 				background: rgba(0, 0, 0, 0.4);
 			}
-
-			&[type="number"] {
-				font-variant-numeric: tabular-nums;
-			}
 		}
 
 		select {
@@ -222,58 +612,69 @@
 			background-repeat: no-repeat;
 			background-position: right 12px center;
 			padding-right: 40px;
-			
-			option {
-				background: var(--surface-bright);
-				color: var(--text-bright);
-			}
 		}
 	}
 
-	.form-actions {
-		display: flex;
-		justify-content: flex-end;
-		gap: 12px;
-		margin-top: 8px;
-		padding-top: 24px;
+	.modal-footer {
+		margin-top: auto;
+		padding: 20px 24px;
 		border-top: 1px solid var(--border);
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		background: rgba(0, 0, 0, 0.1);
 
-		button {
+		.footer-status {
+			.status-error {
+				color: var(--accent);
+				font-size: 13px;
+				display: flex;
+				align-items: center;
+				gap: 6px;
+			}
+		}
+
+		.footer-actions {
 			display: flex;
-			align-items: center;
-			gap: 8px;
-			padding: 10px 20px;
-			border-radius: var(--radius);
-			font-size: 14px;
-			font-weight: 500;
-			cursor: pointer;
-			transition: all 0.2s;
+			gap: 12px;
 
-			&:disabled {
-				opacity: 0.5;
-				cursor: not-allowed;
+			button {
+				display: flex;
+				align-items: center;
+				gap: 8px;
+				padding: 10px 20px;
+				border-radius: var(--radius);
+				font-size: 14px;
+				font-weight: 500;
+				cursor: pointer;
+				transition: all 0.2s;
+
+				&:disabled {
+					opacity: 0.5;
+					cursor: not-allowed;
+				}
 			}
-		}
 
-		.btn-cancel {
-			background: transparent;
-			border: 1px solid var(--border);
-			color: var(--text-dim);
+			.btn-cancel {
+				background: transparent;
+				border: 1px solid var(--border);
+				color: var(--text-dim);
 
-			&:hover:not(:disabled) {
-				background: rgba(255, 255, 255, 0.05);
-				color: var(--text-bright);
+				&:hover:not(:disabled) {
+					background: rgba(255, 255, 255, 0.05);
+					color: var(--text-bright);
+				}
 			}
-		}
 
-		.btn-submit {
-			background: var(--accent);
-			border: 1px solid var(--accent);
-			color: white;
+			.btn-submit {
+				background: var(--accent);
+				border: 1px solid var(--accent);
+				color: white;
 
-			&:hover:not(:disabled) {
-				background: var(--accent-dim);
-				border-color: var(--accent-dim);
+				&:hover:not(:disabled) {
+					background: var(--accent-dim);
+					border-color: var(--accent-dim);
+				}
 			}
 		}
 	}

@@ -1365,9 +1365,9 @@ pub async fn get_channel_groups(State(state): State<Arc<AppState>>) -> Json<Valu
         .map(|a| (a.id, a.name))
         .collect();
 
-    // Build a lookup: channel_group_id → Vec<account name>
+    // Build a lookup: channel_group_id -> Vec<{id, name}>
     // A single group may be associated with multiple M3U providers.
-    let mut group_accounts: std::collections::HashMap<i64, Vec<String>> =
+    let mut group_accounts: std::collections::HashMap<i64, Vec<Value>> =
         std::collections::HashMap::new();
     for m in &mappings {
         let name = account_name_map
@@ -1377,7 +1377,10 @@ pub async fn get_channel_groups(State(state): State<Arc<AppState>>) -> Json<Valu
         group_accounts
             .entry(m.channel_group_id)
             .or_default()
-            .push(name);
+            .push(json!({
+                "id": m.m3u_account_id,
+                "name": name
+            }));
     }
 
     let mut results = Vec::new();
@@ -1743,6 +1746,28 @@ async fn get_channel_groups_for_account(
                 "auto_channel_sync": m.auto_channel_sync,
                 "is_stale": m.is_stale,
                 "last_seen": m.last_seen,
+            })
+        })
+        .collect()
+}
+
+async fn get_vod_categories_for_account(
+    account_id: i64,
+    db: &sea_orm::DatabaseConnection,
+) -> Vec<Value> {
+    use crate::entities::vod_m3uvodcategoryrelation;
+    let mappings = vod_m3uvodcategoryrelation::Entity::find()
+        .filter(vod_m3uvodcategoryrelation::Column::M3uAccountId.eq(account_id))
+        .all(db)
+        .await
+        .unwrap_or_default();
+
+    mappings
+        .into_iter()
+        .map(|m| {
+            json!({
+                "id": m.category_id,
+                "enabled": m.enabled,
             })
         })
         .collect()
@@ -2296,6 +2321,8 @@ pub async fn add_m3u_account(
                 acc_json["groups"] = json!([]);
                 acc_json["channel_groups"] =
                     json!(get_channel_groups_for_account(acc.id, &state.db).await);
+                acc_json["vod_categories"] =
+                    json!(get_vod_categories_for_account(acc.id, &state.db).await);
                 acc_json["streams"] = json!([]);
                 (StatusCode::OK, Json(acc_json))
             } else {
@@ -2332,6 +2359,8 @@ pub async fn get_m3u_account(
             acc_json["groups"] = json!([]);
             acc_json["channel_groups"] =
                 json!(get_channel_groups_for_account(acc.id, &state.db).await);
+            acc_json["vod_categories"] =
+                json!(get_vod_categories_for_account(acc.id, &state.db).await);
             acc_json["streams"] = json!([]);
             (StatusCode::OK, Json(acc_json))
         }
@@ -3066,6 +3095,8 @@ pub async fn update_m3u_account(
         acc_json["groups"] = json!([]);
         acc_json["channel_groups"] =
             json!(get_channel_groups_for_account(updated.id, &state.db).await);
+        acc_json["vod_categories"] =
+            json!(get_vod_categories_for_account(updated.id, &state.db).await);
         acc_json["streams"] = json!([]);
         (StatusCode::OK, Json(acc_json))
     } else {

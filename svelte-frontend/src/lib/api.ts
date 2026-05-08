@@ -95,6 +95,11 @@ export const api = {
   }),
   deleteM3UAccount: (id: number) => fetchApi(`/api/m3u/accounts/${id}/`, { method: 'DELETE' }),
   refreshM3UAccount: (id: number) => fetchApi(`/api/m3u/refresh/${id}/`, { method: 'POST' }),
+  updateM3UGroupSettings: (id: number, data: any) => fetchApi(`/api/m3u/accounts/${id}/group-settings/`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  }),
   refreshAllM3uAccounts: () => fetchApi('/api/m3u/refresh-all/', { method: 'POST' }),
   refreshAllEpgSources: () => fetchApi('/api/epg/refresh-all/', { method: 'POST' }),
   getStreamGroups: () => fetchApi('/api/channels/groups/'),

@@ -4,6 +4,7 @@
 	import { connectWS } from '$lib/ws.svelte';
 	import { loadUiSettings } from '$lib/settings.svelte';
 	import { Home, Tv, Library, Settings, Activity, Search, Sun, Moon, Palette, HardDrive, Link, Puzzle, HeartPulse, CalendarDays, Film } from 'lucide-svelte';
+	import ToastContainer from '$lib/components/ui/ToastContainer.svelte';
 
 	let { children } = $props();
 
@@ -118,6 +119,8 @@
 		</div>
 	</main>
 </div>
+
+<ToastContainer />
 
 <style lang="less">
 	.app-shell {

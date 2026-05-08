@@ -2,6 +2,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { Activity, Play, Square, Settings, CheckCircle2, XCircle, Clock, AlertCircle, RefreshCw } from 'lucide-svelte';
 	import { api } from '$lib/api';
+	import { toast } from '$lib/toast.svelte';
 
 	// State
 	let providers: any[] = $state([]);
@@ -130,7 +131,7 @@
 			// Give it a moment to initialize before polling
 			setTimeout(checkStatus, 500);
 		} catch (err: any) {
-			alert(err.message || 'Failed to start bulk check');
+			toast.error(err.message || 'Failed to start bulk check');
 		}
 	}
 
@@ -138,7 +139,7 @@
 		try {
 			await api.cancelBulkCheck();
 		} catch (err: any) {
-			alert(err.message || 'Failed to cancel');
+			toast.error(err.message || 'Failed to cancel');
 		}
 	}
 

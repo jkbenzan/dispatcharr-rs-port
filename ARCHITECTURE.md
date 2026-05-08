@@ -59,6 +59,11 @@ The entire frontend has been pivoted to **SvelteKit** to achieve a premium "Trak
   - **Integrations & Plugins**: Placeholder UI skeletons at `/integrations` and `/plugins` for future webhook, API token, and custom parser management.
 - **State Management**: Reactive stores using Svelte 5 `$state` and `$effect` for real-time WebSocket events and system status.
 - **Global Settings Store**: `src/lib/settings.svelte.ts` manages reactive global state for user preferences (Time/Date format, Table sizing, Timezone). Preferences are loaded from the backend `/api/core/settings/` on app initialization and synced reactively to the DOM (e.g. `data-table-size` attribute).
+  - **M3U Provider Management**: Providers (M3U/XTREAM Codes) are managed through a centralized modal interface.
+    - **Discovery**: Upon adding a provider, the system performs an initial synchronization to discover available channel groups and VOD categories.
+    - **Granular Configuration**: Once discovered, users can configure:
+      - **Live Channels**: Enable/Disable specific groups and toggle **Auto-Sync** (automatically adds new channels from the provider within that group to the local database).
+      - **VOD Segmentation**: VOD categories are automatically segmented into **Movies** and **Series** based on the provider's metadata, allowing for independent management of large VOD libraries.
 
 ### Authentication & Security
 - **JWT Authorization**: All protected backend routes require a valid JWT in the `Authorization` header, validated via the `CurrentUser` Axum extractor.
