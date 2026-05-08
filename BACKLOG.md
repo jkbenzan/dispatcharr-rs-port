@@ -15,8 +15,14 @@ Items queued for future implementation and audit phases.
 
 ---
 
-## Phase 3: Processing & Mapping (Channel Manager)
+## Phase 3: Processing & Mapping (Channel Manager & Stream Checker)
 
+- [ ] **Stream Checker: Extended Performance Testing**
+  Add an option to run longer tests (2-5 minutes) to monitor for buffering or bit-rate drops after the initial connection.
+- [ ] **Stream Checker: Static/Fake Stream Detection**
+  Integrate FFmpeg/FFprobe filters to detect frozen images or black screens to identify non-functional but "active" streams.
+- [ ] **Stream Checker: Auto-Pruning**
+  Implement logic to automatically delete or disable streams that consistently fail health checks or are flagged as fake.
 - [ ] **Channel Manager UX Refinement**
   Verify drag-and-drop assignments between the Stream Pane and Channel Pane. Ensure smooth performance with large lists.
 - [ ] **Group & Bulk Operations**
@@ -28,8 +34,10 @@ Items queued for future implementation and audit phases.
 
 ---
 
-## Phase 4: Consumption Interfaces (Playback)
+## Phase 4: Consumption Interfaces (Playback & UI)
 
+- [ ] **UI Polish: Navigation Icons**
+  Update the sidebar navigation to use more appropriate icons (e.g., change Stream Checker to `ticket-check`).
 - [ ] **Finalize SvelteKit Migration**
   Complete the remaining UI skeletons for DVR scheduling and the Plugin management interface.
 - [ ] **EPG Timeline Accuracy**
@@ -51,3 +59,10 @@ Items queued for future implementation and audit phases.
   Implement backend integration tests for `core_settings` persistence and Playwright E2E tests for UI reactivity.
 - [ ] **Media Pipeline Testing**
   Develop a testing suite for Proxy, Cache Engine, and DVR/Comskip workflows once the Media Player is finalized.
+
+---
+
+## Infrastructure
+
+- [ ] **Database Initialization Script**
+  Create a DB initialization script to automate schema setup and initial permission configuration for new installs.
