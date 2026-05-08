@@ -68,3 +68,10 @@ Items queued for future implementation and audit phases.
   Create a DB initialization script to automate schema setup and initial permission configuration for new installs.
 - [ ] **GitHub Logo Library Sync**
   Implement a background task to clone and periodically pull external logo repositories (e.g., `iptv-org/logos`) to provide a searchable library for channel icon procurement.
+
+---
+
+## Integrations
+
+- [ ] **Trakt.tv Integration**
+  Explore and implement integration with Trakt.tv for scrobbling live TV/VOD playback, syncing watch history, and importing user lists/collections into the VOD dashboard.
