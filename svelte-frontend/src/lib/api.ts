@@ -92,6 +92,8 @@ export const api = {
   }),
   deleteM3UAccount: (id: number) => fetchApi(`/api/m3u/accounts/${id}/`, { method: 'DELETE' }),
   refreshM3UAccount: (id: number) => fetchApi(`/api/m3u/refresh/${id}/`, { method: 'POST' }),
+  refreshAllM3uAccounts: () => fetchApi('/api/m3u/refresh-all/', { method: 'POST' }),
+  refreshAllEpgSources: () => fetchApi('/api/epg/refresh-all/', { method: 'POST' }),
   getStreamGroups: () => fetchApi('/api/channels/groups/'),
   getStreams: (params: Record<string, any> = {}) => {
     const urlParams = new URLSearchParams();
@@ -126,8 +128,9 @@ export const api = {
     body: JSON.stringify({ streams: streamIds })
   }),
 
-  // =================== SETTINGS ===================
+  // =================== SETTINGS & DASHBOARD ===================
   getSettings: () => fetchApi('/api/core/settings/'),
+  getDashboardStats: () => fetchApi('/api/stats'),
   updateSetting: (id: number, data: any) => fetchApi(`/api/core/settings/${id}/`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },

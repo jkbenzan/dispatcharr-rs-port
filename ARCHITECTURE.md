@@ -79,6 +79,16 @@ The backend has evolved from a direct-pipe proxy to a multiplexing broadcaster:
 - **Failover**: Automatic stream failover based on user-defined sorting rules.
 - **Caching**: Ring-buffer implementation for instant playback starts.
 
+### Stream Checker & Maintenance Engine
+The health of the streaming ecosystem is managed by a background maintenance system:
+- **Maintenance Worker**: Runs periodically during user-defined "off-hours" when the system is idle (no active broadcasters).
+- **Automated Telemetry**: Uses `ffprobe` and `ffmpeg` to harvest quality metrics (resolution, bitrate, frame drops, frozen/black detection) and persists them in the `stream.custom_properties` JSONB field.
+- **Scoring & Sorting**: A score-based engine determines the optimal stream order for each channel:
+  - **Base Score**: Derived from the provider's `m3u_account.priority`.
+  - **Quality Modifiers**: Dynamic rules (e.g., "Must be 1080p", "Penalty for 720p") add or subtract from the base score.
+  - **Persistence**: The resulting order is saved to the `channel_stream.order` field, which the Broadcaster uses for failover selection.
+- **Scheduling & Staggering**: Background ingestion tasks use a jitter-based scheduling algorithm to prevent simultaneous hits to upstream IPTV providers, spreading requests over a staggered window.
+
 ### Channel Data Sidecar
 Enriches channels with metadata via a read-only SQLite database (`channel_data.db`).
 - **Fuzzy Matching**: Jaro-Winkler string similarity for matching local channels to station metadata.

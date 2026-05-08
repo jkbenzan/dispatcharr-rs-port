@@ -970,11 +970,18 @@ pub async fn internal_bulk_sort_streams(
 
         for cs in channel_streams {
             let mut score = 0;
-            // Load the stream
-            if let Ok(Some(stream)) = stream::Entity::find_by_id(cs.stream_id)
+            // Load the stream and its related account
+            use crate::entities::m3u_account;
+            if let Ok(Some((stream, account_opt))) = stream::Entity::find_by_id(cs.stream_id)
+                .find_also_related(m3u_account::Entity)
                 .one(&state.db)
                 .await
             {
+                // Start with account priority as base score
+                if let Some(account) = account_opt {
+                    score += account.priority;
+                }
+
                 if let Some(props) = stream.custom_properties {
                     if let Some(stats) = props.get("stream_stats") {
                         for rule in &rules {

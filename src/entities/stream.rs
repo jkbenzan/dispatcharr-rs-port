@@ -26,7 +26,20 @@ pub struct Model {
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-pub enum Relation {}
+pub enum Relation {
+    #[sea_orm(
+        belongs_to = "crate::entities::m3u_account::Entity",
+        from = "Column::M3uAccountId",
+        to = "crate::entities::m3u_account::Column::Id"
+    )]
+    M3uAccount,
+}
+
+impl Related<crate::entities::m3u_account::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::M3uAccount.def()
+    }
+}
 
 impl ActiveModelBehavior for ActiveModel {}
 

@@ -79,6 +79,17 @@
 		}
 	}
 
+	async function handleRefreshAllM3u() {
+		if (confirm('Start staggered refresh for all active M3U providers? This will process them one by one.')) {
+			try {
+				await api.refreshAllM3uAccounts();
+				alert('Bulk refresh started.');
+			} catch (err: any) {
+				alert(err.message || 'Failed to start bulk refresh');
+			}
+		}
+	}
+
 	// --- EPG Logic ---
 	async function loadEpgSources() {
 		epgLoading = true;
@@ -129,6 +140,17 @@
 			alert('EPG Refresh triggered successfully.');
 		} catch (err: any) {
 			alert(err.message || 'Failed to refresh EPG source');
+		}
+	}
+
+	async function handleRefreshAllEpg() {
+		if (confirm('Start staggered refresh for all active EPG sources?')) {
+			try {
+				await api.refreshAllEpgSources();
+				alert('Bulk EPG refresh started.');
+			} catch (err: any) {
+				alert(err.message || 'Failed to start bulk refresh');
+			}
 		}
 	}
 
@@ -198,17 +220,27 @@
 				</button>
 			</div>
 			
-			{#if activeTab === 'm3u'}
-				<button class="btn-primary" onclick={handleAddM3u}>
-					<Plus size={18} />
-					<span>Add Playlist</span>
-				</button>
-			{:else}
-				<button class="btn-primary" onclick={handleAddEpg}>
-					<Plus size={18} />
-					<span>Add EPG Source</span>
-				</button>
-			{/if}
+			<div class="header-btns">
+				{#if activeTab === 'm3u'}
+					<button class="btn-secondary" onclick={handleRefreshAllM3u}>
+						<RefreshCw size={18} />
+						<span>Refresh All</span>
+					</button>
+					<button class="btn-primary" onclick={handleAddM3u}>
+						<Plus size={18} />
+						<span>Add Playlist</span>
+					</button>
+				{:else}
+					<button class="btn-secondary" onclick={handleRefreshAllEpg}>
+						<RefreshCw size={18} />
+						<span>Refresh All</span>
+					</button>
+					<button class="btn-primary" onclick={handleAddEpg}>
+						<Plus size={18} />
+						<span>Add EPG Source</span>
+					</button>
+				{/if}
+			</div>
 		</div>
 	</header>
 
@@ -393,22 +425,47 @@
 		}
 	}
 
-	.btn-primary {
+	.header-btns {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+	}
+
+	.btn-primary, .btn-secondary {
 		display: flex;
 		align-items: center;
 		gap: 8px;
+		height: 40px;
+		padding: 0 16px;
+		border-radius: var(--radius);
+		font-size: 14px;
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.2s;
+		
+		span {
+			@media (max-width: 768px) {
+				display: none;
+			}
+		}
+	}
+
+	.btn-primary {
 		background: var(--accent);
 		color: white;
 		border: none;
-		padding: 10px 20px;
-		border-radius: var(--radius);
-		font-weight: 600;
-		font-size: 14px;
-		cursor: pointer;
-		transition: all 0.2s;
+		&:hover { 
+			background: var(--accent-dim); 
+			transform: translateY(-1px);
+		}
+	}
 
-		&:hover {
-			background: var(--accent-dim);
+	.btn-secondary {
+		background: var(--surface-bright);
+		color: var(--text-bright);
+		border: 1px solid var(--border-bright);
+		&:hover { 
+			background: var(--border);
 			transform: translateY(-1px);
 		}
 	}

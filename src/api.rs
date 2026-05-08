@@ -1293,24 +1293,37 @@ pub async fn delete_streamprofile(
     }
 }
 pub async fn get_dashboard_stats(State(state): State<Arc<AppState>>) -> Json<Value> {
+    use crate::entities::{channel, stream, m3u_account, epg_source};
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+
     let channels_count = channel::Entity::find().count(&state.db).await.unwrap_or(0);
     let streams_count = stream::Entity::find().count(&state.db).await.unwrap_or(0);
-    let accounts_count = m3u_account::Entity::find()
-        .count(&state.db)
+    
+    let accounts = m3u_account::Entity::find()
+        .all(&state.db)
         .await
-        .unwrap_or(0);
-    let sources_count = epg_source::Entity::find()
-        .count(&state.db)
+        .unwrap_or_default();
+    let accounts_count = accounts.len();
+    let failed_accounts = accounts.iter().filter(|a| a.status == "error").count();
+
+    let sources = epg_source::Entity::find()
+        .all(&state.db)
         .await
-        .unwrap_or(0);
+        .unwrap_or_default();
+    let sources_count = sources.len();
+    let failed_sources = sources.iter().filter(|s| s.status == "error").count();
+
+    let active_broadcasters = state.broadcasters.len();
 
     Json(json!({
         "channels": channels_count,
         "streams": streams_count,
         "m3u_accounts": accounts_count,
+        "failed_m3u_accounts": failed_accounts,
         "epg_sources": sources_count,
-        "active_users": 1,
-        "system_health": "Healthy",
+        "failed_epg_sources": failed_sources,
+        "active_users": active_broadcasters,
+        "system_health": if failed_accounts > 0 || failed_sources > 0 { "Warning" } else { "Healthy" },
         "cpu_usage": 0,
         "memory_usage": 0
     }))
@@ -2709,6 +2722,83 @@ pub async fn refresh_m3u_account(
             Json(json!({"error": "No server URL"})),
         )
     }
+}
+
+pub async fn refresh_all_m3u_accounts(
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    use crate::entities::m3u_account;
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+
+    let accounts = m3u_account::Entity::find()
+        .filter(m3u_account::Column::IsActive.eq(true))
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+
+    let db_clone = state.db.clone();
+    let ws_clone = state.ws_sender.clone();
+    
+    tokio::spawn(async move {
+        for acc in accounts {
+            println!("[Manual Refresh All] Staggered refresh for account {} ({})", acc.id, acc.name);
+            let url = if acc.account_type == "XC" {
+                format!(
+                    "{}/get.php?username={}&password={}&type=m3u_plus&output=ts",
+                    acc.server_url.as_deref().unwrap_or_default().trim_end_matches('/'),
+                    acc.username.as_deref().unwrap_or_default(),
+                    acc.password.as_deref().unwrap_or_default()
+                )
+            } else {
+                acc.server_url.clone().unwrap_or_default()
+            };
+
+            if !url.is_empty() {
+                if acc.account_type == "XC" {
+                    let _ = crate::m3u::fetch_and_parse_xc(&db_clone, acc.id, Some(ws_clone.clone())).await;
+                } else {
+                    let _ = crate::m3u::fetch_and_parse_m3u(&db_clone, &url, acc.id, false, Some(ws_clone.clone())).await;
+                }
+                let _ = crate::m3u::update_account_timestamp(&db_clone, acc.id).await;
+            }
+            
+            // Stagger: Wait 30 seconds before next account to avoid hammering
+            tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+        }
+    });
+
+    (StatusCode::ACCEPTED, Json(json!({"success": true, "message": "Staggered bulk refresh started"})))
+}
+
+pub async fn refresh_all_epg_sources(
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    use crate::entities::epg_source;
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+
+    let sources = epg_source::Entity::find()
+        .filter(epg_source::Column::IsActive.eq(true))
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+
+    let db_clone = state.db.clone();
+    let ws_clone = state.ws_sender.clone();
+    
+    tokio::spawn(async move {
+        for src in sources {
+            println!("[Manual Refresh All] Staggered refresh for EPG source {} ({})", src.id, src.name);
+            let url = src.url.clone().or_else(|| src.file_path.clone()).unwrap_or_default();
+            if !url.is_empty() {
+                let _ = crate::epg::refresh_all_guides(&db_clone, &url, src.id, Some(ws_clone.clone())).await;
+                let _ = crate::epg::update_source_timestamp(&db_clone, src.id).await;
+            }
+            // Stagger
+            tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+        }
+    });
+
+    (StatusCode::ACCEPTED, Json(json!({"success": true, "message": "Staggered bulk refresh started"})))
 }
 
 pub async fn refresh_vod(

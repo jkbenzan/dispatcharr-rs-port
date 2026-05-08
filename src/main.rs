@@ -497,6 +497,12 @@ async fn main() {
                 .patch(api::update_epg_source)
                 .delete(api::delete_epg_source),
         )
+        .route("/api/m3u/refresh-all", post(api::refresh_all_m3u_accounts))
+        .route("/api/m3u/refresh-all/", post(api::refresh_all_m3u_accounts))
+        .route("/api/epg/refresh-all", post(api::refresh_all_epg_sources))
+        .route("/api/epg/refresh-all/", post(api::refresh_all_epg_sources))
+        .route("/api/stats", get(api::get_dashboard_stats))
+        .route("/api/stats/", get(api::get_dashboard_stats))
         .route("/api/epg/refresh/:id/", post(api::refresh_epg_source))
         .route("/api/epg/import", post(api::refresh_epg_import))
         .route("/api/epg/import/", post(api::refresh_epg_import))
@@ -648,11 +654,15 @@ async fn main() {
                     } // 0 means manual refresh only
 
                     let last_updated = acc.updated_at.unwrap_or_else(|| Utc::now().into());
+                    
+                    // Add some jitter to prevent thundering herd (up to 30 mins)
+                    use rand::Rng;
+                    let mut rng = rand::rng();
+                    let jitter_minutes = rng.random_range(-30..30);
+                    
                     let threshold = last_updated.with_timezone(&Utc)
-                        + chrono::Duration::hours(refresh_interval);
-
-                    // tracing::debug!("[Background Worker] Account {} ({}): Last Updated: {:?}, Interval: {}h, Threshold: {:?}, Now: {:?}", 
-                    //    acc.id, acc.name, last_updated, refresh_interval, threshold, Utc::now());
+                        + chrono::Duration::hours(refresh_interval)
+                        + chrono::Duration::minutes(jitter_minutes);
 
                     if Utc::now() >= threshold {
                         println!(
@@ -687,6 +697,9 @@ async fn main() {
                             telemetry.m3u_refresh.total_processed += 1;
                             telemetry.m3u_refresh.success_count += 1; // Basic increment for now
                         }
+
+                        // Stagger outgoing requests: Wait 60 seconds before next account
+                        tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
                     }
 
                 }
@@ -716,8 +729,15 @@ async fn main() {
                     }
 
                     let last_updated = src.updated_at.unwrap_or_else(|| Utc::now().into());
+                    
+                    // Add some jitter (up to 30 mins)
+                    use rand::Rng;
+                    let mut rng = rand::rng();
+                    let jitter_minutes = rng.random_range(-30..30);
+
                     let threshold = last_updated.with_timezone(&Utc)
-                        + chrono::Duration::hours(refresh_interval);
+                        + chrono::Duration::hours(refresh_interval)
+                        + chrono::Duration::minutes(jitter_minutes);
 
                     if Utc::now() >= threshold {
                         println!(
@@ -745,6 +765,9 @@ async fn main() {
                             telemetry.epg_refresh.total_processed += 1;
                             telemetry.epg_refresh.success_count += 1; // Basic increment
                         }
+
+                        // Stagger outgoing requests: Wait 60 seconds before next source
+                        tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
                     }
                 }
             }

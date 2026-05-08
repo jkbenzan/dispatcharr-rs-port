@@ -4,16 +4,21 @@
 	import { Activity, Tv, AlertCircle, TrendingUp } from 'lucide-svelte';
 
 	let stats = $state({
-		total_channels: 0,
-		active_streams: 0,
-		errors: 0,
+		channels: 0,
+		streams: 0,
+		m3u_accounts: 0,
+		failed_m3u_accounts: 0,
+		epg_sources: 0,
+		failed_epg_sources: 0,
+		active_users: 0,
+		system_health: 'Healthy',
 		bandwidth: '0 Mbps'
 	});
 
 	onMount(async () => {
 		try {
-			const res = await api.getSettings(); // Placeholder for actual stats endpoint
-			// Populate stats here once we have the actual endpoint mapped
+			const data = await api.getDashboardStats();
+			Object.assign(stats, data);
 		} catch (e) {
 			console.error('Failed to load dashboard stats');
 		}
@@ -31,31 +36,52 @@
 			<div class="stat-icon red"><Tv size={24} /></div>
 			<div class="stat-content">
 				<span class="stat-label">Total Channels</span>
-				<span class="stat-value">{stats.total_channels || 0}</span>
+				<span class="stat-value">{stats.channels || 0}</span>
 			</div>
 		</div>
 		<div class="stat-card">
 			<div class="stat-icon green"><Activity size={24} /></div>
 			<div class="stat-content">
-				<span class="stat-label">Active Streams</span>
-				<span class="stat-value">{stats.active_streams || 0}</span>
+				<span class="stat-label">Active Broadcasters</span>
+				<span class="stat-value">{stats.active_users || 0}</span>
 			</div>
 		</div>
 		<div class="stat-card">
-			<div class="stat-icon yellow"><TrendingUp size={24} /></div>
+			<div class="stat-icon {stats.failed_m3u_accounts > 0 ? 'yellow' : 'blue'}"><TrendingUp size={24} /></div>
 			<div class="stat-content">
-				<span class="stat-label">Bandwidth</span>
-				<span class="stat-value">{stats.bandwidth}</span>
+				<span class="stat-label">M3U Providers</span>
+				<span class="stat-value">
+					{stats.m3u_accounts}
+					{#if stats.failed_m3u_accounts > 0}
+						<span class="failed-badge">({stats.failed_m3u_accounts} failed)</span>
+					{/if}
+				</span>
 			</div>
 		</div>
 		<div class="stat-card">
-			<div class="stat-icon red-dim"><AlertCircle size={24} /></div>
+			<div class="stat-icon {stats.failed_epg_sources > 0 ? 'red-dim' : 'green-dim'}"><AlertCircle size={24} /></div>
 			<div class="stat-content">
-				<span class="stat-label">Recent Errors</span>
-				<span class="stat-value">{stats.errors}</span>
+				<span class="stat-label">EPG Sources</span>
+				<span class="stat-value">
+					{stats.epg_sources}
+					{#if stats.failed_epg_sources > 0}
+						<span class="failed-badge">({stats.failed_epg_sources} failed)</span>
+					{/if}
+				</span>
 			</div>
 		</div>
 	</div>
+
+	{#if stats.failed_m3u_accounts > 0 || stats.failed_epg_sources > 0}
+		<div class="health-alert warning">
+			<AlertCircle size={20} />
+			<div class="alert-content">
+				<strong>System Attention Required</strong>
+				<p>Some data providers are currently failing to refresh. Check your provider settings.</p>
+			</div>
+			<a href="/streams" class="action-btn">Manage Providers</a>
+		</div>
+	{/if}
 
 	<section class="recent-activity">
 		<div class="section-header">
@@ -141,6 +167,52 @@
 		font-size: 24px;
 		font-weight: 700;
 		color: var(--text-bright);
+		display: flex;
+		align-items: baseline;
+		gap: 8px;
+
+		.failed-badge {
+			font-size: 14px;
+			color: var(--accent);
+			font-weight: 500;
+		}
+	}
+
+	.health-alert {
+		background: rgba(237, 28, 36, 0.05);
+		border: 1px solid rgba(237, 28, 36, 0.2);
+		border-radius: var(--radius);
+		padding: 20px 24px;
+		display: flex;
+		align-items: center;
+		gap: 20px;
+		margin-bottom: 8px;
+
+		&.warning {
+			background: rgba(250, 204, 21, 0.05);
+			border-color: rgba(250, 204, 21, 0.2);
+			color: #facc15;
+		}
+
+		.alert-content {
+			flex: 1;
+			strong { display: block; color: var(--text-bright); margin-bottom: 2px; }
+			p { color: var(--text-dim); font-size: 14px; margin: 0; }
+		}
+
+		.action-btn {
+			background: var(--surface-bright);
+			border: 1px solid var(--border-bright);
+			color: var(--text-bright);
+			padding: 8px 16px;
+			border-radius: 6px;
+			text-decoration: none;
+			font-size: 14px;
+			font-weight: 600;
+			transition: background 0.2s;
+
+			&:hover { background: var(--border); }
+		}
 	}
 
 	.recent-activity {
