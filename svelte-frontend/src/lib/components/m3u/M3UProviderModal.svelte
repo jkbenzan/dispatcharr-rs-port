@@ -1,4 +1,5 @@
-import { api } from '$lib/api';
+<script lang="ts">
+	import { api } from '$lib/api';
 	import { toast } from '$lib/toast.svelte';
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import { Save, AlertCircle, Search, Server, Tv, Film, Clapperboard, Check, X, RefreshCw } from 'lucide-svelte';
