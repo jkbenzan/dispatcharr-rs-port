@@ -31,6 +31,7 @@
 	let maxStreams = $state(1);
 	let refreshInterval = $state(24);
 	let staleStreamDays = $state(7);
+	let enableVod = $state(true);
 
 	// Provider-specific settings (mappings)
 	let groupSettings = $state<Record<number, { enabled: boolean; auto_channel_sync: boolean }>>({});
@@ -73,6 +74,7 @@
 				maxStreams = provider.max_streams || 1;
 				refreshInterval = provider.refresh_interval || 24;
 				staleStreamDays = provider.stale_stream_days || 7;
+				enableVod = provider.enable_vod !== false; // Default to true if missing
 
 				// Initialize mappings from provider data
 				const gSettings: Record<number, any> = {};
@@ -104,6 +106,7 @@
 				maxStreams = 1;
 				refreshInterval = 24;
 				staleStreamDays = 7;
+				enableVod = true;
 				groupSettings = {};
 				categorySettings = {};
 				activeTab = 'general';
@@ -142,7 +145,8 @@
 				max_streams: maxStreams,
 				refresh_interval: refreshInterval,
 				stale_stream_days: staleStreamDays,
-				is_active: true
+				is_active: true,
+				enable_vod: enableVod
 			};
 
 			// Save basic info
@@ -159,10 +163,15 @@
 				const maxAttempts = 30; // 30 seconds max
 				
 				while (attempts < maxAttempts) {
+					syncStatus = `Synchronizing... attempt ${attempts + 1}/${maxAttempts}`;
 					await new Promise(r => setTimeout(r, 1000));
 					await loadSystemData();
 					
-					if (filteredGroups.length > 0 || filteredMovies.length > 0 || filteredSeries.length > 0) {
+					// If we have any data at all, we can stop waiting
+					const hasChannels = filteredGroups.length > 0;
+					const hasVod = filteredMovies.length > 0 || filteredSeries.length > 0;
+					
+					if (hasChannels || (enableVod && hasVod)) {
 						break;
 					}
 					attempts++;
@@ -327,6 +336,16 @@
 							<input type="number" id="staleStreamDays" bind:value={staleStreamDays} min="1" />
 						</div>
 					</div>
+
+					<div class="form-group checkbox-group">
+						<label class="checkbox-label">
+							<input type="checkbox" bind:checked={enableVod} />
+							<div class="checkbox-info">
+								<span class="label-text">Enable VOD Ingestion</span>
+								<span class="helper-text">If enabled, movies and series will be imported from this provider.</span>
+							</div>
+						</label>
+					</div>
 				</form>
 			{:else}
 				<div class="tab-pane">
@@ -483,6 +502,43 @@
 				font-size: 11px;
 				line-height: 1.4;
 				margin: 0;
+			}
+		}
+	}
+
+	.checkbox-group {
+		margin-top: 10px;
+		padding: 12px;
+		background: rgba(255, 255, 255, 0.03);
+		border-radius: var(--radius);
+		border: 1px solid var(--border);
+
+		.checkbox-label {
+			display: flex;
+			align-items: flex-start;
+			gap: 12px;
+			cursor: pointer;
+
+			input[type="checkbox"] {
+				width: 18px;
+				height: 18px;
+				margin-top: 2px;
+			}
+
+			.checkbox-info {
+				display: flex;
+				flex-direction: column;
+				gap: 2px;
+
+				.label-text {
+					font-weight: 500;
+					color: var(--text);
+				}
+
+				.helper-text {
+					font-size: 0.8rem;
+					color: var(--text-dim);
+				}
 			}
 		}
 	}

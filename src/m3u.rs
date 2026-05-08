@@ -142,6 +142,7 @@ pub async fn fetch_and_parse_m3u(
     account_id: i64,
     is_initial: bool,
     ws_sender: Option<Sender<Value>>,
+    is_background: bool,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let mut ua_id = None;
     if let Ok(Some(acc)) = m3u_account::Entity::find_by_id(account_id).one(db).await {
@@ -165,7 +166,7 @@ pub async fn fetch_and_parse_m3u(
     let file_path = temp_file.clone();
 
     // Use a scope or separate function to ensure the file is closed before removal
-    let result = parse_m3u_from_file(db, &file_path, account_id, is_initial, &ws_sender).await;
+    let result = parse_m3u_from_file(db, &file_path, account_id, is_initial, &ws_sender, is_background).await;
     
     // Cleanup
     let _ = std::fs::remove_file(&file_path);
@@ -222,6 +223,7 @@ async fn parse_m3u_from_file(
     account_id: i64,
     is_initial: bool,
     ws_sender: &Option<Sender<Value>>,
+    is_background: bool,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
 
     let filters = m3u_filter::Entity::find()
@@ -541,15 +543,17 @@ async fn parse_m3u_from_file(
             active.last_message = Set(Some("Successfully synced!".to_string()));
             let _ = active.clone().update(db).await;
 
-            let _ = crate::events::record_event(
-                db,
-                "m3u_refresh",
-                Some(acc.name.clone()),
-                serde_json::json!({
-                    "account_id": account_id,
-                    "status": "success"
-                })
-            ).await;
+            if !is_background {
+                let _ = crate::events::record_event(
+                    db,
+                    "m3u_refresh",
+                    Some(acc.name.clone()),
+                    serde_json::json!({
+                        "account_id": account_id,
+                        "status": "success"
+                    })
+                ).await;
+            }
             broadcast_progress(
                 &ws_sender,
                 account_id,
@@ -566,10 +570,12 @@ async fn parse_m3u_from_file(
     println!("M3U Parsing Complete for M3U Account {}", account_id);
     Ok(())
 }
+
 pub async fn fetch_and_parse_xc(
     db: &DatabaseConnection,
     account_id: i64,
     ws_sender: Option<Sender<Value>>,
+    is_background: bool,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let acc = match m3u_account::Entity::find_by_id(account_id).one(db).await {
         Ok(Some(a)) => a,
@@ -816,6 +822,7 @@ pub async fn fetch_and_parse_xc(
 pub async fn fetch_and_parse_xc_vod(
     db: &DatabaseConnection,
     account_id: i64,
+    is_background: bool,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let acc = match m3u_account::Entity::find_by_id(account_id).one(db).await {
         Ok(Some(a)) => a,
@@ -954,16 +961,18 @@ pub async fn fetch_and_parse_xc_vod(
         final_active.updated_at = Set(Some(Utc::now().into()));
         let _ = final_active.update(db).await;
 
-        let _ = crate::events::record_event(
-            db,
-            "m3u_refresh",
-            Some(acc.name.clone()),
-            serde_json::json!({
-                "account_id": account_id,
-                "status": "success",
-                "type": "xc"
-            })
-        ).await;
+        if !is_background {
+            let _ = crate::events::record_event(
+                db,
+                "m3u_refresh",
+                Some(acc.name.clone()),
+                serde_json::json!({
+                    "account_id": account_id,
+                    "status": "success",
+                    "type": "xc_vod"
+                })
+            ).await;
+        }
     }
 
     Ok(())
@@ -972,6 +981,7 @@ pub async fn fetch_and_parse_xc_vod(
 pub async fn fetch_and_parse_xc_series(
     db: &DatabaseConnection,
     account_id: i64,
+    is_background: bool,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let acc = match m3u_account::Entity::find_by_id(account_id).one(db).await {
         Ok(Some(a)) => a,
@@ -1117,6 +1127,7 @@ pub async fn fetch_and_parse_xc_categories(
     db: &DatabaseConnection,
     account_id: i64,
     ws_sender: Option<Sender<Value>>,
+    _is_background: bool,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let acc = match m3u_account::Entity::find_by_id(account_id).one(db).await {
         Ok(Some(a)) => a,

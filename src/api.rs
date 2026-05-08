@@ -2265,6 +2265,7 @@ pub async fn add_m3u_account(
                                 &db_clone,
                                 account_id,
                                 Some(ws_clone),
+                                false,
                             )
                             .await
                             {
@@ -2276,9 +2277,9 @@ pub async fn add_m3u_account(
                             };
                             if is_success && enable_vod {
                                 let _ =
-                                    crate::m3u::fetch_and_parse_xc_vod(&db_clone, account_id).await;
+                                    crate::m3u::fetch_and_parse_xc_vod(&db_clone, account_id, false).await;
                                 let _ =
-                                    crate::m3u::fetch_and_parse_xc_series(&db_clone, account_id)
+                                    crate::m3u::fetch_and_parse_xc_series(&db_clone, account_id, false)
                                         .await;
                             }
                             err
@@ -2290,6 +2291,7 @@ pub async fn add_m3u_account(
                                 account_id,
                                 true,
                                 Some(ws_clone),
+                                false,
                             )
                             .await
                             {
@@ -2729,20 +2731,20 @@ pub async fn refresh_m3u_account(
             let error_msg = if is_xc {
                 let ws_clone = ws_clone_outer.clone();
                 let xc_err = if let Err(e) =
-                    m3u::fetch_and_parse_xc(&db_clone, account_id, Some(ws_clone)).await
+                    m3u::fetch_and_parse_xc(&db_clone, account_id, Some(ws_clone), false).await
                 {
                     Some(format!("Failed to parse XC API: {}", e))
                 } else {
                     None
                 };
                 if xc_err.is_none() {
-                    let _ = m3u::fetch_and_parse_xc_vod(&db_clone, account_id).await;
-                    let _ = m3u::fetch_and_parse_xc_series(&db_clone, account_id).await;
+                    let _ = m3u::fetch_and_parse_xc_vod(&db_clone, account_id, false).await;
+                    let _ = m3u::fetch_and_parse_xc_series(&db_clone, account_id, false).await;
                 }
                 xc_err
             } else {
                 let ws_clone = ws_clone_outer.clone();
-                match m3u::fetch_and_parse_m3u(&db_clone, &url, account_id, false, Some(ws_clone))
+                match m3u::fetch_and_parse_m3u(&db_clone, &url, account_id, false, Some(ws_clone), false)
                     .await
                 {
                     Err(e) => Some(format!("Failed to parse M3U: {}", e)),
@@ -2806,9 +2808,9 @@ pub async fn refresh_all_m3u_accounts(
 
             if !url.is_empty() {
                 if acc.account_type == "XC" {
-                    let _ = crate::m3u::fetch_and_parse_xc(&db_clone, acc.id, Some(ws_clone.clone())).await;
+                    let _ = crate::m3u::fetch_and_parse_xc(&db_clone, acc.id, Some(ws_clone.clone()), false).await;
                 } else {
-                    let _ = crate::m3u::fetch_and_parse_m3u(&db_clone, &url, acc.id, false, Some(ws_clone.clone())).await;
+                    let _ = crate::m3u::fetch_and_parse_m3u(&db_clone, &url, acc.id, false, Some(ws_clone.clone()), false).await;
                 }
                 let _ = crate::m3u::update_account_timestamp(&db_clone, acc.id).await;
             }
@@ -2892,10 +2894,10 @@ pub async fn refresh_vod(
 
     let db_clone = state.db.clone();
     tokio::spawn(async move {
-        if let Err(e) = crate::m3u::fetch_and_parse_xc_vod(&db_clone, account_id).await {
+        if let Err(e) = crate::m3u::fetch_and_parse_xc_vod(&db_clone, account_id, false).await {
             eprintln!("Failed to refresh VOD: {}", e);
         }
-        if let Err(e) = crate::m3u::fetch_and_parse_xc_series(&db_clone, account_id).await {
+        if let Err(e) = crate::m3u::fetch_and_parse_xc_series(&db_clone, account_id, false).await {
             eprintln!("Failed to refresh Series: {}", e);
         }
     });
@@ -3086,8 +3088,8 @@ pub async fn update_m3u_account(
         if enable_vod_opt == Some(true) && updated.account_type == "XC" {
             let db_clone = state.db.clone();
             tokio::spawn(async move {
-                let _ = crate::m3u::fetch_and_parse_xc_vod(&db_clone, account_id).await;
-                let _ = crate::m3u::fetch_and_parse_xc_series(&db_clone, account_id).await;
+                let _ = crate::m3u::fetch_and_parse_xc_vod(&db_clone, account_id, false).await;
+                let _ = crate::m3u::fetch_and_parse_xc_series(&db_clone, account_id, false).await;
             });
         }
 
@@ -3687,15 +3689,15 @@ pub async fn refresh_m3u_all(State(state): State<Arc<AppState>>) -> impl IntoRes
                 let error_msg = if is_xc {
                     let ws_clone = ws_clone_outer.clone();
                     let xc_err = if let Err(e) =
-                        crate::m3u::fetch_and_parse_xc(&db_clone, account_id, Some(ws_clone)).await
+                        crate::m3u::fetch_and_parse_xc(&db_clone, account_id, Some(ws_clone), false).await
                     {
                         Some(format!("Failed to parse XC API: {}", e))
                     } else {
                         None
                     };
                     if xc_err.is_none() {
-                        let _ = crate::m3u::fetch_and_parse_xc_vod(&db_clone, account_id).await;
-                        let _ = crate::m3u::fetch_and_parse_xc_series(&db_clone, account_id).await;
+                        let _ = crate::m3u::fetch_and_parse_xc_vod(&db_clone, account_id, false).await;
+                        let _ = crate::m3u::fetch_and_parse_xc_series(&db_clone, account_id, false).await;
                     }
                     xc_err
                 } else {
@@ -3706,6 +3708,7 @@ pub async fn refresh_m3u_all(State(state): State<Arc<AppState>>) -> impl IntoRes
                         account_id,
                         false,
                         Some(ws_clone),
+                        false,
                     )
                     .await
                     {

@@ -651,63 +651,77 @@ async fn main() {
                 .all(&worker_db)
                 .await
             {
+                // Filter accounts that actually need refresh first
+                let now = Utc::now();
+                let mut accounts_to_refresh = Vec::new();
+
                 for acc in accounts {
                     let refresh_interval = acc.refresh_interval as i64;
                     if refresh_interval <= 0 || acc.status == "fetching" {
                         continue;
-                    } // 0 means manual refresh only
+                    }
 
-                    let last_updated = acc.updated_at.unwrap_or_else(|| Utc::now().into());
+                    let last_updated = acc.updated_at.unwrap_or_else(|| now.into());
                     
-                    // Add some jitter to prevent thundering herd (up to 30 mins)
-                    let jitter_minutes = {
-                        use rand::RngExt;
-                        let mut rng = rand::rng();
-                        rng.random_range(-30..30)
-                    };
+                    // Use a stable jitter based on account ID to prevent threshold hopping
+                    // This ensures the offset is consistent for this account across checks
+                    let jitter_minutes = (acc.id % 61) as i64 - 30; // -30 to +30 range
                     
                     let threshold = last_updated.with_timezone(&Utc)
                         + chrono::Duration::hours(refresh_interval)
                         + chrono::Duration::minutes(jitter_minutes);
 
-                    if Utc::now() >= threshold {
-                        println!(
-                            "[Background Worker] Refreshing M3U account {} ({})",
-                            acc.id, acc.name
-                        );
-                        if acc.account_type == "xc" {
-                            let _ = crate::m3u::fetch_and_parse_xc(&worker_db, acc.id, None).await;
-                        } else {
-                            let url = acc
-                                .server_url
-                                .clone()
-                                .unwrap_or_else(|| acc.file_path.clone().unwrap_or_default());
-                            if !url.is_empty() {
-                                let _ = crate::m3u::fetch_and_parse_m3u(
-                                    &worker_db, &url, acc.id, false, None,
-                                )
-                                .await;
-                            }
-                        }
-                        println!("[Background Worker] Finished parsing for account {}", acc.id);
-                        // Ensure we update the timestamp even if it failed so we don't loop
-                        let res = crate::m3u::update_account_timestamp(&worker_db, acc.id).await;
-                        if let Err(e) = res {
-                            eprintln!("[Background Worker] Error calling timestamp update: {}", e);
-                        }
+                    if now >= threshold {
+                        accounts_to_refresh.push(acc);
+                    }
+                }
 
-                        // Update Telemetry
-                        {
-                            let mut telemetry = m3u_state.background_telemetry.write().await;
-                            telemetry.m3u_refresh.last_run_at = Some(chrono::Utc::now());
-                            telemetry.m3u_refresh.total_processed += 1;
-                            telemetry.m3u_refresh.success_count += 1; // Basic increment for now
-                        }
+                for acc in accounts_to_refresh {
+                    let account_id = acc.id;
+                    let account_name = acc.name.clone();
+                    let account_type = acc.account_type.to_lowercase();
+                    
+                    println!(
+                        "[Background Worker] Refreshing M3U account {} ({})",
+                        account_id, account_name
+                    );
 
-                        // Stagger outgoing requests: Wait 60 seconds before next account
-                        tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
+                    // Update status to fetching immediately to prevent re-pick
+                    if let Ok(Some(m)) = crate::entities::m3u_account::Entity::find_by_id(account_id).one(&worker_db).await {
+                        let mut am: crate::entities::m3u_account::ActiveModel = m.into();
+                        am.status = sea_orm::Set("fetching".to_string());
+                        use sea_orm::ActiveModelTrait;
+                        let _ = am.update(&worker_db).await;
                     }
 
+                    if account_type == "xc" || account_type == "xtream" {
+                        let _ = crate::m3u::fetch_and_parse_xc(&worker_db, account_id, None, true).await;
+                    } else {
+                        let url = acc
+                            .server_url
+                            .clone()
+                            .unwrap_or_else(|| acc.file_path.clone().unwrap_or_default());
+                        if !url.is_empty() {
+                            let _ = crate::m3u::fetch_and_parse_m3u(
+                                &worker_db, &url, account_id, false, None, true,
+                            )
+                            .await;
+                        }
+                    }
+                    
+                    println!("[Background Worker] Finished parsing for account {}", account_id);
+                    let _ = crate::m3u::update_account_timestamp(&worker_db, account_id).await;
+
+                    // Update Telemetry
+                    {
+                        let mut telemetry = m3u_state.background_telemetry.write().await;
+                        telemetry.m3u_refresh.last_run_at = Some(chrono::Utc::now());
+                        telemetry.m3u_refresh.total_processed += 1;
+                        telemetry.m3u_refresh.success_count += 1;
+                    }
+
+                    // Stagger outgoing requests: Wait 60 seconds before next account
+                    tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
                 }
             }
         }

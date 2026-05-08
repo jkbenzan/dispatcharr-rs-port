@@ -1,119 +1,30 @@
-# Dispatcharr-RS Architecture
-
-> **Living Document** — Update this file whenever a significant design decision is made.
-> Last updated: 2026-05-07
-
----
+# Dispatcharr Architecture
 
 ## Overview
+Dispatcharr is a high-performance M3U/XC/EPG proxy and management system built with Rust (Backend) and Svelte (Frontend).
 
-Dispatcharr-RS is a Rust rewrite of the Dispatcharr IPTV middleware. The backend is an Axum-based API server. The frontend is currently undergoing a major migration from a dual-framework setup (React/Angular) to a unified **SvelteKit** application with a high-performance, **Trakt-inspired** dark aesthetic.
+## Backend (Rust)
+- **Framework**: Axum
+- **Database**: PostgreSQL (via SeaORM)
+- **Background Worker**: 
+    - Handles periodic M3U and EPG refreshes.
+    - **Staggering**: Refreshes are staggered across accounts with a 60s delay and a stable per-account jitter (±30s) to prevent thundering herd issues.
+    - **Throttling**: Accounts are only refreshed if the `refresh_interval` has passed since the last successful update.
+- **M3U/XC Ingestion**:
+    - Supports standard M3U playlists and Xtream Codes API.
+    - **Case-Insensitive Account Detection**: Correctly handles "XC", "xc", and "xtream" types.
+    - **VOD Support**: Segmented ingestion for Movies and Series.
+    - **Enable VOD Toggle**: Providers can opt-out of VOD ingestion via a custom property `enable_vod`.
+    - **Activity Log**: Sync events are recorded in `core_systemevent`. Routine background successes are suppressed from the log to reduce noise.
 
----
+## Frontend (Svelte)
+- **State Management**: Svelte 5 Runes ($state, $derived, $effect).
+- **M3U Provider Management**:
+    - Modal for adding/editing providers with tabbed interface (General, Live Channels, VOD Movies, VOD Series).
+    - **Sync Overlay**: Provides real-time feedback during initial provider synchronization.
+    - **Reactive Tabs**: Groups and Categories are filtered based on the selected provider and discovered in real-time.
 
-## Project Structure
-
-```
-dispatcharr-rs-port/
-├── src/                        # Rust backend (Axum)
-│   ├── main.rs                 # Server setup, routes, background workers
-│   ├── api.rs                  # REST API handlers
-│   ├── proxy.rs                # Stream proxy / broadcaster
-│   ├── entities/               # SeaORM entity models
-│   └── ...
-├── svelte-frontend/            # NEW: Unified SvelteKit frontend (Active Migration)
-├── dist/                       # Built frontend output (gitignored)
-├── Dockerfile                  # Multi-stage build
-└── ARCHITECTURE.md             # ← You are here
-```
-
----
-
-## SvelteKit Frontend Migration
-
-The entire frontend has been pivoted to **SvelteKit** to achieve a premium "Trakt-like" user experience. This unified frontend replaces the legacy React and Angular implementations and is now the primary UI on the `develop` and `main` branches.
-
-### Media Consumption & Feature Status
-- **TV Guide (EPG)**: High-performance timeline view at `/guide`. Features synchronized vertical scrolling, "Jump to Now" functionality, detailed program info modals, and **integrated channel playback** via a Hybrid Video Player (MPEG-TS/HLS) with automatic external player fallback.
-- **Hybrid Playback System**: A "smart" video player architecture that auto-detects stream formats. It utilizes `mpegts.js` for raw MPEG-TS proxy streams and `hls.js` for HLS manifests, with native fallback for Safari/iOS to ensure broad device compatibility.
-- **VOD**: Trakt-inspired interface at `/vod` supporting infinite scroll pagination and dynamic categorization of Movies and Series. Includes TMDB ID resolving for rich poster metadata.
-- **DVR**: A placeholder UI skeleton at `/dvr` outlining upcoming features like Series Pass and Comskip Integration.
-
-### Design System (Trakt Aesthetic)
-- **Framework**: SvelteKit 2 + Svelte 5 (Runes).
-- **Styling**: Vanilla CSS/LESS with a custom-built design system.
-- **Theme/Accent System**: Uses CSS variables bound to `document.documentElement` attributes (`data-theme` and `data-accent`). Fully supports dynamic switching between light/dark modes and configurable brand colors (Trakt Red `#ed1c24` / Dispatcharr Green `#158f76`). Preferences persist via `localStorage`.
-- **Components**: Lightweight, native-feeling components (avoiding heavy UI libraries like Taiga).
-  - *Primitives*: Reusable primitives like `Modal.svelte` handle backdrop blur, z-indexing, and keyboard escape.
-  - *Media*: `VideoPlayer.svelte` provides a unified interface for HLS and MPEG-TS playback with custom glassmorphic controls and automatic codec detection.
-- **Icons**: Lucide-Svelte.
-
-- **Layout Architecture**:
-  - **Root Layout**: A fixed sidebar navigation with a responsive main content area. Includes a custom branding header with a "Powered by Rust" flare and a collapsible mode replacing the text with a themeable Dispatcharr logo SVG. Now enhanced with a glassmorphism effect (frosted glass) over a subtle radial gradient.
-  - **Channel Manager**: A split-pane interface with independent scrolling for Channels (left) and Streams (right), featuring a custom JS-based resizer.
-  - **Create Channel**: A massive 2-panel modal component leveraging the `Modal` primitive, fully integrating the Channel Data sidecar fuzzy lookups, EPG assignments, and Logo uploads without navigating away from the Channel Manager.
-  - **M3U / Streams Management**: A grid-based view at `/streams` for managing multiple M3U and XTREAM Codes providers. Includes robust creation/editing forms and handles bulk refresh operations.
-  - **Stream Checker**: A diagnostic dashboard at `/stream-checker` utilizing the backend bulk check workers. It features live progress polling, dynamic stream selection via providers, and real-time visualization of `ffprobe` and `ffmpeg` results.
-  - **Global Settings**: A modular sidebar-driven interface at `/settings` directly reading/writing to the backend `core_settings` table, mapping configuration JSON structures into bespoke UI controls (e.g. DVR padding, IP network CIDRs, Proxy failover thresholds).
-  - **Activity & Logs**: A real-time terminal interface at `/activity` streaming live system events from the WebSocket backend, complete with a hybrid JSON-viewer for inspecting raw payload details.
-  - **Integrations & Plugins**: Placeholder UI skeletons at `/integrations` and `/plugins` for future webhook, API token, and custom parser management.
-- **State Management**: Reactive stores using Svelte 5 `$state` and `$effect` for real-time WebSocket events and system status.
-- **Global Settings Store**: `src/lib/settings.svelte.ts` manages reactive global state for user preferences (Time/Date format, Table sizing, Timezone). Preferences are loaded from the backend `/api/core/settings/` on app initialization and synced reactively to the DOM (e.g. `data-table-size` attribute).
-  - **M3U Provider Management**: Providers (M3U/XTREAM Codes) are managed through a centralized modal interface.
-    - **Discovery**: Upon adding a provider, the system performs an initial synchronization to discover available channel groups and VOD categories.
-    - **Granular Configuration**: Once discovered, users can configure:
-      - **Live Channels**: Enable/Disable specific groups and toggle **Auto-Sync** (automatically adds new channels from the provider within that group to the local database).
-      - **VOD Segmentation**: VOD categories are automatically segmented into **Movies** and **Series** based on the provider's metadata, allowing for independent management of large VOD libraries.
-    - **Synchronous Discovery Workflow**: When a new provider is added, the UI enters a **Syncing State**, polling the backend until initial groups and categories are discovered. This ensures the configuration modal always presents the user with actionable data immediately after creation.
-
-  - **Activity & Logs**: A real-time terminal interface at `/activity` streaming live system events from the WebSocket backend, complete with a hybrid JSON-viewer for inspecting raw payload details.
-    - **Persistence**: Implements a persistent "Clear" operation via `DELETE /api/core/system-events/clear/`, ensuring that purged logs do not reappear after a system refresh or M3U ingestion cycle.
-
-### Authentication & Security
-- **JWT Authorization**: All protected backend routes require a valid JWT in the `Authorization` header, validated via the `CurrentUser` Axum extractor.
-- **Local Development Bypass**: To facilitate the rapid SvelteKit migration, the `CurrentUser` extractor supports a configurable bypass. If the `DISPATCHARR_AUTH_ENABLED` environment variable is not set to `true`, the system automatically assigns a primary Admin user to all incoming requests, allowing the frontend to interact with the API without a completed login flow.
-
-### Build & Serving
-- **Adapter**: `@sveltejs/adapter-static` configured in SPA mode.
-- **Output**: Generates to the root `dist/` folder.
-- **Rust Integration**: Served by Axum via `ServeDir::new("dist")` with `index.html` fallback for client-side routing.
-
----
-
-## Backend Architecture
-
-### Streaming Engine (Broadcaster)
-The backend has evolved from a direct-pipe proxy to a multiplexing broadcaster:
-- **Multiplexing**: Multiple users watching the same channel share a single upstream connection.
-- **Failover**: Automatic stream failover based on user-defined sorting rules.
-- **Caching**: Ring-buffer implementation for instant playback starts.
-
-### Stream Checker & Maintenance Engine
-The health of the streaming ecosystem is managed by a background maintenance system:
-- **Maintenance Worker**: Runs periodically during user-defined "off-hours" when the system is idle (no active broadcasters).
-- **Automated Telemetry**: Uses `ffprobe` and `ffmpeg` to harvest quality metrics (resolution, bitrate, frame drops, frozen/black detection) and persists them in the `stream.custom_properties` JSONB field.
-- **Scoring & Sorting**: A score-based engine determines the optimal stream order for each channel:
-  - **Base Score**: Derived from the provider's `m3u_account.priority`.
-  - **Quality Modifiers**: Dynamic rules (e.g., "Must be 1080p", "Penalty for 720p") add or subtract from the base score.
-  - **Persistence**: The resulting order is saved to the `channel_stream.order` field, which the Broadcaster uses for failover selection.
-- **Scheduling & Staggering**: Background ingestion tasks use a jitter-based scheduling algorithm to prevent simultaneous hits to upstream IPTV providers, spreading requests over a staggered window.
-
-### Channel Data Sidecar
-Enriches channels with metadata via a read-only SQLite database (`channel_data.db`).
-- **Fuzzy Matching**: Jaro-Winkler string similarity for matching local channels to station metadata.
-- **Graceful Degradation**: 503 response if the sidecar DB is missing or corrupted.
-
----
-
-## Logo & Asset Management
-- **Logo Libraries (Upcoming)**: A planned feature to support syncing from external GitHub repositories (e.g., `iptv-org/logos`) to act as a procurement library for channel icons.
-- **Resolution**: Backend resolves logo foreign keys to either public URLs or local static paths (`/logos/`) during channel serialization.
-- **Storage**: Local uploads are stored in the `data/logos/` directory and served via Axum's static service.
-
----
-
-## Docker Build Process
-The build prioritizes the SvelteKit output:
-1. **SvelteKit Stage**: `npm run build` outputs to `dist/`.
-2. **Rust Stage**: `cargo build --release`.
-3. **Final Stage**: Combines the binary with the `dist/` folder.
+## Telemetry & Logging
+- **System Events**: Stored in `core_systemevent`.
+- **Background Suppression**: Routine successful background tasks do not create event entries.
+- **Errors**: All sync errors are logged regardless of background status.
