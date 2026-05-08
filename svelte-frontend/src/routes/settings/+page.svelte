@@ -21,13 +21,28 @@
 	];
 
 	let formData: Record<string, any> = $state({});
+	let timeZones: string[] = $state([]);
 
 	onMount(async () => {
+		try {
+			if (typeof Intl !== 'undefined' && Intl.supportedValuesOf) {
+				timeZones = Intl.supportedValuesOf('timeZone');
+			} else {
+				timeZones = ['UTC', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'Europe/London', 'Asia/Tokyo', 'Australia/Sydney'];
+			}
+		} catch (e) {
+			timeZones = ['UTC', 'America/New_York'];
+		}
+
 		try {
 			const res = await api.getSettings();
 			settingsList = res;
 			res.forEach(s => {
-				formData[s.key] = JSON.parse(JSON.stringify(s.value));
+				const val = JSON.parse(JSON.stringify(s.value));
+				if (s.key === 'system_settings' && !val.time_zone) {
+					val.time_zone = 'America/New_York';
+				}
+				formData[s.key] = val;
 			});
 		} catch (e) {
 			console.error(e);
@@ -134,8 +149,12 @@
 						<div class="form-grid">
 							<div class="form-group">
 								<label>System Time Zone</label>
-								<input type="text" bind:value={formData['system_settings'].time_zone} placeholder="UTC" />
-								<span class="help-text">Standard IANA timezone string (e.g., America/New_York)</span>
+								<select bind:value={formData['system_settings'].time_zone}>
+									{#each timeZones as tz}
+										<option value={tz}>{tz}</option>
+									{/each}
+								</select>
+								<span class="help-text">Standard IANA timezone string for server-side scheduling.</span>
 							</div>
 							<div class="form-group">
 								<label>Max System Events</label>

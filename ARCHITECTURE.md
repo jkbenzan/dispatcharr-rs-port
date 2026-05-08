@@ -58,6 +58,11 @@ The entire frontend has been pivoted to **SvelteKit** to achieve a premium "Trak
   - **Activity & Logs**: A real-time terminal interface at `/activity` streaming live system events from the WebSocket backend, complete with a hybrid JSON-viewer for inspecting raw payload details.
   - **Integrations & Plugins**: Placeholder UI skeletons at `/integrations` and `/plugins` for future webhook, API token, and custom parser management.
 - **State Management**: Reactive stores using Svelte 5 `$state` and `$effect` for real-time WebSocket events and system status.
+- **Global Settings Store**: `src/lib/settings.svelte.ts` manages reactive global state for user preferences (Time/Date format, Table sizing, Timezone). Preferences are loaded from the backend `/api/core/settings/` on app initialization and synced reactively to the DOM (e.g. `data-table-size` attribute).
+
+### Authentication & Security
+- **JWT Authorization**: All protected backend routes require a valid JWT in the `Authorization` header, validated via the `CurrentUser` Axum extractor.
+- **Local Development Bypass**: To facilitate the rapid SvelteKit migration, the `CurrentUser` extractor supports a configurable bypass. If the `DISPATCHARR_AUTH_ENABLED` environment variable is not set to `true`, the system automatically assigns a primary Admin user to all incoming requests, allowing the frontend to interact with the API without a completed login flow.
 
 ### Build & Serving
 - **Adapter**: `@sveltejs/adapter-static` configured in SPA mode.
