@@ -16,11 +16,16 @@ Dispatcharr is a high-performance M3U/XC/EPG proxy and management system built w
     - **VOD Support**: Segmented ingestion for Movies and Series.
     - **Enable VOD Toggle**: Providers can opt-out of VOD ingestion via a custom property `enable_vod`.
     - **Activity Log**: Sync events are recorded in `core_systemevent`. Routine background successes are suppressed from the log to reduce noise.
+- **Stream Counting & Statistics**:
+    - **Initial Prefetch**: During provider setup, a "full fetch" is performed to tally streams per category, allowing the UI to display "{n} streams found" before categories are selected.
+    - **Periodic Updates**: Background sync tasks for Live, VOD, and Series now include a tallying phase that updates category `stream_count` in the database `custom_properties` field.
+    - **Global Metrics**: Counts are updated for all categories (groups) provided by the source, ensuring the management UI always reflects current provider content.
 
 ## Frontend (Svelte)
 - **State Management**: Svelte 5 Runes ($state, $derived, $effect).
 - **M3U Provider Management**:
-    - Modal for adding/editing providers with tabbed interface (General, Channel Categories, VOD Movies, VOD Series).
+    - Modal for adding/editing providers with tabbed interface (**Channel Categories**, VOD Movies, VOD Series).
+    - **Stream Statistics**: Displays human-readable stream counts (e.g., "{n} streams found") for all categories, retrieved from persisted `custom_properties`.
     - **Sync Overlay**: Provides real-time feedback during initial provider synchronization.
     - **Reactive Tabs**: Groups and Categories are filtered based on the selected provider and discovered in real-time.
 
