@@ -312,6 +312,16 @@ pub async fn get_paginated_object() -> Json<Value> {
     }))
 }
 
+pub async fn get_system_events(
+	State(state): State<Arc<AppState>>,
+) -> Json<Value> {
+	let events = core_systemevent::Entity::find()
+		.order_by_desc(core_systemevent::Column::Timestamp)
+		.all(&state.db)
+		.await
+		.unwrap_or_default();
+	let count = events.len();
+
 	Json(json!({
 		"count": count,
 		"total": count,
