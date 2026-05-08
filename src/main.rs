@@ -656,9 +656,11 @@ async fn main() {
                     let last_updated = acc.updated_at.unwrap_or_else(|| Utc::now().into());
                     
                     // Add some jitter to prevent thundering herd (up to 30 mins)
-                    use rand::Rng;
-                    let mut rng = rand::rng();
-                    let jitter_minutes = rng.random_range(-30..30);
+                    let jitter_minutes = {
+                        use rand::RngExt;
+                        let mut rng = rand::rng();
+                        rng.random_range(-30..30)
+                    };
                     
                     let threshold = last_updated.with_timezone(&Utc)
                         + chrono::Duration::hours(refresh_interval)
@@ -731,9 +733,11 @@ async fn main() {
                     let last_updated = src.updated_at.unwrap_or_else(|| Utc::now().into());
                     
                     // Add some jitter (up to 30 mins)
-                    use rand::Rng;
-                    let mut rng = rand::rng();
-                    let jitter_minutes = rng.random_range(-30..30);
+                    let jitter_minutes = {
+                        use rand::RngExt;
+                        let mut rng = rand::rng();
+                        rng.random_range(-30..30)
+                    };
 
                     let threshold = last_updated.with_timezone(&Utc)
                         + chrono::Duration::hours(refresh_interval)

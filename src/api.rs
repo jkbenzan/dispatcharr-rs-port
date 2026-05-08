@@ -1294,7 +1294,7 @@ pub async fn delete_streamprofile(
 }
 pub async fn get_dashboard_stats(State(state): State<Arc<AppState>>) -> Json<Value> {
     use crate::entities::{channel, stream, m3u_account, epg_source};
-    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+    use sea_orm::EntityTrait;
 
     let channels_count = channel::Entity::find().count(&state.db).await.unwrap_or(0);
     let streams_count = stream::Entity::find().count(&state.db).await.unwrap_or(0);
