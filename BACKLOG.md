@@ -4,14 +4,17 @@ Items queued for future implementation and audit phases.
 
 ---
 
-## Phase 2: Data Ingestion & Sources (Providers)
+## Phase 2: Data Ingestion & Streaming Infrastructure [DONE]
 
-- [ ] **Provider Management Audit**
-  Verify creation, editing, and deletion forms for M3U/Xtream providers. Ensure all backend fields (timeouts, buffer sizes) are correctly mapped.
-- [ ] **Refresh Status Indicators**
-  Implement/verify UI indicators for last sync time and active stream counts per provider on the `/streams` page.
-- [ ] **Bulk Sync Triggering**
-  Ensure the "Refresh All" button correctly triggers the backend background workers and provides live feedback.
+- [x] **Background Worker Hardening**:
+  - [x] Implement randomized jitter (±30 mins) for M3U/EPG refreshes.
+  - [x] Implement staggered sequential processing (60s delay) between providers.
+- [x] **Health Monitoring & Dashboard**:
+  - [x] Surface failed provider counts in dashboard stats.
+  - [x] Add visual health alerts and "Refresh All" troubleshooting buttons.
+- [x] **Intelligent Scoring Engine**:
+  - [x] Integrate `m3u_account.priority` as the base score for stream sorting.
+  - [x] Refactor `bulk_sort_streams` logic to support priority-first selection.
 
 ---
 
