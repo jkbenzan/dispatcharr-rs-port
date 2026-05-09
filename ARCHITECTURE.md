@@ -28,6 +28,7 @@ Dispatcharr is a high-performance M3U/XC/EPG proxy and management system built w
     - Channel name parsing removes provider noise, country prefixes, resolution markers, and generic terms before scoring.
     - Match scoring uses Jaro-Winkler similarity plus resolution, country, and logo context.
     - A token-overlap guard caps unrelated short-name matches below medium confidence when the channel name shares no significant token with the station name or call sign.
+    - Applying a match now persists selected station metadata to the external PostgreSQL channel row, including station ID, channel name, TVG-ID, and logo lookup/creation.
 
 ## Frontend (Svelte)
 - **State Management**: Svelte 5 Runes ($state, $derived, $effect).

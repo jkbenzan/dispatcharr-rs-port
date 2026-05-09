@@ -3,12 +3,14 @@ use axum::{
     http::StatusCode,
     Json,
 };
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::sync::Arc;
 
-use crate::AppState;
 use crate::channel_match::{calculate_match_score, parse_channel_name, StationForScoring};
+use crate::entities::{channel, logo};
+use crate::AppState;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -278,7 +280,6 @@ pub async fn suggest_matches(
 }
 
 #[derive(Deserialize)]
-#[allow(dead_code)]
 pub struct ApplyMatchPayload {
     channel_id: i64,
     station_id: String,
@@ -300,13 +301,91 @@ pub async fn apply_match(
         return Err((StatusCode::NOT_FOUND, Json(json!({ "error": "Station not found" }))));
     }
     let station = station.unwrap();
-    
-    // In a full implementation, we would query the `channel` from the Postgres `state.db` here,
-    // modify its fields, optionally find/download the logo via `find_or_create_logo`, 
-    // and save the entity. Returning simplified success to avoid overly complex ORM logic in this stub.
-    
+
+    let channel_model = channel::Entity::find_by_id(payload.channel_id)
+        .one(&state.db)
+        .await
+        .map_err(|e| err_500(e.to_string()))?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": "Channel not found" })),
+            )
+        })?;
+
+    let mut active: channel::ActiveModel = channel_model.into();
+    let mut applied_fields = Vec::new();
+
+    if payload.apply_station_id {
+        active.tvc_guide_stationid = Set(Some(station.station_id.clone()));
+        applied_fields.push("tvc_guide_stationid");
+    }
+
+    if payload.apply_channel_name {
+        if let Some(name) = station.name.as_ref().filter(|name| !name.trim().is_empty()) {
+            active.name = Set(name.trim().to_string());
+            applied_fields.push("name");
+        }
+    }
+
+    if payload.apply_tvg_id {
+        let tvg_id = station
+            .call_sign
+            .as_ref()
+            .filter(|call_sign| !call_sign.trim().is_empty())
+            .or_else(|| station.name.as_ref().filter(|name| !name.trim().is_empty()))
+            .map(|value| value.trim().to_string());
+
+        if let Some(tvg_id) = tvg_id {
+            active.tvg_id = Set(Some(tvg_id));
+            applied_fields.push("tvg_id");
+        }
+    }
+
+    let mut applied_logo = None;
+    if payload.apply_logo {
+        if let Some(logo_uri) = station.logo_uri.as_ref().filter(|uri| !uri.trim().is_empty()) {
+            let logo_uri = logo_uri.trim().to_string();
+            let existing_logo = logo::Entity::find()
+                .filter(logo::Column::Url.eq(&logo_uri))
+                .one(&state.db)
+                .await
+                .map_err(|e| err_500(e.to_string()))?;
+
+            let logo_model = if let Some(existing_logo) = existing_logo {
+                existing_logo
+            } else {
+                logo::ActiveModel {
+                    name: Set(station.name.clone().unwrap_or_else(|| station.station_id.clone())),
+                    url: Set(logo_uri),
+                    ..Default::default()
+                }
+                .insert(&state.db)
+                .await
+                .map_err(|e| err_500(e.to_string()))?
+            };
+
+            active.logo_id = Set(Some(logo_model.id));
+            applied_logo = Some(json!({
+                "id": logo_model.id,
+                "name": logo_model.name,
+                "url": logo_model.url,
+            }));
+            applied_fields.push("logo_id");
+        }
+    }
+
+    active.updated_at = Set(chrono::Utc::now().into());
+    let updated_channel = active
+        .update(&state.db)
+        .await
+        .map_err(|e| err_500(e.to_string()))?;
+
     Ok(Json(json!({
         "success": true,
+        "applied_fields": applied_fields,
+        "channel": updated_channel,
+        "logo": applied_logo,
         "station": station
     })))
 }
