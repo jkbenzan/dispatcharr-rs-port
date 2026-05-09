@@ -12,7 +12,7 @@ Dispatcharr is a high-performance M3U/XC/EPG proxy and management system built w
     - **Throttling**: Accounts are only refreshed if the `refresh_interval` has passed since the last successful update.
 - **M3U/XC Ingestion**:
     - Supports standard M3U playlists and Xtream Codes API.
-    - **Case-Insensitive Account Detection**: Correctly handles "XC", "xc", and "xtream" types.
+    - **Case-Insensitive Account Detection**: A centralized `is_xc_account()` helper in `api.rs` normalizes all XC type comparisons. This prevents routing failures caused by case mismatches between the frontend (`"xc"`) and backend (`"XC"`) — ensuring provider creation, refresh, and background sync all correctly identify XC accounts regardless of case.
     - **VOD Support**: Segmented ingestion for Movies and Series.
     - **Enable VOD Toggle**: Providers can opt-out of VOD ingestion via a custom property `enable_vod`. **Disabled by default** to minimize unintended data ingestion.
     - **Mandatory Account Type**: New providers require an explicit choice between M3U and XC types; no system default is assumed.

@@ -6,6 +6,14 @@ use std::collections::HashMap;
 // DATA SHAPES FOR THE FRONTEND
 // --------------------------------------------------------
 
+/// Case-insensitive check for Xtream Codes account types.
+/// The frontend sends "xc" (lowercase) while some legacy data may use "XC".
+/// This helper normalizes the comparison to prevent silent routing failures.
+fn is_xc_account(account_type: &str) -> bool {
+    let lower = account_type.to_lowercase();
+    lower == "xc" || lower == "xtream"
+}
+
 /// 1. FLAT ARRAY: Solves the `TypeError: .reduce is not a function`
 pub async fn get_flat_array() -> Json<Value> {
     Json(json!([]))
@@ -2244,7 +2252,7 @@ pub async fn add_m3u_account(
                 .one(&state.db)
                 .await
             {
-                let url = if acc.account_type == "XC" {
+                let url = if is_xc_account(&acc.account_type) {
                     format!(
                         "{}/get.php?username={}&password={}&type=m3u_plus&output=ts",
                         acc.server_url
@@ -2265,7 +2273,7 @@ pub async fn add_m3u_account(
 
                 if !url.is_empty() || file_path.is_some() {
                     let db_clone = state.db.clone();
-                    let is_xc = acc.account_type == "XC";
+                    let is_xc = is_xc_account(&acc.account_type);
                     let ws_clone = state.ws_sender.clone();
                     let final_url = url.clone();
                     let file_path_clone = file_path.clone();
@@ -2720,7 +2728,7 @@ pub async fn refresh_m3u_account(
         }
     };
 
-    let url = if account.account_type == "XC" {
+    let url = if is_xc_account(&account.account_type) {
         format!(
             "{}/get.php?username={}&password={}&type=m3u_plus&output=ts",
             account
@@ -2737,7 +2745,7 @@ pub async fn refresh_m3u_account(
 
     if !url.is_empty() {
         let db_clone = state.db.clone();
-        let is_xc = account.account_type == "XC";
+        let is_xc = is_xc_account(&account.account_type);
         let ws_clone_outer = state.ws_sender.clone();
         tokio::spawn(async move {
             let error_msg = if is_xc {
@@ -2807,7 +2815,7 @@ pub async fn refresh_all_m3u_accounts(
     tokio::spawn(async move {
         for acc in accounts {
             println!("[Manual Refresh All] Staggered refresh for account {} ({})", acc.id, acc.name);
-            let url = if acc.account_type == "XC" {
+            let url = if is_xc_account(&acc.account_type) {
                 format!(
                     "{}/get.php?username={}&password={}&type=m3u_plus&output=ts",
                     acc.server_url.as_deref().unwrap_or_default().trim_end_matches('/'),
@@ -2819,7 +2827,7 @@ pub async fn refresh_all_m3u_accounts(
             };
 
             if !url.is_empty() {
-                if acc.account_type == "XC" {
+                if is_xc_account(&acc.account_type) {
                     let _ = crate::m3u::fetch_and_parse_xc(&db_clone, acc.id, Some(ws_clone.clone()), false).await;
                 } else {
                     let _ = crate::m3u::fetch_and_parse_m3u(&db_clone, &url, acc.id, false, Some(ws_clone.clone()), false).await;
@@ -3097,7 +3105,7 @@ pub async fn update_m3u_account(
         apply_custom_props_from_payload(&payload, &mut active, acc.custom_properties.as_ref());
 
     if let Ok(updated) = active.update(&state.db).await {
-        if enable_vod_opt == Some(true) && updated.account_type == "XC" {
+        if enable_vod_opt == Some(true) && is_xc_account(&updated.account_type) {
             let db_clone = state.db.clone();
             tokio::spawn(async move {
                 let _ = crate::m3u::fetch_and_parse_xc_vod(&db_clone, account_id, false).await;
@@ -3679,7 +3687,7 @@ pub async fn refresh_m3u_all(State(state): State<Arc<AppState>>) -> impl IntoRes
     for account in accounts {
         let db_clone = state.db.clone();
         let account_id = account.id;
-        let is_xc = account.account_type == "XC";
+        let is_xc = is_xc_account(&account.account_type);
         let url = if is_xc {
             format!(
                 "{}/get.php?username={}&password={}&type=m3u_plus&output=ts",
