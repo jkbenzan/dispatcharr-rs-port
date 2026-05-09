@@ -34,7 +34,8 @@ Dispatcharr is a high-performance M3U/XC/EPG proxy and management system built w
     - **Reactive Tabs**: Groups and Categories are filtered based on the selected provider and discovered in real-time.
 
 ## Telemetry & Logging
-- **System Events**: Stored in `core_systemevent`.
+- **System Events**: Stored in `core_systemevent`. M3U Provider creations, deletions, and manual refreshes explicitly log their status (success, info, or error) to this table.
 - **Sync Visibility**: Both manual and background refreshes are recorded in the activity log. Events include an `is_background` flag in the payload to distinguish automated tasks.
 - **Errors**: All sync errors are propagated using the `?` operator to avoid silent failures. The `handle_sync_error` helper automatically updates the account `status` to `"failed"` and persists the error message for visibility in the Provider Grid.
+- **Frontend Error Propagation**: The Svelte frontend strictly bubbles up `errorData.error` from JSON API responses to ensure any backend failures (such as SQLite constraint violations) are correctly exposed rather than being masked as generic 500 errors.
 - **Diagnostic Logging**: Backend sync tasks log discovered category and stream counts to stdout/stderr for operational monitoring and system integrity verification.

@@ -4,7 +4,7 @@ async function fetchApi(path: string, options: RequestInit = {}) {
   const response = await fetch(path, options);
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || `API Error: ${response.status} ${response.statusText}`);
+    throw new Error(errorData.error || errorData.message || `API Error: ${response.status} ${response.statusText}`);
   }
   
   if (response.status === 204) return {};

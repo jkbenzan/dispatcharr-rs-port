@@ -2272,6 +2272,13 @@ pub async fn add_m3u_account(
                 }));
 
                 if !url.is_empty() || file_path.is_some() {
+                    let _ = crate::events::record_event(
+                        &state.db,
+                        "provider_sync",
+                        Some(acc.name.clone()),
+                        serde_json::json!({"status": "success", "event": "Provider Created"}),
+                    ).await;
+
                     let db_clone = state.db.clone();
                     let is_xc = is_xc_account(&acc.account_type);
                     let ws_clone = state.ws_sender.clone();
@@ -2744,6 +2751,13 @@ pub async fn refresh_m3u_account(
     };
 
     if !url.is_empty() {
+        let _ = crate::events::record_event(
+            &state.db,
+            "provider_sync",
+            Some(account.name.clone()),
+            serde_json::json!({"status": "info", "event": "Manual Refresh Triggered"}),
+        ).await;
+        
         let db_clone = state.db.clone();
         let is_xc = is_xc_account(&account.account_type);
         let ws_clone_outer = state.ws_sender.clone();
@@ -3230,12 +3244,28 @@ pub async fn delete_m3u_account(
         .exec(&state.db)
         .await
     {
-        Ok(_) => StatusCode::NO_CONTENT.into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": e.to_string()})),
-        )
-            .into_response(),
+        Ok(_) => {
+            let _ = crate::events::record_event(
+                &state.db,
+                "provider_sync",
+                Some(format!("Provider ID {}", account_id)),
+                serde_json::json!({"status": "success", "event": "Provider Deleted"}),
+            ).await;
+            StatusCode::NO_CONTENT.into_response()
+        },
+        Err(e) => {
+            let _ = crate::events::record_event(
+                &state.db,
+                "provider_sync",
+                Some(format!("Provider ID {}", account_id)),
+                serde_json::json!({"status": "error", "event": "Provider Deletion Error", "error": e.to_string()}),
+            ).await;
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": e.to_string()})),
+            )
+                .into_response()
+        }
     }
 }
 
