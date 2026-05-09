@@ -57,6 +57,7 @@ Dispatcharr is a high-performance M3U/XC/EPG proxy and management system built w
 - Runtime startup has been verified against the external PostgreSQL database and the downloaded channel-data SQLite sidecar; the backend connects and listens on port 8080.
 - The optional channel-data sidecar is stored locally at `data/channel_data.db`, is ignored by git, and can be replaced or redirected with `CHANNEL_DB_PATH` when needed.
 - Channel DB match application has been smoke-tested against an existing external-PostgreSQL channel row by applying and restoring name/TVG-ID fields.
+- External PostgreSQL channel cleanup was performed after a bad auto-created-channel flood: `52,744` orphan generated channels were backed up to `cleanup_backup_bad_auto_channels_20260509_171135` and removed, leaving `316` curated/manual channels.
 - `npm run check` passes with zero warnings.
 - `npm run build` passes when the process can write the repository-root `dist` directory.
 - `npm install` currently reports low-severity audit findings; do not run `npm audit fix --force` without checking for breaking package changes.
