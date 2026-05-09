@@ -43,6 +43,7 @@ fn get_f64(val: &serde_json::Value, key: &str) -> Option<f64> {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct XcCategory {
     pub category_id: String,
     pub category_name: String,
@@ -50,6 +51,7 @@ pub struct XcCategory {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct XcStream {
     pub num: Option<serde_json::Value>,
     pub name: String,
@@ -173,6 +175,7 @@ pub async fn get_vod_categories(
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct XcVodStream {
     pub num: Option<serde_json::Value>,
     pub name: String,
@@ -253,6 +256,7 @@ pub async fn get_series_categories(
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct XcSeries {
     pub num: Option<serde_json::Value>,
     pub name: String,
@@ -317,6 +321,7 @@ pub async fn get_series(
     Ok(streams)
 }
 
+#[allow(dead_code)]
 pub async fn get_series_info(
     client: &Client,
     server_url: &str,

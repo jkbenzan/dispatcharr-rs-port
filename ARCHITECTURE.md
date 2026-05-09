@@ -49,7 +49,7 @@ Dispatcharr is a high-performance M3U/XC/EPG proxy and management system built w
 - **Diagnostic Logging**: Backend sync tasks log discovered category and stream counts to stdout/stderr for operational monitoring and system integrity verification.
 
 ## Verification Status
-- `cargo check` passes with warning debt.
+- `cargo check` passes with local Rust warning debt cleared; it still reports an upstream `sqlx-postgres v0.7.4` future-incompatibility notice.
 - `cargo test` passes all current unit tests.
 - `npm run check` passes with zero warnings.
 - `npm run build` passes when the process can write the repository-root `dist` directory.

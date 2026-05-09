@@ -34,6 +34,7 @@ mod logo_sync;
 mod trakt;
 
 // Ensure ffmpeg/ffprobe are available, downloading them if needed.
+#[allow(dead_code)]
 fn ensure_ffmpeg() {
     use ffmpeg_sidecar::{
         

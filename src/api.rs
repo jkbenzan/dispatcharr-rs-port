@@ -15,6 +15,7 @@ fn is_xc_account(account_type: &str) -> bool {
 }
 
 /// 1. FLAT ARRAY: Solves the `TypeError: .reduce is not a function`
+#[allow(dead_code)]
 pub async fn get_flat_array() -> Json<Value> {
     Json(json!([]))
 }
@@ -354,6 +355,7 @@ pub async fn clear_system_events(
 // Solves the `TypeError: Cannot read properties of undefined (reading 'length')`
 // --------------------------------------------------------
 
+#[allow(dead_code)]
 pub async fn get_core_settings() -> Json<Value> {
     // Django returns an array of {key, name, value} objects.
     // The frontend does settings.reduce((acc, s) => acc[s.key] = s) so we must match this format.

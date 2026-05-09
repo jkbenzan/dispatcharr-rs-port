@@ -164,6 +164,7 @@ pub async fn preview_lineup(
 }
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 pub struct ImportLineupPayload {
     include_sd: bool,
     include_hd: bool,
@@ -192,6 +193,7 @@ pub async fn import_lineup(
 pub struct SuggestQuery {
     channel_name: String,
     channel_id: Option<i64>,
+    #[allow(dead_code)]
     existing_station_id: Option<String>,
     filter_country: Option<String>,
     filter_resolutions: Option<Vec<String>>,
@@ -276,6 +278,7 @@ pub async fn suggest_matches(
 }
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 pub struct ApplyMatchPayload {
     channel_id: i64,
     station_id: String,

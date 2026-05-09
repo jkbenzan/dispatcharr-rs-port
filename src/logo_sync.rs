@@ -1,8 +1,7 @@
 use std::path::Path;
 use std::process::Command;
 use std::sync::Arc;
-use tokio::sync::RwLock;
-use tracing::{info, error, warn};
+use tracing::{info, error};
 use serde::{Serialize, Deserialize};
 use walkdir::WalkDir;
 
@@ -22,7 +21,7 @@ pub struct LogoSearchResult {
     pub repository: String,
 }
 
-pub async fn sync_logo_repositories(state: Arc<AppState>) {
+pub async fn sync_logo_repositories(_state: Arc<AppState>) {
     info!("[LogoSync] Starting logo repository synchronization...");
     
     // For now, we'll use a hardcoded list or load from settings

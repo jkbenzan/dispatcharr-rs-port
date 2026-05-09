@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
 use std::sync::Arc;
 use crate::AppState;
 
@@ -31,6 +30,7 @@ pub async fn get_trakt_settings(db: &sea_orm::DatabaseConnection) -> TraktSettin
     TraktSettings::default()
 }
 
+#[allow(dead_code)]
 pub async fn save_trakt_settings(db: &sea_orm::DatabaseConnection, settings: TraktSettings) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use crate::entities::core_settings;
     use sea_orm::{EntityTrait, QueryFilter, ColumnTrait, Set, ActiveModelTrait};

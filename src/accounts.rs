@@ -51,6 +51,7 @@ pub struct CreateUserReq {
     pub is_superuser: Option<bool>,
     pub is_staff: Option<bool>,
     pub groups: Option<Vec<i32>>,
+    #[allow(dead_code)]
     pub channel_profiles: Option<Vec<Value>>,
 }
 
@@ -66,6 +67,7 @@ pub struct UpdateUserReq {
     pub is_superuser: Option<bool>,
     pub is_staff: Option<bool>,
     pub groups: Option<Vec<i32>>,
+    #[allow(dead_code)]
     pub channel_profiles: Option<Vec<Value>>,
     pub custom_properties: Option<Value>,
 }

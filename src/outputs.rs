@@ -13,6 +13,7 @@ use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+#[allow(dead_code)]
 const STREAM_SECRET: &[u8] = b"dispatcharr_super_secret_temporary_key";
 
 pub async fn generate_m3u(

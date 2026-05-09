@@ -5,7 +5,7 @@ use axum::{
     Json,
 };
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder, QuerySelect, Set,
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder, Set,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -18,7 +18,7 @@ use crate::entities::channel_stream;
 use crate::entities::stream;
 use crate::entities::stream_sorting_rule;
 use crate::AppState;
-use futures_util::stream::{self as future_stream, StreamExt};
+use futures_util::stream::StreamExt;
 use sea_orm::ActiveValue;
 use std::collections::HashMap;
 use std::process::Command as StdCommand;
