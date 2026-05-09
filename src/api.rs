@@ -14,6 +14,16 @@ fn is_xc_account(account_type: &str) -> bool {
     lower == "xc" || lower == "xtream"
 }
 
+fn redact_m3u_account_credentials(acc: &m3u_account::Model, acc_json: &mut Value) {
+    acc_json["has_username"] = json!(acc.username.as_ref().is_some_and(|v| !v.is_empty()));
+    acc_json["has_password"] = json!(acc.password.as_ref().is_some_and(|v| !v.is_empty()));
+
+    if let Some(obj) = acc_json.as_object_mut() {
+        obj.remove("username");
+        obj.remove("password");
+    }
+}
+
 /// 1. FLAT ARRAY: Solves the `TypeError: .reduce is not a function`
 #[allow(dead_code)]
 pub async fn get_flat_array() -> Json<Value> {
@@ -1918,6 +1928,7 @@ pub async fn get_m3u_accounts(State(state): State<Arc<AppState>>) -> Json<Value>
     let mut results = vec![];
     for acc in accounts {
         let mut acc_json = serde_json::to_value(&acc).unwrap();
+        redact_m3u_account_credentials(&acc, &mut acc_json);
         extract_custom_props_to_root(&acc, &mut acc_json);
         acc_json["profiles"] = json!([]);
         acc_json["filters"] = json!([]);
@@ -2349,6 +2360,7 @@ pub async fn add_m3u_account(
                 create_default_profile(acc.id, &acc.name, acc.max_streams, &state.db).await;
 
                 let mut acc_json = serde_json::to_value(&acc).unwrap();
+                redact_m3u_account_credentials(&acc, &mut acc_json);
                 extract_custom_props_to_root(&acc, &mut acc_json);
                 acc_json["profiles"] = json!([]);
                 acc_json["filters"] = json!([]);
@@ -2387,6 +2399,7 @@ pub async fn get_m3u_account(
     {
         Ok(Some(acc)) => {
             let mut acc_json = serde_json::to_value(&acc).unwrap();
+            redact_m3u_account_credentials(&acc, &mut acc_json);
             extract_custom_props_to_root(&acc, &mut acc_json);
             acc_json["profiles"] = json!([]);
             acc_json["filters"] = json!([]);
@@ -3102,7 +3115,9 @@ pub async fn update_m3u_account(
     }
 
     if let Some(user) = payload.get("username").and_then(|v| v.as_str()) {
-        active.username = sea_orm::Set(Some(user.to_string()));
+        if !(user.is_empty() && acc.username.is_some()) {
+            active.username = sea_orm::Set(empty_string_as_none(Some(user)));
+        }
     }
 
     if let Some(pass) = payload.get("password").and_then(|v| v.as_str()) {
@@ -3140,6 +3155,7 @@ pub async fn update_m3u_account(
         }
 
         let mut acc_json = serde_json::to_value(&updated).unwrap();
+        redact_m3u_account_credentials(&updated, &mut acc_json);
         extract_custom_props_to_root(&updated, &mut acc_json);
         acc_json["profiles"] = json!([]);
         acc_json["filters"] = json!([]);
@@ -3955,6 +3971,42 @@ mod tests {
         assert_eq!(get_val("backend_url"), "");
         assert_eq!(get_val("version"), "0.22.1");
         assert_eq!(get_val("maintenance_mode"), false);
+    }
+
+    #[test]
+    fn test_redact_m3u_account_credentials_removes_secret_fields() {
+        let account = m3u_account::Model {
+            id: 1,
+            name: "Provider".to_string(),
+            server_url: Some("http://example.test".to_string()),
+            max_streams: 1,
+            is_active: true,
+            created_at: chrono::Utc::now().into(),
+            updated_at: None,
+            user_agent_id: None,
+            server_group_id: None,
+            locked: false,
+            stream_profile_id: None,
+            custom_properties: None,
+            refresh_interval: 24,
+            refresh_task_id: None,
+            file_path: None,
+            stale_stream_days: 7,
+            account_type: "XC".to_string(),
+            password: Some("secret-password".to_string()),
+            username: Some("secret-user".to_string()),
+            last_message: None,
+            status: "pending".to_string(),
+            priority: 1,
+        };
+
+        let mut value = serde_json::to_value(&account).unwrap();
+        redact_m3u_account_credentials(&account, &mut value);
+
+        assert!(value.get("username").is_none());
+        assert!(value.get("password").is_none());
+        assert_eq!(value["has_username"], true);
+        assert_eq!(value["has_password"], true);
     }
 }
 
