@@ -3,10 +3,14 @@
 A high-performance Rust rewrite of the Dispatcharr IPTV middleware.
 
 ## Features
-- Zero-copy stream proxying
-- Failover support
-- Async SQLite with SeaORM
-- API compatibility with SvelteKit frontend
+- **High-Performance Middleware**: Zero-copy stream proxying with failover support.
+- **M3U & Xtream Codes (XC)**: Full support for both playlist files and XC API providers.
+- **VOD & Series Management**: Segmented ingestion for Movies and Series with customizable opt-out toggles.
+- **Automated Background Sync**: Periodic provider refreshes with staggered scheduling and jitter to prevent server hammering.
+- **Stream Statistics**: Accurate, persisted stream tallying per category for clear platform overview.
+- **Robust Persistence**: Async SQLite storage using SeaORM with comprehensive category mapping.
+- **Telemetry**: Detailed activity logging for both manual and automated tasks.
+- **Frontend Integration**: Seamless API compatibility with the Svelte 5 management interface.
 
 ## Development
 1. `cp .env.example .env`
