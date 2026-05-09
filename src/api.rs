@@ -2737,6 +2737,13 @@ pub async fn refresh_m3u_account(
         }
     };
 
+    if account.locked || account.name.eq_ignore_ascii_case("custom") {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "Custom provider cannot be refreshed"})),
+        );
+    }
+
     let url = if is_xc_account(&account.account_type) {
         format!(
             "{}/get.php?username={}&password={}&type=m3u_plus&output=ts",
@@ -2796,7 +2803,8 @@ pub async fn refresh_m3u_account(
                 {
                     let mut active: m3u_account::ActiveModel = acc.into();
                     active.status = sea_orm::Set("failed".to_string());
-                    active.last_message = sea_orm::Set(Some(msg.chars().take(255).collect()));
+                    let sanitized = crate::m3u::sanitize_provider_error_message(&msg);
+                    active.last_message = sea_orm::Set(Some(sanitized.chars().take(255).collect()));
                     let _ = active.update(&db_clone).await;
                 }
             }
@@ -2821,6 +2829,8 @@ pub async fn refresh_all_m3u_accounts(
 
     let accounts = m3u_account::Entity::find()
         .filter(m3u_account::Column::IsActive.eq(true))
+        .filter(m3u_account::Column::Locked.eq(false))
+        .filter(m3u_account::Column::Name.ne("custom"))
         .all(&state.db)
         .await
         .unwrap_or_default();
@@ -3704,6 +3714,8 @@ pub async fn refresh_m3u_all(State(state): State<Arc<AppState>>) -> impl IntoRes
     use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
     let accounts = match m3u_account::Entity::find()
         .filter(m3u_account::Column::IsActive.eq(true))
+        .filter(m3u_account::Column::Locked.eq(false))
+        .filter(m3u_account::Column::Name.ne("custom"))
         .all(&state.db)
         .await
     {
@@ -3779,7 +3791,9 @@ pub async fn refresh_m3u_all(State(state): State<Arc<AppState>>) -> impl IntoRes
                         use sea_orm::ActiveModelTrait;
                         let mut active: crate::entities::m3u_account::ActiveModel = acc.into();
                         active.status = sea_orm::Set("failed".to_string());
-                        active.last_message = sea_orm::Set(Some(msg.chars().take(255).collect()));
+                        let sanitized = crate::m3u::sanitize_provider_error_message(&msg);
+                        active.last_message =
+                            sea_orm::Set(Some(sanitized.chars().take(255).collect()));
                         let _ = active.update(&db_clone).await;
                     }
                 }

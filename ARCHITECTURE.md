@@ -15,6 +15,7 @@ Dispatcharr is a high-performance M3U/XC/EPG proxy and management system built w
     - Supports standard M3U playlists and Xtream Codes API.
     - Provider entries are ingested as `dispatcharr_channels_stream` rows first. The legacy auto-channel-sync path can promote unmapped streams into generated channels, and those generated channels are tied back to the provider through `auto_created_by_id` for cleanup, but normal operation should curate channels separately and assign one or more streams to them.
     - Legacy auto-channel-sync is disabled unless `DISPATCHARR_ENABLE_LEGACY_AUTO_CHANNEL_SYNC=true` is set, and it refuses to generate more than `DISPATCHARR_AUTO_CHANNEL_SYNC_LIMIT` channels in one sync (default `100`).
+    - Locked/custom providers are excluded from manual, bulk, and background refresh paths.
     - **Case-Insensitive Account Detection**: A centralized `is_xc_account()` helper in `api.rs` normalizes all XC type comparisons. This prevents routing failures caused by case mismatches between the frontend (`"xc"`) and backend (`"XC"`) — ensuring provider creation, refresh, and background sync all correctly identify XC accounts regardless of case.
     - **VOD Support**: Segmented ingestion for Movies and Series.
     - **Enable VOD Toggle**: Providers can opt-out of VOD ingestion via a custom property `enable_vod`. **Disabled by default** to minimize unintended data ingestion.

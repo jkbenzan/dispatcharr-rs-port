@@ -84,6 +84,11 @@ fn truncate(s: &str, max_chars: usize) -> String {
     }
 }
 
+pub fn sanitize_provider_error_message(message: &str) -> String {
+    let re = Regex::new(r"([?&](?:username|password)=)[^&\s]+").unwrap();
+    re.replace_all(message, "${1}<redacted>").to_string()
+}
+
 pub async fn handle_sync_error(
     db: &sea_orm::DatabaseConnection,
     account_id: i64,
@@ -93,7 +98,8 @@ pub async fn handle_sync_error(
     if let Ok(Some(acc)) = m3u_account::Entity::find_by_id(account_id).one(db).await {
         let mut active: m3u_account::ActiveModel = acc.into();
         active.status = Set("failed".to_string());
-        active.last_message = Set(Some(truncate(&error.to_string(), 255)));
+        let sanitized = sanitize_provider_error_message(&error.to_string());
+        active.last_message = Set(Some(truncate(&sanitized, 255)));
         let _ = active.update(db).await;
     }
     Err(error)

@@ -658,7 +658,11 @@ async fn main() {
 
                 for acc in accounts {
                     let refresh_interval = acc.refresh_interval as i64;
-                    if refresh_interval <= 0 || acc.status == "fetching" {
+                    if refresh_interval <= 0
+                        || acc.status == "fetching"
+                        || acc.locked
+                        || acc.name.eq_ignore_ascii_case("custom")
+                    {
                         continue;
                     }
 
