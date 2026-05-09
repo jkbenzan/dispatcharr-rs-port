@@ -851,13 +851,26 @@ pub async fn fetch_and_parse_xc(
         }
     }
     // --- End Stale Stream Cleanup ---
-
     let _ = crate::channel_sync::sync_channels_for_account(db, account_id).await;
-    let mut final_active: m3u_account::ActiveModel = acc.into();
+    let mut final_active: m3u_account::ActiveModel = acc.clone().into();
     final_active.status = Set("success".to_string());
     final_active.last_message = Set(Some("Groups mapped successfully".to_string()));
     final_active.updated_at = Set(Some(Utc::now().into()));
     let _ = final_active.update(db).await;
+
+    if !is_background {
+        let _ = crate::events::record_event(
+            db,
+            "m3u_refresh",
+            Some(acc.name.clone()),
+            serde_json::json!({
+                "account_id": account_id,
+                "status": "success",
+                "type": "xc_live"
+            })
+        ).await;
+    }
+
     broadcast_progress(
         &ws_sender,
         account_id,
@@ -1221,11 +1234,24 @@ pub async fn fetch_and_parse_xc_series(
     }
 
     if let Ok(Some(acc)) = m3u_account::Entity::find_by_id(account_id).one(db).await {
-        let mut final_active: m3u_account::ActiveModel = acc.into();
+        let mut final_active: m3u_account::ActiveModel = acc.clone().into();
         final_active.status = Set("success".to_string());
         final_active.last_message = Set(Some("Successfully synced Series!".to_string()));
         final_active.updated_at = Set(Some(Utc::now().into()));
         let _ = final_active.update(db).await;
+
+        if !is_background {
+            let _ = crate::events::record_event(
+                db,
+                "m3u_refresh",
+                Some(acc.name.clone()),
+                serde_json::json!({
+                    "account_id": account_id,
+                    "status": "success",
+                    "type": "xc_series"
+                })
+            ).await;
+        }
     }
 
     Ok(())
