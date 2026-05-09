@@ -6,12 +6,14 @@ Dispatcharr is a high-performance M3U/XC/EPG proxy and management system built w
 ## Backend (Rust)
 - **Framework**: Axum
 - **Database**: External PostgreSQL via SeaORM. Runtime configuration is provided through `DATABASE_URL`, and production/deployed environments are expected to point at the external Postgres instance. SeaORM is compiled with both PostgreSQL and SQLite features because a separate read-only SQLite sidecar is used for channel database metadata.
+- **Channel Model**: Channels are curated playback outputs. Provider M3U/XC entries are stored as streams and assigned to channels through `dispatcharr_channels_channelstream`; a single channel can have multiple streams for proxy failover, quality selection, concurrency limits, and buffering behavior. Stream rows should not be treated as user-facing channels. The historical auto-channel-sync path can generate channels from streams, but it is a legacy workflow and is not practical for normal provider-scale usage.
 - **Background Worker**: 
     - Handles periodic M3U and EPG refreshes.
     - **Staggering**: Refreshes are staggered across accounts with a 60s delay and a stable per-account jitter (±30s) to prevent thundering herd issues.
     - **Throttling**: Accounts are only refreshed if the `refresh_interval` has passed since the last successful update.
 - **M3U/XC Ingestion**:
     - Supports standard M3U playlists and Xtream Codes API.
+    - Provider entries are ingested as `dispatcharr_channels_stream` rows first. The legacy auto-channel-sync path can promote unmapped streams into generated channels, and those generated channels are tied back to the provider through `auto_created_by_id` for cleanup, but normal operation should curate channels separately and assign one or more streams to them.
     - **Case-Insensitive Account Detection**: A centralized `is_xc_account()` helper in `api.rs` normalizes all XC type comparisons. This prevents routing failures caused by case mismatches between the frontend (`"xc"`) and backend (`"XC"`) — ensuring provider creation, refresh, and background sync all correctly identify XC accounts regardless of case.
     - **VOD Support**: Segmented ingestion for Movies and Series.
     - **Enable VOD Toggle**: Providers can opt-out of VOD ingestion via a custom property `enable_vod`. **Disabled by default** to minimize unintended data ingestion.

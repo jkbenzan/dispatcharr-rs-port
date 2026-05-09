@@ -54,6 +54,7 @@ pub async fn sync_channels_for_account(
                 channel_group_id: Set(stream.channel_group_id),
                 uuid: Set(Uuid::new_v4()),
                 auto_created: Set(true),
+                auto_created_by_id: Set(Some(account_id)),
                 created_at: Set(now),
                 updated_at: Set(now),
                 is_adult: Set(false),
