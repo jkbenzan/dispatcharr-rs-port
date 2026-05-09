@@ -54,6 +54,7 @@ Dispatcharr is a high-performance M3U/XC/EPG proxy and management system built w
 - `cargo test` passes all current unit tests.
 - Runtime startup has been verified against the external PostgreSQL database and the downloaded channel-data SQLite sidecar; the backend connects and listens on port 8080.
 - The optional channel-data sidecar is stored locally at `data/channel_data.db`, is ignored by git, and can be replaced or redirected with `CHANNEL_DB_PATH` when needed.
+- Channel DB match application has been smoke-tested against an existing external-PostgreSQL channel row by applying and restoring name/TVG-ID fields.
 - `npm run check` passes with zero warnings.
 - `npm run build` passes when the process can write the repository-root `dist` directory.
 - `npm install` currently reports low-severity audit findings; do not run `npm audit fix --force` without checking for breaking package changes.
