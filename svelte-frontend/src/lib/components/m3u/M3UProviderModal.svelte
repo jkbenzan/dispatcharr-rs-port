@@ -23,7 +23,7 @@
 
 	// Form state
 	let name = $state('');
-	let accountType = $state('m3u');
+	let accountType = $state('');
 	let m3uUrl = $state('');
 	let serverUrl = $state('');
 	let username = $state('');
@@ -31,7 +31,7 @@
 	let maxStreams = $state(1);
 	let refreshInterval = $state(24);
 	let staleStreamDays = $state(7);
-	let enableVod = $state(true);
+	let enableVod = $state(false);
 
 	// Provider-specific settings (mappings)
 	let groupSettings = $state<Record<number, { enabled: boolean; auto_channel_sync: boolean }>>({});
@@ -98,7 +98,7 @@
 			} else {
 				// Reset form
 				name = '';
-				accountType = 'm3u';
+				accountType = '';
 				m3uUrl = '';
 				serverUrl = '';
 				username = '';
@@ -106,7 +106,7 @@
 				maxStreams = 1;
 				refreshInterval = 24;
 				staleStreamDays = 7;
-				enableVod = true;
+				enableVod = false;
 				groupSettings = {};
 				categorySettings = {};
 				activeTab = 'general';
@@ -134,6 +134,12 @@
 		e.preventDefault();
 		error = '';
 		loading = true;
+		
+		if (!accountType) {
+			error = 'Please select an account type';
+			loading = false;
+			return;
+		}
 
 		try {
 			const payload = {
@@ -292,7 +298,8 @@
 					<div class="form-row">
 						<div class="form-group">
 							<label for="accountType">Account Type</label>
-							<select id="accountType" bind:value={accountType}>
+							<select id="accountType" bind:value={accountType} required>
+								<option value="" disabled selected>-- Please Select --</option>
 								<option value="m3u">Standard M3U Playlist</option>
 								<option value="xc">XTREAM Codes</option>
 							</select>

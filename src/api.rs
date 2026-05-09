@@ -2182,8 +2182,16 @@ pub async fn add_m3u_account(
     let account_type = payload
         .get("account_type")
         .and_then(|v| v.as_str())
-        .unwrap_or("XC")
-        .to_string();
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+
+    if account_type.is_none() {
+        return (
+            axum::http::StatusCode::BAD_REQUEST,
+            Json(json!({"error": "Account type is required"})),
+        );
+    }
+    let account_type = account_type.unwrap();
 
     let server_url = payload
         .get("server_url")
