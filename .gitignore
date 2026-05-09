@@ -10,6 +10,9 @@
 .env
 *.db
 *.db-journal
+*.db-shm
+*.db-wal
+*.db.part
 
 # IDEs
 .vscode/

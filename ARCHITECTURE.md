@@ -51,6 +51,8 @@ Dispatcharr is a high-performance M3U/XC/EPG proxy and management system built w
 ## Verification Status
 - `cargo check` passes with local Rust warning debt cleared; SeaORM is upgraded to the 1.1 line, which resolves the prior `sqlx-postgres v0.7.4` future-incompatibility notice.
 - `cargo test` passes all current unit tests.
+- Runtime startup has been verified against the external PostgreSQL database and the downloaded channel-data SQLite sidecar; the backend connects and listens on port 8080.
+- The optional channel-data sidecar is stored locally at `data/channel_data.db`, is ignored by git, and can be replaced or redirected with `CHANNEL_DB_PATH` when needed.
 - `npm run check` passes with zero warnings.
 - `npm run build` passes when the process can write the repository-root `dist` directory.
 - `npm install` currently reports low-severity audit findings; do not run `npm audit fix --force` without checking for breaking package changes.
