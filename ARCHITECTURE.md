@@ -16,6 +16,8 @@ Dispatcharr is a high-performance M3U/XC/EPG proxy and management system built w
     - **VOD Support**: Segmented ingestion for Movies and Series.
     - **Enable VOD Toggle**: Providers can opt-out of VOD ingestion via a custom property `enable_vod`. **Disabled by default** to minimize unintended data ingestion.
     - **Mandatory Account Type**: New providers require an explicit choice between M3U and XC types; no system default is assumed.
+    - **URL Normalization**: Robust XC base URL extraction logic preserves subpaths while stripping specific IPTV filenames (e.g., `get.php`, `player_api.php`) and query strings.
+    - **Centralized Error Handling**: All synchronization routines propagate connectivity and API errors using a centralized `handle_sync_error` helper. This ensures failures are logged, the account status is updated to `"failed"` in the database, and the user is informed via the UI.
     - **Activity Log**: Sync events are recorded in `core_systemevent` for both manual and background refreshes.
 - **Stream Counting & Statistics**:
     - **Initial Prefetch**: During provider setup, a "full fetch" is performed to tally streams per category, allowing the UI to display "{n} streams found" before categories are selected.
@@ -33,4 +35,5 @@ Dispatcharr is a high-performance M3U/XC/EPG proxy and management system built w
 ## Telemetry & Logging
 - **System Events**: Stored in `core_systemevent`.
 - **Sync Visibility**: Both manual and background refreshes are recorded in the activity log. Events include an `is_background` flag in the payload to distinguish automated tasks.
-- **Errors**: All sync errors are logged with detailed context for troubleshooting.
+- **Errors**: All sync errors are propagated using the `?` operator to avoid silent failures. The `handle_sync_error` helper automatically updates the account `status` to `"failed"` and persists the error message for visibility in the Provider Grid.
+- **Diagnostic Logging**: Backend sync tasks log discovered category and stream counts to stdout/stderr for operational monitoring and system integrity verification.

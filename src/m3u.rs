@@ -84,6 +84,21 @@ fn truncate(s: &str, max_chars: usize) -> String {
     }
 }
 
+pub async fn handle_sync_error(
+    db: &sea_orm::DatabaseConnection,
+    account_id: i64,
+    error: Box<dyn std::error::Error + Send + Sync>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    eprintln!("[Sync Error] Account {}: {}", account_id, error);
+    if let Ok(Some(acc)) = m3u_account::Entity::find_by_id(account_id).one(db).await {
+        let mut active: m3u_account::ActiveModel = acc.into();
+        active.status = Set("failed".to_string());
+        active.last_message = Set(Some(truncate(&error.to_string(), 255)));
+        let _ = active.update(db).await;
+    }
+    Err(error)
+}
+
 pub fn broadcast_progress(
     ws_sender: &Option<Sender<Value>>,
     account_id: i64,
@@ -171,13 +186,12 @@ pub async fn fetch_and_parse_m3u(
     // Cleanup
     let _ = std::fs::remove_file(&file_path);
     
-    if let Err(e) = &result {
-        eprintln!("[M3U] Error during refresh for account {}: {}", account_id, e);
-        // Even if it failed, we update the timestamp so we don't loop every 5 minutes
+    if let Err(e) = result {
         let _ = update_account_timestamp(db, account_id).await;
+        return handle_sync_error(db, account_id, e).await;
     }
 
-    result
+    Ok(())
 }
 
 pub async fn update_account_timestamp(db: &DatabaseConnection, account_id: i64) -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -608,275 +622,294 @@ pub async fn fetch_and_parse_xc(
         _ => return Err("Account not found".into()),
     };
 
-    let mut active: m3u_account::ActiveModel = acc.clone().into();
-    active.status = Set("fetching".to_string());
-    active.last_message = Set(Some("Fetching XC API categories...".to_string()));
-    let _ = active.update(db).await;
-    broadcast_progress(
-        &ws_sender,
-        account_id,
-        "fetching",
-        "downloading",
-        10,
-        "Fetching XC API categories...",
-    );
-
-    let mut server_url_raw = acc.server_url.clone().unwrap_or_default();
-    server_url_raw = server_url_raw.trim_end_matches('/').to_string();
-
-    let server_url = if let Some(idx) = server_url_raw.find("://") {
-        let protocol = &server_url_raw[..idx];
-        let rest = &server_url_raw[idx + 3..];
-        let domain = rest.split('/').next().unwrap_or(rest);
-        format!("{}://{}", protocol, domain)
-    } else {
-        let domain = server_url_raw.split('/').next().unwrap_or(&server_url_raw);
-        format!("http://{}", domain)
-    };
-    let username = acc.username.clone().unwrap_or_default();
-    let password = acc.password.clone().unwrap_or_default();
-
-    eprintln!("[XC] Connecting to server: {}", server_url);
-
-    let client = reqwest::Client::builder()
-        .user_agent(get_user_agent_string(db, acc.user_agent_id).await)
-        .timeout(std::time::Duration::from_secs(60))
-        .build()?;
-
-    let categories =
-        crate::xtream_codes::get_live_categories(&client, &server_url, &username, &password)
-            .await?;
-
-    let mut active2: m3u_account::ActiveModel = acc.clone().into();
-    active2.last_message = Set(Some("Fetching XC API streams...".to_string()));
-    let _ = active2.update(db).await;
-
-    let xc_streams =
-        crate::xtream_codes::get_live_streams(&client, &server_url, &username, &password).await?;
-
-    let mut streams_batch = Vec::new();
-    let mut group_id_map = HashMap::new();
-    let mut group_counts: HashMap<i64, i32> = HashMap::new();
-    let mut current_hashes = Vec::new();
-
-    // Pre-load existing stream hashes to avoid duplicate key violations on re-sync
-    let existing_records = stream::Entity::find()
-        .filter(stream::Column::M3uAccountId.eq(account_id))
-        .all(db)
-        .await
-        .unwrap_or_default();
-    let mut hash_set: HashSet<String> = existing_records
-        .into_iter()
-        .filter_map(|r| r.stream_hash)
-        .collect();
-
-    let auto_sync_live = acc
-        .custom_properties
-        .as_ref()
-        .and_then(|cp| {
-            cp.get("auto_enable_new_groups_live")
-                .and_then(|v| v.as_bool())
-        })
-        .unwrap_or(true);
-
-    let mut category_map = HashMap::new();
-    for cat in categories {
-        category_map.insert(cat.category_id.clone(), cat.category_name.clone());
-        get_or_create_channel_group_id(
-            db,
-            &cat.category_name,
+    let result: Result<(), Box<dyn Error + Send + Sync>> = async {
+        let mut active: m3u_account::ActiveModel = acc.clone().into();
+        active.status = Set("fetching".to_string());
+        active.last_message = Set(Some("Fetching XC API categories...".to_string()));
+        let _ = active.update(db).await;
+        broadcast_progress(
+            &ws_sender,
             account_id,
-            auto_sync_live,
-            &mut group_id_map,
-        )
-        .await;
-    }
+            "fetching",
+            "downloading",
+            10,
+            "Fetching XC API categories...",
+        );
 
-    // Load disabled group IDs and purge any existing streams in those groups.
-    let xc_disabled_group_ids: HashSet<i64> = channel_group_m3u_account::Entity::find()
-        .filter(channel_group_m3u_account::Column::M3uAccountId.eq(account_id))
-        .filter(channel_group_m3u_account::Column::Enabled.eq(false))
-        .all(db)
-        .await
-        .unwrap_or_default()
-        .into_iter()
-        .map(|m| m.channel_group_id as i64)
-        .collect();
+        let mut server_url_raw = acc.server_url.clone().unwrap_or_default();
+        server_url_raw = server_url_raw.trim_end_matches('/').to_string();
 
-    if !xc_disabled_group_ids.is_empty() {
-        let ids: Vec<i64> = xc_disabled_group_ids.iter().cloned().collect();
-        let _ = stream::Entity::delete_many()
+        let server_url = {
+            let mut base = server_url_raw.clone();
+            if let Some(idx) = base.find('?') {
+                base.truncate(idx);
+            }
+            let lower = base.to_lowercase();
+            if lower.ends_with("/get.php") {
+                base.truncate(base.len() - 8);
+            } else if lower.ends_with("/player_api.php") {
+                base.truncate(base.len() - 15);
+            } else if lower.ends_with("/enigma2.php") {
+                base.truncate(base.len() - 12);
+            } else if lower.ends_with("/xmltv.php") {
+                base.truncate(base.len() - 10);
+            }
+            base.trim_end_matches('/').to_string()
+        };
+
+        let username = acc.username.clone().unwrap_or_default();
+        let password = acc.password.clone().unwrap_or_default();
+
+        eprintln!("[XC] Connecting to server: {}", server_url);
+
+        let client = reqwest::Client::builder()
+            .user_agent(get_user_agent_string(db, acc.user_agent_id).await)
+            .timeout(std::time::Duration::from_secs(60))
+            .build()?;
+
+        let categories =
+            crate::xtream_codes::get_live_categories(&client, &server_url, &username, &password)
+                .await?;
+        println!("[XC Sync] Found {} categories for account {}", categories.len(), account_id);
+
+        let mut active2: m3u_account::ActiveModel = acc.clone().into();
+        active2.last_message = Set(Some("Fetching XC API streams...".to_string()));
+        let _ = active2.update(db).await;
+
+        let xc_streams =
+            crate::xtream_codes::get_live_streams(&client, &server_url, &username, &password).await?;
+        println!("[XC Sync] Found {} streams for account {}", xc_streams.len(), account_id);
+
+        let mut streams_batch = Vec::new();
+        let mut group_id_map = HashMap::new();
+        let mut group_counts: HashMap<i64, i32> = HashMap::new();
+        let mut current_hashes = Vec::new();
+
+        // Pre-load existing stream hashes to avoid duplicate key violations on re-sync
+        let existing_records = stream::Entity::find()
             .filter(stream::Column::M3uAccountId.eq(account_id))
-            .filter(stream::Column::ChannelGroupId.is_in(ids))
-            .exec(db)
-            .await;
-        tracing::info!(
-            "[XC] Purged existing streams for {} disabled groups on account {}",
-            xc_disabled_group_ids.len(),
-            account_id
-        );
-    }
-
-    for s in xc_streams {
-        let group_title = category_map
-            .get(&s.category_id)
-            .cloned()
-            .unwrap_or_else(|| "Unknown Category".to_string());
-
-        let url = format!(
-            "{}/live/{}/{}/{}.ts",
-            server_url.trim_end_matches('/'),
-            username,
-            password,
-            s.stream_id
-        );
-
-        let mut hasher = Sha256::new();
-        hasher.update(url.as_bytes());
-        hasher.update(&account_id.to_be_bytes());
-        let result = hex::encode(hasher.finalize());
-
-        current_hashes.push(result.clone());
-
-        if !hash_set.contains(&result) {
-            hash_set.insert(result.clone());
-
-            let mut cp = serde_json::Map::new();
-            cp.insert(
-                "group_title".to_string(),
-                serde_json::Value::String(group_title.clone()),
-            );
-            if let Some(num) = s.num {
-                cp.insert("channel-number".to_string(), num);
-            }
-
-            let cg_id = group_id_map.get(&group_title).cloned();
-
-            // Skip streams whose group is disabled for this account
-            if let Some(gid) = cg_id {
-                *group_counts.entry(gid).or_insert(0) += 1;
-                if xc_disabled_group_ids.contains(&gid) {
-                    continue;
-                }
-            }
-
-            let stream_model = stream::ActiveModel {
-                m3u_account_id: Set(Some(account_id)),
-                name: Set(truncate(&s.name, 255)),
-                url: Set(Some(url)),
-                logo_url: Set(s.stream_icon.map(|l| truncate(&l, 500))),
-                tvg_id: Set(s.epg_channel_id.map(|t| truncate(&t, 255))),
-                channel_group_id: Set(cg_id),
-                is_custom: Set(false),
-                is_stale: Set(false),
-                is_adult: Set(false),
-                current_viewers: Set(0),
-                last_seen: Set(Utc::now().into()),
-                updated_at: Set(Utc::now().into()),
-                stream_hash: Set(Some(result)),
-                custom_properties: Set(Some(serde_json::Value::Object(cp))),
-                ..Default::default()
-            };
-            streams_batch.push(stream_model);
-
-            if streams_batch.len() >= 500 {
-                let chunk = std::mem::take(&mut streams_batch);
-                if let Err(e) = stream::Entity::insert_many(chunk).exec(db).await {
-                    println!("[XC Sync] ERROR inserting stream chunk: {:?}", e);
-                }
-            }
-        }
-    }
-
-    if !streams_batch.is_empty() {
-        if let Err(e) = stream::Entity::insert_many(streams_batch).exec(db).await {
-            println!("[XC Sync] ERROR inserting final stream batch: {:?}", e);
-        }
-    }
-
-    // --- Stale Stream Cleanup ---
-    let now_fixed: chrono::DateTime<chrono::FixedOffset> = Utc::now().into();
-
-    // --- Update Group Stream Counts ---
-    for (cg_id, count) in group_counts {
-        let mapping = channel_group_m3u_account::Entity::find()
-            .filter(channel_group_m3u_account::Column::ChannelGroupId.eq(cg_id))
-            .filter(channel_group_m3u_account::Column::M3uAccountId.eq(account_id))
-            .one(db)
+            .all(db)
             .await
-            .unwrap_or(None);
-        
-        if let Some(m) = mapping {
-            let mut cp = match m.custom_properties.as_ref() {
-                Some(serde_json::Value::Object(map)) => map.clone(),
-                _ => serde_json::Map::new(),
-            };
-            cp.insert("stream_count".to_string(), serde_json::Value::Number(count.into()));
+            .unwrap_or_default();
+        let mut hash_set: HashSet<String> = existing_records
+            .into_iter()
+            .filter_map(|r| r.stream_hash)
+            .collect();
 
-            let mut active: channel_group_m3u_account::ActiveModel = m.into();
-            active.custom_properties = Set(Some(serde_json::Value::Object(cp)));
-            let _ = active.update(db).await;
+        let auto_sync_live = acc
+            .custom_properties
+            .as_ref()
+            .and_then(|cp| {
+                cp.get("auto_enable_new_groups_live")
+                    .and_then(|v| v.as_bool())
+            })
+            .unwrap_or(true);
+
+        let mut category_map = HashMap::new();
+        for cat in categories {
+            category_map.insert(cat.category_id.clone(), cat.category_name.clone());
+            get_or_create_channel_group_id(
+                db,
+                &cat.category_name,
+                account_id,
+                auto_sync_live,
+                &mut group_id_map,
+            )
+            .await;
         }
-    }
-    if !current_hashes.is_empty() {
-        for chunk in current_hashes.chunks(1000) {
-            let _ = stream::Entity::update_many()
-                .col_expr(
-                    stream::Column::LastSeen,
-                    sea_orm::sea_query::Expr::value(now_fixed),
-                )
+
+        // Load disabled group IDs and purge any existing streams in those groups.
+        let xc_disabled_group_ids: HashSet<i64> = channel_group_m3u_account::Entity::find()
+            .filter(channel_group_m3u_account::Column::M3uAccountId.eq(account_id))
+            .filter(channel_group_m3u_account::Column::Enabled.eq(false))
+            .all(db)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .map(|m| m.channel_group_id as i64)
+            .collect();
+
+        if !xc_disabled_group_ids.is_empty() {
+            let ids: Vec<i64> = xc_disabled_group_ids.iter().cloned().collect();
+            let _ = stream::Entity::delete_many()
                 .filter(stream::Column::M3uAccountId.eq(account_id))
-                .filter(stream::Column::StreamHash.is_in(chunk.to_vec()))
+                .filter(stream::Column::ChannelGroupId.is_in(ids))
                 .exec(db)
                 .await;
-        }
-    }
-
-    let stale_days = acc.stale_stream_days;
-    let stale_cutoff_utc = Utc::now() - chrono::Duration::days(stale_days as i64);
-    let stale_cutoff_fixed: chrono::DateTime<chrono::FixedOffset> = stale_cutoff_utc.into();
-
-    if let Ok(r) = stream::Entity::delete_many()
-        .filter(stream::Column::M3uAccountId.eq(account_id))
-        .filter(stream::Column::LastSeen.lt(stale_cutoff_fixed))
-        .exec(db)
-        .await
-    {
-        if r.rows_affected > 0 {
-            println!(
-                "[XC Sync] Deleted {} stale streams for account {}",
-                r.rows_affected, account_id
+            tracing::info!(
+                "[XC] Purged existing streams for {} disabled groups on account {}",
+                xc_disabled_group_ids.len(),
+                account_id
             );
         }
+
+        for s in xc_streams {
+            let group_title = category_map
+                .get(&s.category_id)
+                .cloned()
+                .unwrap_or_else(|| "Unknown Category".to_string());
+
+            let url = format!(
+                "{}/live/{}/{}/{}.ts",
+                server_url.trim_end_matches('/'),
+                username,
+                password,
+                s.stream_id
+            );
+
+            let mut hasher = Sha256::new();
+            hasher.update(url.as_bytes());
+            hasher.update(&account_id.to_be_bytes());
+            let result = hex::encode(hasher.finalize());
+
+            current_hashes.push(result.clone());
+
+            if !hash_set.contains(&result) {
+                hash_set.insert(result.clone());
+
+                let mut cp = serde_json::Map::new();
+                cp.insert(
+                    "group_title".to_string(),
+                    serde_json::Value::String(group_title.clone()),
+                );
+                if let Some(num) = s.num {
+                    cp.insert("channel-number".to_string(), num);
+                }
+
+                let cg_id = group_id_map.get(&group_title).cloned();
+
+                // Skip streams whose group is disabled for this account
+                if let Some(gid) = cg_id {
+                    *group_counts.entry(gid).or_insert(0) += 1;
+                    if xc_disabled_group_ids.contains(&gid) {
+                        continue;
+                    }
+                }
+
+                let stream_model = stream::ActiveModel {
+                    m3u_account_id: Set(Some(account_id)),
+                    name: Set(truncate(&s.name, 255)),
+                    url: Set(Some(url)),
+                    logo_url: Set(s.stream_icon.map(|l| truncate(&l, 500))),
+                    tvg_id: Set(s.epg_channel_id.map(|t| truncate(&t, 255))),
+                    channel_group_id: Set(cg_id),
+                    is_custom: Set(false),
+                    is_stale: Set(false),
+                    is_adult: Set(false),
+                    current_viewers: Set(0),
+                    last_seen: Set(Utc::now().into()),
+                    updated_at: Set(Utc::now().into()),
+                    stream_hash: Set(Some(result)),
+                    custom_properties: Set(Some(serde_json::Value::Object(cp))),
+                    ..Default::default()
+                };
+                streams_batch.push(stream_model);
+
+                if streams_batch.len() >= 500 {
+                    let chunk = std::mem::take(&mut streams_batch);
+                    if let Err(e) = stream::Entity::insert_many(chunk).exec(db).await {
+                        println!("[XC Sync] ERROR inserting stream chunk: {:?}", e);
+                    }
+                }
+            }
+        }
+
+        if !streams_batch.is_empty() {
+            if let Err(e) = stream::Entity::insert_many(streams_batch).exec(db).await {
+                println!("[XC Sync] ERROR inserting final stream batch: {:?}", e);
+            }
+        }
+
+        // --- Stale Stream Cleanup ---
+        let now_fixed: chrono::DateTime<chrono::FixedOffset> = Utc::now().into();
+
+        // --- Update Group Stream Counts ---
+        for (cg_id, count) in group_counts {
+            let mapping = channel_group_m3u_account::Entity::find()
+                .filter(channel_group_m3u_account::Column::ChannelGroupId.eq(cg_id))
+                .filter(channel_group_m3u_account::Column::M3uAccountId.eq(account_id))
+                .one(db)
+                .await
+                .unwrap_or(None);
+            
+            if let Some(m) = mapping {
+                let mut cp = match m.custom_properties.as_ref() {
+                    Some(serde_json::Value::Object(map)) => map.clone(),
+                    _ => serde_json::Map::new(),
+                };
+                cp.insert("stream_count".to_string(), serde_json::Value::Number(count.into()));
+
+                let mut active: channel_group_m3u_account::ActiveModel = m.into();
+                active.custom_properties = Set(Some(serde_json::Value::Object(cp)));
+                let _ = active.update(db).await;
+            }
+        }
+        if !current_hashes.is_empty() {
+            for chunk in current_hashes.chunks(1000) {
+                let _ = stream::Entity::update_many()
+                    .col_expr(
+                        stream::Column::LastSeen,
+                        sea_orm::sea_query::Expr::value(now_fixed),
+                    )
+                    .filter(stream::Column::M3uAccountId.eq(account_id))
+                    .filter(stream::Column::StreamHash.is_in(chunk.to_vec()))
+                    .exec(db)
+                    .await;
+            }
+        }
+
+        let stale_days = acc.stale_stream_days;
+        let stale_cutoff_utc = Utc::now() - chrono::Duration::days(stale_days as i64);
+        let stale_cutoff_fixed: chrono::DateTime<chrono::FixedOffset> = stale_cutoff_utc.into();
+
+        if let Ok(r) = stream::Entity::delete_many()
+            .filter(stream::Column::M3uAccountId.eq(account_id))
+            .filter(stream::Column::LastSeen.lt(stale_cutoff_fixed))
+            .exec(db)
+            .await
+        {
+            if r.rows_affected > 0 {
+                println!(
+                    "[XC Sync] Deleted {} stale streams for account {}",
+                    r.rows_affected, account_id
+                );
+            }
+        }
+        // --- End Stale Stream Cleanup ---
+        let _ = crate::channel_sync::sync_channels_for_account(db, account_id).await;
+        let mut final_active: m3u_account::ActiveModel = acc.clone().into();
+        final_active.status = Set("success".to_string());
+        final_active.last_message = Set(Some("Groups mapped successfully".to_string()));
+        final_active.updated_at = Set(Some(Utc::now().into()));
+        let _ = final_active.update(db).await;
+
+        let _ = crate::events::record_event(
+            db,
+            "m3u_refresh",
+            Some(acc.name.clone()),
+            serde_json::json!({
+                "account_id": account_id,
+                "status": "success",
+                "type": "xc_live",
+                "is_background": is_background
+            })
+        ).await;
+
+        broadcast_progress(
+            &ws_sender,
+            account_id,
+            "success",
+            "completed",
+            100,
+            "Groups mapped successfully",
+        );
+
+        Ok(())
+    }.await;
+
+    if let Err(e) = result {
+        return handle_sync_error(db, account_id, e).await;
     }
-    // --- End Stale Stream Cleanup ---
-    let _ = crate::channel_sync::sync_channels_for_account(db, account_id).await;
-    let mut final_active: m3u_account::ActiveModel = acc.clone().into();
-    final_active.status = Set("success".to_string());
-    final_active.last_message = Set(Some("Groups mapped successfully".to_string()));
-    final_active.updated_at = Set(Some(Utc::now().into()));
-    let _ = final_active.update(db).await;
-
-    let _ = crate::events::record_event(
-        db,
-        "m3u_refresh",
-        Some(acc.name.clone()),
-        serde_json::json!({
-            "account_id": account_id,
-            "status": "success",
-            "type": "xc_live",
-            "is_background": is_background
-        })
-    ).await;
-
-    broadcast_progress(
-        &ws_sender,
-        account_id,
-        "success",
-        "completed",
-        100,
-        "Groups mapped successfully",
-    );
 
     Ok(())
 }
@@ -893,14 +926,22 @@ pub async fn fetch_and_parse_xc_vod(
 
     let mut server_url_raw = acc.server_url.clone().unwrap_or_default();
     server_url_raw = server_url_raw.trim_end_matches('/').to_string();
-    let server_url = if let Some(idx) = server_url_raw.find("://") {
-        let protocol = &server_url_raw[..idx];
-        let rest = &server_url_raw[idx + 3..];
-        let domain = rest.split('/').next().unwrap_or(rest);
-        format!("{}://{}", protocol, domain)
-    } else {
-        let domain = server_url_raw.split('/').next().unwrap_or(&server_url_raw);
-        format!("http://{}", domain)
+    let server_url = {
+        let mut base = server_url_raw.clone();
+        if let Some(idx) = base.find('?') {
+            base.truncate(idx);
+        }
+        let lower = base.to_lowercase();
+        if lower.ends_with("/get.php") {
+            base.truncate(base.len() - 8);
+        } else if lower.ends_with("/player_api.php") {
+            base.truncate(base.len() - 15);
+        } else if lower.ends_with("/enigma2.php") {
+            base.truncate(base.len() - 12);
+        } else if lower.ends_with("/xmltv.php") {
+            base.truncate(base.len() - 10);
+        }
+        base.trim_end_matches('/').to_string()
     };
     let username = acc.username.clone().unwrap_or_default();
     let password = acc.password.clone().unwrap_or_default();
@@ -917,12 +958,8 @@ pub async fn fetch_and_parse_xc_vod(
     active.last_message = Set(Some("Fetching XC VOD categories...".to_string()));
     let _ = active.update(db).await;
 
-    if let Some(vod_cats) =
-        crate::xtream_codes::get_vod_categories(&client, &server_url, &username, &password)
-            .await
-            .ok()
-    {
-        for cat in vod_cats {
+    let vod_cats = crate::xtream_codes::get_vod_categories(&client, &server_url, &username, &password).await?;
+    for cat in vod_cats {
             let vc = match vod_category::Entity::find()
                 .filter(vod_category::Column::Name.eq(&cat.category_name))
                 .filter(vod_category::Column::CategoryType.eq("movie"))
@@ -973,19 +1010,14 @@ pub async fn fetch_and_parse_xc_vod(
                     .await;
             }
         }
-    }
 
     // 2. Fetch VOD Streams
     let mut active: m3u_account::ActiveModel = acc.clone().into();
     active.last_message = Set(Some("Fetching XC VOD streams...".to_string()));
     let _ = active.update(db).await;
 
-    if let Some(vod_streams) =
-        crate::xtream_codes::get_vod_streams(&client, &server_url, &username, &password)
-            .await
-            .ok()
-    {
-        for s in vod_streams.into_iter() {
+    let vod_streams = crate::xtream_codes::get_vod_streams(&client, &server_url, &username, &password).await?;
+    for s in vod_streams.into_iter() {
             if let Some(internal_cat_id) = category_id_map.get(&s.category_id) {
                 *category_counts.entry(*internal_cat_id).or_insert(0) += 1;
             }
@@ -1019,7 +1051,6 @@ pub async fn fetch_and_parse_xc_vod(
                 }
             }
         }
-    }
 
     // --- Update VOD Category Stream Counts ---
     for (cat_id, count) in category_counts {
@@ -1082,14 +1113,22 @@ pub async fn fetch_and_parse_xc_series(
 
     let mut server_url_raw = acc.server_url.clone().unwrap_or_default();
     server_url_raw = server_url_raw.trim_end_matches('/').to_string();
-    let server_url = if let Some(idx) = server_url_raw.find("://") {
-        let protocol = &server_url_raw[..idx];
-        let rest = &server_url_raw[idx + 3..];
-        let domain = rest.split('/').next().unwrap_or(rest);
-        format!("{}://{}", protocol, domain)
-    } else {
-        let domain = server_url_raw.split('/').next().unwrap_or(&server_url_raw);
-        format!("http://{}", domain)
+    let server_url = {
+        let mut base = server_url_raw.clone();
+        if let Some(idx) = base.find('?') {
+            base.truncate(idx);
+        }
+        let lower = base.to_lowercase();
+        if lower.ends_with("/get.php") {
+            base.truncate(base.len() - 8);
+        } else if lower.ends_with("/player_api.php") {
+            base.truncate(base.len() - 15);
+        } else if lower.ends_with("/enigma2.php") {
+            base.truncate(base.len() - 12);
+        } else if lower.ends_with("/xmltv.php") {
+            base.truncate(base.len() - 10);
+        }
+        base.trim_end_matches('/').to_string()
     };
     let username = acc.username.clone().unwrap_or_default();
     let password = acc.password.clone().unwrap_or_default();
@@ -1103,12 +1142,8 @@ pub async fn fetch_and_parse_xc_series(
     active.last_message = Set(Some("Fetching XC Series categories...".to_string()));
     let _ = active.update(db).await;
 
-    if let Some(series_cats) =
-        crate::xtream_codes::get_series_categories(&client, &server_url, &username, &password)
-            .await
-            .ok()
-    {
-        for cat in series_cats {
+    let series_cats = crate::xtream_codes::get_series_categories(&client, &server_url, &username, &password).await?;
+    for cat in series_cats {
             let vc = match vod_category::Entity::find()
                 .filter(vod_category::Column::Name.eq(&cat.category_name))
                 .filter(vod_category::Column::CategoryType.eq("series"))
@@ -1166,12 +1201,8 @@ pub async fn fetch_and_parse_xc_series(
     active.last_message = Set(Some("Fetching XC Series...".to_string()));
     let _ = active.update(db).await;
 
-    if let Some(series_list) =
-        crate::xtream_codes::get_series(&client, &server_url, &username, &password)
-            .await
-            .ok()
-    {
-        for s in series_list.into_iter() {
+    let series_list = crate::xtream_codes::get_series(&client, &server_url, &username, &password).await?;
+    for s in series_list.into_iter() {
             if let Some(internal_cat_id) = category_id_map.get(&s.category_id) {
                 *category_counts.entry(*internal_cat_id).or_insert(0) += 1;
             }
@@ -1267,15 +1298,24 @@ pub async fn fetch_and_parse_xc_categories(
     let mut server_url_raw = acc.server_url.clone().unwrap_or_default();
     server_url_raw = server_url_raw.trim_end_matches('/').to_string();
 
-    let server_url = if let Some(idx) = server_url_raw.find("://") {
-        let protocol = &server_url_raw[..idx];
-        let rest = &server_url_raw[idx + 3..];
-        let domain = rest.split('/').next().unwrap_or(rest);
-        format!("{}://{}", protocol, domain)
-    } else {
-        let domain = server_url_raw.split('/').next().unwrap_or(&server_url_raw);
-        format!("http://{}", domain)
+    let server_url = {
+        let mut base = server_url_raw.clone();
+        if let Some(idx) = base.find('?') {
+            base.truncate(idx);
+        }
+        let lower = base.to_lowercase();
+        if lower.ends_with("/get.php") {
+            base.truncate(base.len() - 8);
+        } else if lower.ends_with("/player_api.php") {
+            base.truncate(base.len() - 15);
+        } else if lower.ends_with("/enigma2.php") {
+            base.truncate(base.len() - 12);
+        } else if lower.ends_with("/xmltv.php") {
+            base.truncate(base.len() - 10);
+        }
+        base.trim_end_matches('/').to_string()
     };
+
     let username = acc.username.clone().unwrap_or_default();
     let password = acc.password.clone().unwrap_or_default();
 
@@ -1293,18 +1333,11 @@ pub async fn fetch_and_parse_xc_categories(
     }
 
     let live_categories =
-        match crate::xtream_codes::get_live_categories(&client, &server_url, &username, &password)
-            .await
-        {
-            Ok(c) => c,
-            Err(_) => vec![],
-        };
+        crate::xtream_codes::get_live_categories(&client, &server_url, &username, &password)
+            .await?;
 
     // Fetch Live Streams to tally counts
-    let live_streams = match crate::xtream_codes::get_live_streams(&client, &server_url, &username, &password).await {
-        Ok(s) => s,
-        Err(_) => vec![],
-    };
+    let live_streams = crate::xtream_codes::get_live_streams(&client, &server_url, &username, &password).await?;
     let mut live_counts = std::collections::HashMap::new();
     for s in live_streams {
         *live_counts.entry(s.category_id.clone()).or_insert(0) += 1;
@@ -1373,19 +1406,10 @@ pub async fn fetch_and_parse_xc_categories(
         let _ = active.update(db).await;
     }
 
-    let vod_categories =
-        match crate::xtream_codes::get_vod_categories(&client, &server_url, &username, &password)
-            .await
-        {
-            Ok(c) => c,
-            Err(_) => vec![],
-        };
+    let vod_categories = crate::xtream_codes::get_vod_categories(&client, &server_url, &username, &password).await?;
 
     // Fetch VOD Streams to tally counts
-    let vod_streams = match crate::xtream_codes::get_vod_streams(&client, &server_url, &username, &password).await {
-        Ok(s) => s,
-        Err(_) => vec![],
-    };
+    let vod_streams = crate::xtream_codes::get_vod_streams(&client, &server_url, &username, &password).await?;
     let mut vod_counts = std::collections::HashMap::new();
     for s in vod_streams {
         *vod_counts.entry(s.category_id.clone()).or_insert(0) += 1;
@@ -1460,23 +1484,10 @@ pub async fn fetch_and_parse_xc_categories(
         let _ = active.update(db).await;
     }
 
-    let series_categories = match crate::xtream_codes::get_series_categories(
-        &client,
-        &server_url,
-        &username,
-        &password,
-    )
-    .await
-    {
-        Ok(c) => c,
-        Err(_) => vec![],
-    };
+    let series_categories = crate::xtream_codes::get_series_categories(&client, &server_url, &username, &password).await?;
 
     // Fetch Series to tally counts
-    let series_list = match crate::xtream_codes::get_series(&client, &server_url, &username, &password).await {
-        Ok(s) => s,
-        Err(_) => vec![],
-    };
+    let series_list = crate::xtream_codes::get_series(&client, &server_url, &username, &password).await?;
     let mut series_counts = std::collections::HashMap::new();
     for s in series_list {
         *series_counts.entry(s.category_id.clone()).or_insert(0) += 1;
