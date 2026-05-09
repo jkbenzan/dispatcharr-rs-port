@@ -570,17 +570,16 @@ async fn parse_m3u_from_file(
             active.last_message = Set(Some("Successfully synced!".to_string()));
             let _ = active.clone().update(db).await;
 
-            if !is_background {
-                let _ = crate::events::record_event(
-                    db,
-                    "m3u_refresh",
-                    Some(acc.name.clone()),
-                    serde_json::json!({
-                        "account_id": account_id,
-                        "status": "success"
-                    })
-                ).await;
-            }
+            let _ = crate::events::record_event(
+                db,
+                "m3u_refresh",
+                Some(acc.name.clone()),
+                serde_json::json!({
+                    "account_id": account_id,
+                    "status": "success",
+                    "is_background": is_background
+                })
+            ).await;
             broadcast_progress(
                 &ws_sender,
                 account_id,
@@ -858,18 +857,17 @@ pub async fn fetch_and_parse_xc(
     final_active.updated_at = Set(Some(Utc::now().into()));
     let _ = final_active.update(db).await;
 
-    if !is_background {
-        let _ = crate::events::record_event(
-            db,
-            "m3u_refresh",
-            Some(acc.name.clone()),
-            serde_json::json!({
-                "account_id": account_id,
-                "status": "success",
-                "type": "xc_live"
-            })
-        ).await;
-    }
+    let _ = crate::events::record_event(
+        db,
+        "m3u_refresh",
+        Some(acc.name.clone()),
+        serde_json::json!({
+            "account_id": account_id,
+            "status": "success",
+            "type": "xc_live",
+            "is_background": is_background
+        })
+    ).await;
 
     broadcast_progress(
         &ws_sender,
@@ -1053,18 +1051,17 @@ pub async fn fetch_and_parse_xc_vod(
         final_active.updated_at = Set(Some(Utc::now().into()));
         let _ = final_active.update(db).await;
 
-        if !is_background {
-            let _ = crate::events::record_event(
-                db,
-                "m3u_refresh",
-                Some(acc.name.clone()),
-                serde_json::json!({
-                    "account_id": account_id,
-                    "status": "success",
-                    "type": "xc_vod"
-                })
-            ).await;
-        }
+        let _ = crate::events::record_event(
+            db,
+            "m3u_refresh",
+            Some(acc.name.clone()),
+            serde_json::json!({
+                "account_id": account_id,
+                "status": "success",
+                "type": "xc_vod",
+                "is_background": is_background
+            })
+        ).await;
     }
 
     Ok(())
@@ -1240,18 +1237,17 @@ pub async fn fetch_and_parse_xc_series(
         final_active.updated_at = Set(Some(Utc::now().into()));
         let _ = final_active.update(db).await;
 
-        if !is_background {
-            let _ = crate::events::record_event(
-                db,
-                "m3u_refresh",
-                Some(acc.name.clone()),
-                serde_json::json!({
-                    "account_id": account_id,
-                    "status": "success",
-                    "type": "xc_series"
-                })
-            ).await;
-        }
+        let _ = crate::events::record_event(
+            db,
+            "m3u_refresh",
+            Some(acc.name.clone()),
+            serde_json::json!({
+                "account_id": account_id,
+                "status": "success",
+                "type": "xc_series",
+                "is_background": is_background
+            })
+        ).await;
     }
 
     Ok(())

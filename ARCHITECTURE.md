@@ -15,7 +15,7 @@ Dispatcharr is a high-performance M3U/XC/EPG proxy and management system built w
     - **Case-Insensitive Account Detection**: Correctly handles "XC", "xc", and "xtream" types.
     - **VOD Support**: Segmented ingestion for Movies and Series.
     - **Enable VOD Toggle**: Providers can opt-out of VOD ingestion via a custom property `enable_vod`.
-    - **Activity Log**: Sync events are recorded in `core_systemevent`. Routine background successes are suppressed from the log to reduce noise.
+    - **Activity Log**: Sync events are recorded in `core_systemevent` for both manual and background refreshes.
 - **Stream Counting & Statistics**:
     - **Initial Prefetch**: During provider setup, a "full fetch" is performed to tally streams per category, allowing the UI to display "{n} streams found" before categories are selected.
     - **Periodic Updates**: Background sync tasks for Live, VOD, and Series now include a tallying phase that updates category `stream_count` in the database `custom_properties` field.
@@ -31,5 +31,5 @@ Dispatcharr is a high-performance M3U/XC/EPG proxy and management system built w
 
 ## Telemetry & Logging
 - **System Events**: Stored in `core_systemevent`.
-- **Background Suppression**: Routine successful background tasks do not create event entries.
-- **Errors**: All sync errors are logged regardless of background status.
+- **Sync Visibility**: Both manual and background refreshes are recorded in the activity log. Events include an `is_background` flag in the payload to distinguish automated tasks.
+- **Errors**: All sync errors are logged with detailed context for troubleshooting.
