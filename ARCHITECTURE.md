@@ -17,8 +17,9 @@ Dispatcharr is a high-performance M3U/XC/EPG proxy and management system built w
     - **Enable VOD Toggle**: Providers can opt-out of VOD ingestion via a custom property `enable_vod`. **Disabled by default** to minimize unintended data ingestion.
     - **Mandatory Account Type**: New providers require an explicit choice between M3U and XC types; no system default is assumed.
     - **URL Normalization**: Robust XC base URL extraction logic preserves subpaths while stripping specific IPTV filenames (e.g., `get.php`, `player_api.php`) and query strings.
-    - **Centralized Error Handling**: All synchronization routines propagate connectivity and API errors using a centralized `handle_sync_error` helper. This ensures failures are logged, the account status is updated to `"failed"` in the database, and the user is informed via the UI.
-    - **Activity Log**: Sync events are recorded in `core_systemevent` for both manual and background refreshes.
+    - **Centralized Error Handling**: All synchronization routines (Live, VOD, Series) utilize a stabilized `async { ... }.await` Result-block pattern. This architectural pattern guarantees that all errors (connectivity, parsing, or API timeouts) are properly captured and propagated to a centralized `handle_sync_error` routine. 
+    - **Trait Satisfaction**: Backend routines are strictly enforced to satisfy `Send + Sync` requirements for multi-threaded async execution, ensuring reliable background operation and stable container builds.
+    - **Activity Log**: Sync events are recorded in `core_systemevent` for both manual and background refreshes, providing a clear audit trail of ingestion health.
 - **Stream Counting & Statistics**:
     - **Initial Prefetch**: During provider setup, a "full fetch" is performed to tally streams per category, allowing the UI to display "{n} streams found" before categories are selected.
     - **Periodic Updates**: Background sync tasks for Live, VOD, and Series now include a tallying phase that updates category `stream_count` in the database `custom_properties` field.

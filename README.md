@@ -10,6 +10,7 @@ A high-performance Rust rewrite of the Dispatcharr IPTV middleware.
 - **Stream Statistics**: Accurate, persisted stream tallying per category for clear platform overview.
 - **Robust Persistence**: Async SQLite storage using SeaORM with comprehensive category mapping.
 - **Telemetry**: Detailed activity logging for both manual and automated tasks.
+- **Reliable Ingestion Pipeline**: Centralized error handling with explicit status reporting and automated recovery routines for all provider types.
 - **Frontend Integration**: Seamless API compatibility with the Svelte 5 management interface.
 
 ## Development

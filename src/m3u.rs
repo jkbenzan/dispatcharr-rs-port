@@ -924,7 +924,8 @@ pub async fn fetch_and_parse_xc_vod(
         _ => return Err("Account not found".into()),
     };
 
-    let mut server_url_raw = acc.server_url.clone().unwrap_or_default();
+    let result: Result<(), Box<dyn Error + Send + Sync>> = async {
+        let mut server_url_raw = acc.server_url.clone().unwrap_or_default();
     server_url_raw = server_url_raw.trim_end_matches('/').to_string();
     let server_url = {
         let mut base = server_url_raw.clone();
@@ -1009,6 +1010,7 @@ pub async fn fetch_and_parse_xc_vod(
                     .exec(db)
                     .await;
             }
+            category_id_map.insert(cat.category_id, vc.id);
         }
 
     // 2. Fetch VOD Streams
@@ -1094,6 +1096,12 @@ pub async fn fetch_and_parse_xc_vod(
             })
         ).await;
     }
+        Ok(())
+    }.await;
+
+    if let Err(e) = result {
+        return handle_sync_error(db, account_id, e).await;
+    }
 
     Ok(())
 }
@@ -1107,6 +1115,8 @@ pub async fn fetch_and_parse_xc_series(
         Ok(Some(a)) => a,
         _ => return Err("Account not found".into()),
     };
+
+    let result: Result<(), Box<dyn Error + Send + Sync>> = async {
 
     let mut category_id_map: HashMap<String, i64> = HashMap::new();
     let mut category_counts: HashMap<i64, i32> = HashMap::new();
@@ -1195,7 +1205,6 @@ pub async fn fetch_and_parse_xc_series(
             }
             category_id_map.insert(cat.category_id, vc.id);
         }
-    }
 
     let mut active: m3u_account::ActiveModel = acc.clone().into();
     active.last_message = Set(Some("Fetching XC Series...".to_string()));
@@ -1235,7 +1244,6 @@ pub async fn fetch_and_parse_xc_series(
                         .exec(db)
                         .await;
                 }
-            }
         }
     }
 
@@ -1279,6 +1287,12 @@ pub async fn fetch_and_parse_xc_series(
                 "is_background": is_background
             })
         ).await;
+    }
+        Ok(())
+    }.await;
+
+    if let Err(e) = result {
+        return handle_sync_error(db, account_id, e).await;
     }
 
     Ok(())
@@ -1600,11 +1614,11 @@ pub async fn rehash_all_streams(db: &DatabaseConnection) -> Result<usize, Box<dy
         if s.stream_hash.as_deref() != Some(&new_hash) {
             let mut active: stream::ActiveModel = s.into();
             active.stream_hash = Set(Some(new_hash));
-            let _ = active.update(db).await;
+            active.update(db).await?;
             updated += 1;
         }
     }
 
-    tracing::info!("✅ Global rehash complete. Updated {}/{} streams.", updated, total);
+    tracing::info!("✅ Rehash complete. Updated {}/{} streams.", updated, total);
     Ok(updated)
 }
