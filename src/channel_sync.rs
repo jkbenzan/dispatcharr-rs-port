@@ -1,8 +1,24 @@
 use crate::entities::{channel, channel_group_m3u_account, channel_stream, stream};
 use chrono::Utc;
-use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
+use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter, Set};
 use std::error::Error;
 use uuid::Uuid;
+
+const DEFAULT_AUTO_CHANNEL_SYNC_LIMIT: u64 = 100;
+
+fn legacy_auto_channel_sync_enabled() -> bool {
+    std::env::var("DISPATCHARR_ENABLE_LEGACY_AUTO_CHANNEL_SYNC")
+        .map(|value| matches!(value.as_str(), "1" | "true" | "TRUE" | "yes" | "YES"))
+        .unwrap_or(false)
+}
+
+fn auto_channel_sync_limit() -> u64 {
+    std::env::var("DISPATCHARR_AUTO_CHANNEL_SYNC_LIMIT")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(DEFAULT_AUTO_CHANNEL_SYNC_LIMIT)
+}
 
 pub async fn sync_channels_for_account(
     db: &DatabaseConnection,
@@ -30,9 +46,29 @@ pub async fn sync_channels_for_account(
         return Ok(());
     }
 
-    let streams = stream::Entity::find()
+    if !legacy_auto_channel_sync_enabled() {
+        println!(
+            "[Channel Sync] Legacy auto-channel-sync is disabled. Set DISPATCHARR_ENABLE_LEGACY_AUTO_CHANNEL_SYNC=true to allow generated channels for account {}.",
+            account_id
+        );
+        return Ok(());
+    }
+
+    let stream_query = stream::Entity::find()
         .filter(stream::Column::M3uAccountId.eq(account_id))
-        .filter(stream::Column::ChannelGroupId.is_in(enabled_group_ids.clone()))
+        .filter(stream::Column::ChannelGroupId.is_in(enabled_group_ids.clone()));
+
+    let stream_count = stream_query.clone().count(db).await?;
+    let limit = auto_channel_sync_limit();
+    if stream_count > limit {
+        println!(
+            "[Channel Sync] Refusing to auto-create {} channels for account {}; limit is {}. Increase DISPATCHARR_AUTO_CHANNEL_SYNC_LIMIT only for intentional small migrations.",
+            stream_count, account_id, limit
+        );
+        return Ok(());
+    }
+
+    let streams = stream_query
         .all(db)
         .await?;
 
