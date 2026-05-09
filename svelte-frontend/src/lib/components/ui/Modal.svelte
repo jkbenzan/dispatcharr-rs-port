@@ -33,6 +33,7 @@
 			onmousedown={(e) => e.stopPropagation()}
 			role="dialog"
 			aria-modal="true"
+			tabindex="-1"
 		>
 			{#if title}
 				<div class="modal-header">

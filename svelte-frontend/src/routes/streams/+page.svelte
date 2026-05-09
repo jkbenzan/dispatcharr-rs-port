@@ -157,48 +157,6 @@
 		}
 	}
 
-	// --- Shared ---
-
-	function handleAdd() {
-		selectedProvider = null;
-		showModal = true;
-	}
-
-	function handleEdit(provider: any) {
-		selectedProvider = provider;
-		showModal = true;
-	}
-
-	async function handleSave(payload: any, id?: number) {
-		if (id) {
-			await api.updateM3UAccount(id, payload);
-		} else {
-			await api.addM3UAccount(payload);
-		}
-		await loadProviders();
-	}
-
-	async function handleDelete(id: number) {
-		if (confirm('Are you sure you want to delete this provider? This action cannot be undone.')) {
-			try {
-				await api.deleteM3UAccount(id);
-				await loadProviders();
-			} catch (err: any) {
-				toast.error(err.message || 'Failed to delete provider');
-			}
-		}
-	}
-
-	async function handleRefresh(id: number) {
-		try {
-			await api.refreshM3UAccount(id);
-			// Show temporary success or just let WS events update status
-			toast.success('Refresh triggered successfully. Monitor activity log for progress.');
-		} catch (err: any) {
-			toast.error(err.message || 'Failed to refresh provider');
-		}
-	}
-
 	import { formatDateTime } from '$lib/settings.svelte';
 
 	function formatDate(isoStr?: string) {
@@ -494,12 +452,10 @@
 		gap: 16px;
 		text-align: center;
 		
-		h3 {
-			font-size: 18px;
-			color: var(--text-bright);
-			margin: 0;
+		:global(.spin) {
+			animation: spin 1s linear infinite;
 		}
-		
+
 		p {
 			max-width: 400px;
 			line-height: 1.5;
@@ -507,9 +463,12 @@
 		}
 	}
 
-	.spin {
-		animation: spin 1s linear infinite;
+	.empty-state h3 {
+		font-size: 18px;
+		color: var(--text-bright);
+		margin: 0;
 	}
+
 
 	@keyframes spin {
 		100% { transform: rotate(360deg); }

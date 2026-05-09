@@ -402,7 +402,7 @@
     100% { opacity: 1; }
   }
 
-  .spinning {
+  :global(.spinning) {
     animation: spin 1s linear infinite;
   }
 

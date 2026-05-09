@@ -182,6 +182,7 @@
 											class="stream-row" 
 											class:assigned={assignedStreamIds.has(stream.id)}
 											draggable="true"
+											role="listitem"
 											ondragstart={(e) => handleDragStart(e, stream)}
 										>
 											<div class="stream-info">
@@ -276,7 +277,7 @@
 		color: var(--text-dim);
 	}
 
-	.icon-dim { color: var(--text-dim); }
+	:global(.icon-dim) { color: var(--text-dim); }
 
 	.stream-row {
 		display: flex;

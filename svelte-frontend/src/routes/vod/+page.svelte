@@ -17,7 +17,7 @@
   let searchQuery = $state('');
   
   let observer: IntersectionObserver;
-  let sentinel: HTMLElement;
+  let sentinel = $state<HTMLElement>();
 
   async function loadCategories() {
     try {
@@ -272,7 +272,7 @@
     display: flex;
     align-items: center;
 
-    .search-icon {
+    :global(.search-icon) {
       position: absolute;
       left: 12px;
       color: var(--text-dim);
@@ -401,7 +401,7 @@
     gap: 16px;
     color: var(--text-dim);
     
-    .text-dim {
+    :global(.text-dim) {
       opacity: 0.5;
     }
   }
@@ -503,6 +503,7 @@
     font-size: 11px;
     line-height: 1.4;
     display: -webkit-box;
+    line-clamp: 3;
     -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;

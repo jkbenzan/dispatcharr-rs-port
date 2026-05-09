@@ -8,7 +8,7 @@ A high-performance Rust rewrite of the Dispatcharr IPTV middleware.
 - **VOD & Series Management**: Segmented ingestion for Movies and Series with customizable opt-out toggles.
 - **Automated Background Sync**: Periodic provider refreshes with staggered scheduling and jitter to prevent server hammering.
 - **Stream Statistics**: Accurate, persisted stream tallying per category for clear platform overview.
-- **Robust Persistence**: Async SQLite storage using SeaORM with comprehensive category mapping.
+- **Robust Persistence**: Async PostgreSQL storage using SeaORM with comprehensive category mapping.
 - **Telemetry**: Detailed activity logging for both manual and automated tasks.
 - **Reliable Ingestion Pipeline**: Centralized error handling with explicit status reporting and automated recovery routines for all provider types.
 - **Frontend Integration**: Seamless API compatibility with the Svelte 5 management interface.

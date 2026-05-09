@@ -234,10 +234,6 @@
 			color: var(--text-bright);
 		}
 
-		&.active {
-			background: rgba(237, 28, 36, 0.1);
-			color: var(--accent);
-		}
 	}
 
 	.app-shell.collapsed .nav-item {
@@ -325,12 +321,6 @@
 
 	.app-shell.collapsed .theme-controls {
 		flex-direction: column;
-	}
-
-	.color-dot {
-		width: 12px;
-		height: 12px;
-		border-radius: 50%;
 	}
 
 	.main-container {

@@ -38,7 +38,7 @@
 		try {
 			const res = await api.getSettings();
 			settingsList = res;
-			res.forEach(s => {
+			res.forEach((s: any) => {
 				const val = JSON.parse(JSON.stringify(s.value));
 				if (s.key === 'system_settings' && !val.time_zone) {
 					val.time_zone = 'America/New_York';
@@ -94,7 +94,8 @@
 		<aside class="settings-nav">
 			{#each tabs as tab}
 				<button 
-					class="nav-item {activeTab === tab.id ? 'active' : ''}" 
+					class="nav-item"
+					class:active={activeTab === tab.id}
 					onclick={() => activeTab = tab.id}
 				>
 					<tab.icon size={18} />
@@ -117,23 +118,23 @@
 						</div>
 						<div class="form-grid">
 							<div class="form-group">
-								<label>Time Format</label>
-								<select bind:value={formData['ui_settings'].time_format}>
+								<label for="time-format">Time Format</label>
+								<select id="time-format" bind:value={formData['ui_settings'].time_format}>
 									<option value="12h">12-Hour (AM/PM)</option>
 									<option value="24h">24-Hour (Military)</option>
 								</select>
 							</div>
 							<div class="form-group">
-								<label>Date Format</label>
-								<select bind:value={formData['ui_settings'].date_format}>
+								<label for="date-format">Date Format</label>
+								<select id="date-format" bind:value={formData['ui_settings'].date_format}>
 									<option value="mdy">MM/DD/YYYY</option>
 									<option value="dmy">DD/MM/YYYY</option>
 									<option value="ymd">YYYY/MM/DD</option>
 								</select>
 							</div>
 							<div class="form-group">
-								<label>Table Size</label>
-								<select bind:value={formData['ui_settings'].table_size}>
+								<label for="table-size">Table Size</label>
+								<select id="table-size" bind:value={formData['ui_settings'].table_size}>
 									<option value="compact">Compact</option>
 									<option value="default">Default</option>
 									<option value="comfortable">Comfortable</option>
@@ -149,8 +150,8 @@
 						</div>
 						<div class="form-grid">
 							<div class="form-group">
-								<label>System Time Zone</label>
-								<select bind:value={formData['system_settings'].time_zone}>
+								<label for="system-time-zone">System Time Zone</label>
+								<select id="system-time-zone" bind:value={formData['system_settings'].time_zone}>
 									{#each timeZones as tz}
 										<option value={tz}>{tz}</option>
 									{/each}
@@ -158,8 +159,8 @@
 								<span class="help-text">Standard IANA timezone string for server-side scheduling.</span>
 							</div>
 							<div class="form-group">
-								<label>Max System Events</label>
-								<input type="number" bind:value={formData['system_settings'].max_system_events} min="10" max="1000" />
+								<label for="max-system-events">Max System Events</label>
+								<input id="max-system-events" type="number" bind:value={formData['system_settings'].max_system_events} min="10" max="1000" />
 								<span class="help-text">Number of events to keep in the system log before pruning.</span>
 							</div>
 						</div>
@@ -172,23 +173,23 @@
 						</div>
 						<div class="form-grid">
 							<div class="form-group">
-								<label>Internal Buffer Size (KB)</label>
-								<input type="number" bind:value={formData['stream_settings'].buffer_size} />
+								<label for="internal-buffer-size">Internal Buffer Size (KB)</label>
+								<input id="internal-buffer-size" type="number" bind:value={formData['stream_settings'].buffer_size} />
 								<span class="help-text">Size of the chunks piped from FFmpeg/Direct stream.</span>
 							</div>
 							<div class="form-group">
-								<label>Retry Count</label>
-								<input type="number" bind:value={formData['stream_settings'].retry_count} />
+								<label for="retry-count">Retry Count</label>
+								<input id="retry-count" type="number" bind:value={formData['stream_settings'].retry_count} />
 								<span class="help-text">Number of connection attempts before failing the stream.</span>
 							</div>
 							<div class="form-group">
-								<label>Stream Checker Concurrency</label>
-								<input type="number" bind:value={formData['stream_settings'].stream_checker_parallel_providers} min="1" max="10" />
+								<label for="stream-checker-concurrency">Stream Checker Concurrency</label>
+								<input id="stream-checker-concurrency" type="number" bind:value={formData['stream_settings'].stream_checker_parallel_providers} min="1" max="10" />
 								<span class="help-text">Number of concurrent streams to test during background maintenance.</span>
 							</div>
 							<div class="form-group full-width">
-								<label>Default User Agent</label>
-								<input type="text" bind:value={formData['stream_settings'].default_user_agent} />
+								<label for="default-user-agent">Default User Agent</label>
+								<input id="default-user-agent" type="text" bind:value={formData['stream_settings'].default_user_agent} />
 								<span class="help-text">The default HTTP User-Agent sent to IPTV providers if not specifically overridden on the playlist.</span>
 							</div>
 						</div>
@@ -209,37 +210,37 @@
 								<span class="help-text">Automatically process recordings to flag or remove commercials.</span>
 							</div>
 							<div class="form-group">
-								<label>Comskip Custom Path</label>
-								<input type="text" bind:value={formData['dvr_settings'].comskip_custom_path} placeholder="/usr/bin/comskip" disabled={!formData['dvr_settings'].comskip_enabled} />
+								<label for="comskip-custom-path">Comskip Custom Path</label>
+								<input id="comskip-custom-path" type="text" bind:value={formData['dvr_settings'].comskip_custom_path} placeholder="/usr/bin/comskip" disabled={!formData['dvr_settings'].comskip_enabled} />
 							</div>
 							<div class="form-group">
-								<label>Pre-Padding (Minutes)</label>
-								<input type="number" bind:value={formData['dvr_settings'].pre_offset_minutes} min="0" />
+								<label for="pre-padding-minutes">Pre-Padding (Minutes)</label>
+								<input id="pre-padding-minutes" type="number" bind:value={formData['dvr_settings'].pre_offset_minutes} min="0" />
 								<span class="help-text">Start recordings early.</span>
 							</div>
 							<div class="form-group">
-								<label>Post-Padding (Minutes)</label>
-								<input type="number" bind:value={formData['dvr_settings'].post_offset_minutes} min="0" />
+								<label for="post-padding-minutes">Post-Padding (Minutes)</label>
+								<input id="post-padding-minutes" type="number" bind:value={formData['dvr_settings'].post_offset_minutes} min="0" />
 								<span class="help-text">End recordings late.</span>
 							</div>
 							<div class="form-group full-width">
-								<label>TV Show Template</label>
-								<input type="text" bind:value={formData['dvr_settings'].tv_template} />
+								<label for="tv-show-template">TV Show Template</label>
+								<input id="tv-show-template" type="text" bind:value={formData['dvr_settings'].tv_template} />
 								<span class="help-text">Available tokens: {'{show}, {season}, {episode}, {title}, {start}'}</span>
 							</div>
 							<div class="form-group full-width">
-								<label>TV Show Fallback Template</label>
-								<input type="text" bind:value={formData['dvr_settings'].tv_fallback_template} />
+								<label for="tv-show-fallback-template">TV Show Fallback Template</label>
+								<input id="tv-show-fallback-template" type="text" bind:value={formData['dvr_settings'].tv_fallback_template} />
 								<span class="help-text">Used when season/episode info is missing. Available tokens: {'{show}, {start}'}</span>
 							</div>
 							<div class="form-group full-width">
-								<label>Movie Template</label>
-								<input type="text" bind:value={formData['dvr_settings'].movie_template} />
+								<label for="movie-template">Movie Template</label>
+								<input id="movie-template" type="text" bind:value={formData['dvr_settings'].movie_template} />
 								<span class="help-text">Available tokens: {'{title}, {year}, {start}'}</span>
 							</div>
 							<div class="form-group full-width">
-								<label>Movie Fallback Template</label>
-								<input type="text" bind:value={formData['dvr_settings'].movie_fallback_template} />
+								<label for="movie-fallback-template">Movie Fallback Template</label>
+								<input id="movie-fallback-template" type="text" bind:value={formData['dvr_settings'].movie_fallback_template} />
 								<span class="help-text">Used when year info is missing. Available tokens: {'{title}, {start}'}</span>
 							</div>
 						</div>
@@ -252,32 +253,32 @@
 						</div>
 						<div class="form-grid">
 							<div class="form-group">
-								<label>Buffering Timeout (s)</label>
-								<input type="number" bind:value={formData['proxy_settings'].buffering_timeout} min="1" />
+								<label for="buffering-timeout">Buffering Timeout (s)</label>
+								<input id="buffering-timeout" type="number" bind:value={formData['proxy_settings'].buffering_timeout} min="1" />
 								<span class="help-text">Time to wait for first byte before failing over.</span>
 							</div>
 							<div class="form-group">
-								<label>Buffering Speed</label>
-								<input type="number" step="0.1" bind:value={formData['proxy_settings'].buffering_speed} min="0.1" />
+								<label for="buffering-speed">Buffering Speed</label>
+								<input id="buffering-speed" type="number" step="0.1" bind:value={formData['proxy_settings'].buffering_speed} min="0.1" />
 								<span class="help-text">Multiplier for internal read speed.</span>
 							</div>
 							<div class="form-group">
-								<label>Chunk TTL (s)</label>
-								<input type="number" bind:value={formData['proxy_settings'].redis_chunk_ttl} min="1" />
+								<label for="chunk-ttl">Chunk TTL (s)</label>
+								<input id="chunk-ttl" type="number" bind:value={formData['proxy_settings'].redis_chunk_ttl} min="1" />
 								<span class="help-text">Time to keep stream chunks in memory.</span>
 							</div>
 							<div class="form-group">
-								<label>Channel Shutdown Delay (s)</label>
-								<input type="number" bind:value={formData['proxy_settings'].channel_shutdown_delay} min="0" />
+								<label for="channel-shutdown-delay">Channel Shutdown Delay (s)</label>
+								<input id="channel-shutdown-delay" type="number" bind:value={formData['proxy_settings'].channel_shutdown_delay} min="0" />
 								<span class="help-text">Keep the provider connection alive after the last client disconnects (fast switching).</span>
 							</div>
 							<div class="form-group">
-								<label>Init Grace Period (s)</label>
-								<input type="number" bind:value={formData['proxy_settings'].channel_init_grace_period} min="1" />
+								<label for="init-grace-period">Init Grace Period (s)</label>
+								<input id="init-grace-period" type="number" bind:value={formData['proxy_settings'].channel_init_grace_period} min="1" />
 							</div>
 							<div class="form-group">
-								<label>New Client Offset (s)</label>
-								<input type="number" bind:value={formData['proxy_settings'].new_client_behind_seconds} min="0" />
+								<label for="new-client-offset">New Client Offset (s)</label>
+								<input id="new-client-offset" type="number" bind:value={formData['proxy_settings'].new_client_behind_seconds} min="0" />
 								<span class="help-text">How far behind live to start new clients (improves stability).</span>
 							</div>
 							<div class="form-group switch-group full-width mt">
@@ -288,8 +289,8 @@
 								</label>
 							</div>
 							<div class="form-group full-width">
-								<label>HTTP Proxy URL</label>
-								<input type="text" bind:value={formData['proxy_settings'].http_proxy_url} placeholder="http://proxy:8080" disabled={!formData['proxy_settings'].http_proxy_enabled} />
+								<label for="http-proxy-url">HTTP Proxy URL</label>
+								<input id="http-proxy-url" type="text" bind:value={formData['proxy_settings'].http_proxy_url} placeholder="http://proxy:8080" disabled={!formData['proxy_settings'].http_proxy_enabled} />
 							</div>
 						</div>
 
@@ -301,21 +302,21 @@
 						</div>
 						<div class="form-grid">
 							<div class="form-group full-width">
-								<label>Admin UI Interface</label>
-								<input type="text" bind:value={formData['network_access'].UI} />
+								<label for="admin-ui-interface">Admin UI Interface</label>
+								<input id="admin-ui-interface" type="text" bind:value={formData['network_access'].UI} />
 							</div>
 							<div class="form-group full-width">
-								<label>M3U & EPG Retrieval</label>
-								<input type="text" bind:value={formData['network_access'].M3U_EPG} />
+								<label for="m3u-epg-retrieval">M3U & EPG Retrieval</label>
+								<input id="m3u-epg-retrieval" type="text" bind:value={formData['network_access'].M3U_EPG} />
 								<span class="help-text">Default permits local network playback.</span>
 							</div>
 							<div class="form-group full-width">
-								<label>Direct Stream Playback</label>
-								<input type="text" bind:value={formData['network_access'].STREAMS} />
+								<label for="direct-stream-playback">Direct Stream Playback</label>
+								<input id="direct-stream-playback" type="text" bind:value={formData['network_access'].STREAMS} />
 							</div>
 							<div class="form-group full-width">
-								<label>Xtream API</label>
-								<input type="text" bind:value={formData['network_access'].XC_API} />
+								<label for="xtream-api">Xtream API</label>
+								<input id="xtream-api" type="text" bind:value={formData['network_access'].XC_API} />
 							</div>
 						</div>
 
@@ -327,8 +328,8 @@
 						</div>
 						<div class="form-grid">
 							<div class="form-group">
-								<label>Default Max Streams</label>
-								<input type="number" bind:value={formData['user_limit_settings'].max_streams} min="1" />
+								<label for="default-max-streams">Default Max Streams</label>
+								<input id="default-max-streams" type="number" bind:value={formData['user_limit_settings'].max_streams} min="1" />
 							</div>
 							<div class="form-group switch-group mt">
 								<label>
@@ -377,8 +378,8 @@
 								<span class="help-text">Automatically download new channel mappings when available.</span>
 							</div>
 							<div class="form-group full-width mt">
-								<label>Download URL</label>
-								<input type="text" bind:value={formData['channel_db_settings'].download_url} />
+								<label for="channel-db-download-url">Download URL</label>
+								<input id="channel-db-download-url" type="text" bind:value={formData['channel_db_settings'].download_url} />
 							</div>
 						</div>
 					{/if}

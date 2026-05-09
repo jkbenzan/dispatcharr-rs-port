@@ -5,7 +5,7 @@ Dispatcharr is a high-performance M3U/XC/EPG proxy and management system built w
 
 ## Backend (Rust)
 - **Framework**: Axum
-- **Database**: PostgreSQL (via SeaORM)
+- **Database**: External PostgreSQL via SeaORM. Runtime configuration is provided through `DATABASE_URL`, and production/deployed environments are expected to point at the external Postgres instance. SeaORM is compiled with both PostgreSQL and SQLite features because a separate read-only SQLite sidecar is used for channel database metadata.
 - **Background Worker**: 
     - Handles periodic M3U and EPG refreshes.
     - **Staggering**: Refreshes are staggered across accounts with a 60s delay and a stable per-account jitter (±30s) to prevent thundering herd issues.
@@ -24,6 +24,10 @@ Dispatcharr is a high-performance M3U/XC/EPG proxy and management system built w
     - **Initial Prefetch**: During provider setup, a "full fetch" is performed to tally streams per category, allowing the UI to display "{n} streams found" before categories are selected.
     - **Periodic Updates**: Background sync tasks for Live, VOD, and Series now include a tallying phase that updates category `stream_count` in the database `custom_properties` field.
     - **Global Metrics**: Counts are updated for all categories (groups) provided by the source, ensuring the management UI always reflects current provider content.
+- **Channel Matching**:
+    - Channel name parsing removes provider noise, country prefixes, resolution markers, and generic terms before scoring.
+    - Match scoring uses Jaro-Winkler similarity plus resolution, country, and logo context.
+    - A token-overlap guard caps unrelated short-name matches below medium confidence when the channel name shares no significant token with the station name or call sign.
 
 ## Frontend (Svelte)
 - **State Management**: Svelte 5 Runes ($state, $derived, $effect).
@@ -32,10 +36,21 @@ Dispatcharr is a high-performance M3U/XC/EPG proxy and management system built w
     - **Stream Statistics**: Displays human-readable stream counts (e.g., "{n} streams found") for all categories, retrieved from persisted `custom_properties`.
     - **Sync Overlay**: Provides real-time feedback during initial provider synchronization.
     - **Reactive Tabs**: Groups and Categories are filtered based on the selected provider and discovered in real-time.
+- **Build Health**:
+    - `npm run check` passes with zero Svelte diagnostics.
+    - `npm run build` completes successfully and writes the static frontend to `../dist`.
+    - The frontend includes explicit Node typings via `@types/node` for the SvelteKit generated TypeScript configuration.
 
 ## Telemetry & Logging
 - **System Events**: Stored in `core_systemevent`. M3U Provider creations, deletions, and manual refreshes explicitly log their status (success, info, or error) to this table.
 - **Sync Visibility**: Both manual and background refreshes are recorded in the activity log. Events include an `is_background` flag in the payload to distinguish automated tasks.
 - **Errors**: All sync errors are propagated using the `?` operator to avoid silent failures. The `handle_sync_error` helper automatically updates the account `status` to `"failed"` and persists the error message for visibility in the Provider Grid.
-- **Frontend Error Propagation**: The Svelte frontend strictly bubbles up `errorData.error` from JSON API responses to ensure any backend failures (such as SQLite constraint violations) are correctly exposed rather than being masked as generic 500 errors.
+- **Frontend Error Propagation**: The Svelte frontend strictly bubbles up `errorData.error` from JSON API responses to ensure any backend failures (such as database constraint violations) are correctly exposed rather than being masked as generic 500 errors.
 - **Diagnostic Logging**: Backend sync tasks log discovered category and stream counts to stdout/stderr for operational monitoring and system integrity verification.
+
+## Verification Status
+- `cargo check` passes with warning debt.
+- `cargo test` passes all current unit tests.
+- `npm run check` passes with zero warnings.
+- `npm run build` passes when the process can write the repository-root `dist` directory.
+- `npm install` currently reports low-severity audit findings; do not run `npm audit fix --force` without checking for breaking package changes.

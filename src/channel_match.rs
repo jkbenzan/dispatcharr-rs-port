@@ -101,6 +101,32 @@ fn normalize_whitespace(s: &str) -> String {
     s.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
+fn significant_tokens(s: &str) -> Vec<String> {
+    s.split(|c: char| !c.is_alphanumeric())
+        .filter_map(|token| {
+            let token = token.trim();
+            if token.len() >= 3 {
+                Some(token.to_uppercase())
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+fn has_name_overlap(clean: &str, candidate: &str) -> bool {
+    let clean_tokens = significant_tokens(clean);
+    let candidate_tokens = significant_tokens(candidate);
+
+    clean_tokens.iter().any(|clean_token| {
+        candidate_tokens.iter().any(|candidate_token| {
+            clean_token == candidate_token
+                || clean_token.contains(candidate_token)
+                || candidate_token.contains(clean_token)
+        })
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Core functions
 // ---------------------------------------------------------------------------
@@ -308,6 +334,11 @@ pub fn calculate_match_score(
     };
 
     let mut score = name_score.max(call_sign_score);
+    if !has_name_overlap(&clean_upper, &station_name_upper)
+        && !has_name_overlap(&clean_upper, &call_sign_upper)
+    {
+        score = score.min(0.49);
+    }
 
     // ── Resolution bonus/penalty ──────────────────────────────────────────
     if let Some(ref detected_res) = parsed.resolution {

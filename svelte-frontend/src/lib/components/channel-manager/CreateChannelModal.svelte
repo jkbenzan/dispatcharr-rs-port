@@ -373,9 +373,9 @@
 					</div>
 					
 					<div class="form-group">
-						<label>Channel Name <span class="required">*</span></label>
+						<label for="channel-name">Channel Name <span class="required">*</span></label>
 						<div class="input-wrapper">
-							<input type="text" bind:value={form.name} class="form-input" placeholder="Enter channel name" autocomplete="off" required>
+							<input id="channel-name" type="text" bind:value={form.name} class="form-input" placeholder="Enter channel name" autocomplete="off" required>
 							{#if suggestions.length > 0}
 								<div class="suggestions-dropdown">
 									{#each suggestions as s}
@@ -390,9 +390,9 @@
 					</div>
 
 					<div class="form-group mt-3">
-						<label>Channel Number</label>
+						<label for="channel-number">Channel Number</label>
 						<div class="channel-number-row">
-							<input type="number" bind:value={form.channel_number} class="form-input ch-num-input" placeholder="e.g. 101">
+							<input id="channel-number" type="number" bind:value={form.channel_number} class="form-input ch-num-input" placeholder="e.g. 101">
 							<div class="ch-num-buttons">
 								<button type="button" class="btn-pill" onclick={useSmartRange} title="Find gap near your input number">Smart Range</button>
 								<button type="button" class="btn-pill" onclick={useFirstAvailable}>First Available</button>
@@ -519,22 +519,22 @@
 						<div class="sub-col">
 							<div class="form-group">
 								<div class="label-row">
-									<label>TVG-ID</label>
+									<label for="tvg-id">TVG-ID</label>
 									{#if selectedStation}
 										<button type="button" class="shortcut-link" onclick={() => form.tvg_id = selectedStation.call_sign || selectedStation.name}>Use EPG</button>
 									{/if}
 								</div>
-								<input type="text" bind:value={form.tvg_id} class="form-input" placeholder="e.g. NFLHD">
+								<input id="tvg-id" type="text" bind:value={form.tvg_id} class="form-input" placeholder="e.g. NFLHD">
 							</div>
 
 							<div class="form-group mt-3">
-								<label>Station ID</label>
-								<input type="text" bind:value={form.tvc_guide_stationid} class="form-input" placeholder="e.g. 45399">
+								<label for="station-id">Station ID</label>
+								<input id="station-id" type="text" bind:value={form.tvc_guide_stationid} class="form-input" placeholder="e.g. 45399">
 							</div>
 
 							<div class="form-group mt-3">
-								<label>Stream Profile</label>
-								<select bind:value={form.stream_profile_id} class="form-select">
+								<label for="stream-profile">Stream Profile</label>
+								<select id="stream-profile" bind:value={form.stream_profile_id} class="form-select">
 									<option value={null}>(use default)</option>
 									{#each profiles as p}
 										<option value={p.id}>{p.name}</option>
@@ -543,8 +543,8 @@
 							</div>
 
 							<div class="form-group mt-3">
-								<label>User Level</label>
-								<select bind:value={form.user_level} class="form-select">
+								<label for="user-level">User Level</label>
+								<select id="user-level" bind:value={form.user_level} class="form-select">
 									{#each userLevels as level}
 										<option value={level.id}>{level.name}</option>
 									{/each}
@@ -555,7 +555,7 @@
 						<div class="sub-col">
 							<div class="form-group">
 								<div class="label-row">
-									<label>EPG Assignment</label>
+									<label for="epg-source">EPG Assignment</label>
 									<div class="actions">
 										<button type="button" class="shortcut-link" onclick={useDummyEpg}>Use Dummy</button>
 										{#if form.epg_data_id}
@@ -566,7 +566,7 @@
 								
 								<div class="epg-selector">
 									<div class="epg-controls">
-										<select bind:value={selectedEpgSourceId} class="form-select mb-2">
+										<select id="epg-source" bind:value={selectedEpgSourceId} class="form-select mb-2">
 											<option value={null}>Select Source...</option>
 											{#each epgSources as source}
 												<option value={source.id}>{source.name}</option>
@@ -595,7 +595,7 @@
 
 							<div class="form-group mt-3">
 								<div class="label-row">
-									<label>Logo</label>
+									<span class="field-label">Logo</span>
 									{#if selectedStation?.logo_uri}
 										<button type="button" class="shortcut-link" onclick={() => { newLogoUrl = selectedStation.logo_uri; addLogoFromUrl(); }}>Use DB Logo</button>
 									{/if}
@@ -769,7 +769,7 @@
 		flex-direction: column;
 		gap: 6px;
 
-		label {
+		label, .field-label {
 			font-size: 12px;
 			font-weight: 500;
 			color: var(--text-dim);

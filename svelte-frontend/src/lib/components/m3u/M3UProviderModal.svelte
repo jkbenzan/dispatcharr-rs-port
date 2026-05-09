@@ -21,6 +21,12 @@
 	let allChannelGroups = $state<any[]>([]);
 	let allVodCategories = $state<any[]>([]);
 
+	type ProviderAccountSummary = {
+		id?: number | string;
+		m3u_account?: number | string;
+		stream_count?: number;
+	};
+
 	// Form state
 	let name = $state('');
 	let accountType = $state('');
@@ -370,7 +376,7 @@
 									<div class="setting-info">
 										<span class="setting-name">{group.name}</span>
 										<span class="setting-sub">
-											{(group.m3u_accounts?.find(a => Number(a.id) === Number(provider?.id))?.stream_count || 0)} streams found
+											{(group.m3u_accounts?.find((a: ProviderAccountSummary) => Number(a.id) === Number(provider?.id))?.stream_count || 0)} streams found
 										</span>
 									</div>
 									<div class="setting-controls">
@@ -398,7 +404,7 @@
 									<div class="setting-info">
 										<span class="setting-name">{cat.name}</span>
 										<span class="setting-sub">
-											{(cat.m3u_accounts?.find(a => Number(a.m3u_account) === Number(provider?.id))?.stream_count || 0)} streams found
+											{(cat.m3u_accounts?.find((a: ProviderAccountSummary) => Number(a.m3u_account) === Number(provider?.id))?.stream_count || 0)} streams found
 										</span>
 									</div>
 									<div class="setting-controls">
@@ -418,7 +424,7 @@
 									<div class="setting-info">
 										<span class="setting-name">{cat.name}</span>
 										<span class="setting-sub">
-											{(cat.m3u_accounts?.find(a => Number(a.m3u_account) === Number(provider?.id))?.stream_count || 0)} streams found
+											{(cat.m3u_accounts?.find((a: ProviderAccountSummary) => Number(a.m3u_account) === Number(provider?.id))?.stream_count || 0)} streams found
 										</span>
 									</div>
 									<div class="setting-controls">
@@ -584,7 +590,7 @@
 		display: flex;
 		align-items: center;
 
-		svg {
+		:global(svg) {
 			position: absolute;
 			left: 12px;
 			color: var(--text-dim);
@@ -813,7 +819,7 @@
 		}
 	}
 
-	.animate-spin {
+	:global(.animate-spin) {
 		animation: spin 1s linear infinite;
 	}
 

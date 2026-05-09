@@ -153,9 +153,10 @@
 				background: rgba(0, 0, 0, 0.4);
 			}
 
-			&[type="number"] {
-				font-variant-numeric: tabular-nums;
-			}
+		}
+
+		input[type="number"] {
+			font-variant-numeric: tabular-nums;
 		}
 
 		select {

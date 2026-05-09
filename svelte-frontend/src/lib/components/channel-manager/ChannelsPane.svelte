@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { api } from '$lib/api';
-	import { ChevronDown, ChevronRight, MoreVertical, Play, Info, CheckCircle2 } from 'lucide-svelte';
+	import { ChevronDown, ChevronRight, MoreVertical, Play, Info, CheckCircle2, Tv } from 'lucide-svelte';
 
 	interface StreamView {
 		id: number;
@@ -171,6 +171,7 @@
 							<div 
 								class="channel-row" 
 								class:drop-target={crossPaneDropTargetId === channel.id}
+								role="listitem"
 								ondragover={(e) => handleChannelDragOver(e, channel)}
 								ondragleave={() => crossPaneDropTargetId = null}
 								ondrop={(e) => handleChannelDrop(e, channel)}

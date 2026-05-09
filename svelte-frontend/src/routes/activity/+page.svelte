@@ -15,6 +15,13 @@
 		expandedRows[id] = !expandedRows[id];
 	}
 
+	function handleLogKeydown(e: KeyboardEvent, id: number) {
+		if (e.key === 'Enter' || e.key === ' ') {
+			e.preventDefault();
+			toggleExpand(id);
+		}
+	}
+
 	onMount(async () => {
 		connectWS();
 		try {
@@ -155,7 +162,13 @@
 				{#each mergedEvents() as event}
 					{@const color = getSeverityColor(event.event_type)}
 					<div class="log-entry">
-						<div class="log-line" onclick={() => toggleExpand(event.id)}>
+						<div
+							class="log-line"
+							onclick={() => toggleExpand(event.id)}
+							onkeydown={(e) => handleLogKeydown(e, event.id)}
+							role="button"
+							tabindex="0"
+						>
 							<span class="timestamp">[{formatDate(event.timestamp)}]</span>
 							<span class="severity" style="color: {color}">[{event.event_type.toUpperCase()}]</span>
 							{#if event.channel_name}

@@ -51,7 +51,12 @@
 		<ChannelsPane />
 	</div>
 	
-	<div class="resizer" onmousedown={startResizing}></div>
+	<button
+		type="button"
+		class="resizer"
+		onmousedown={startResizing}
+		aria-label="Resize channel and stream panes"
+	></button>
 	
 	<div class="pane right" style:width="{100 - leftWidth}%">
 		<StreamsPane />
@@ -138,24 +143,10 @@
 		width: 8px;
 		cursor: col-resize;
 		background: transparent;
+		border: 0;
+		padding: 0;
 		transition: background 0.2s;
 		&:hover { background: var(--accent); }
 	}
 
-	.streams-placeholder {
-		height: 100%;
-		background: var(--surface);
-		border-radius: var(--radius);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		border: 1px dashed var(--border);
-	}
-
-	.empty-state {
-		text-align: center;
-		color: var(--text-dim);
-		h3 { color: var(--text-bright); margin: 16px 0 8px; }
-		p { font-size: 14px; }
-	}
 </style>

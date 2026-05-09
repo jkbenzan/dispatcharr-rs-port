@@ -790,7 +790,7 @@
 		}
 	}
 
-	.spin {
+	:global(.spin) {
 		animation: spin 1s linear infinite;
 	}
 

@@ -16,9 +16,9 @@
   let error = $state<string | null>(null);
   
   let observer: IntersectionObserver;
-  let sentinel: HTMLElement;
-  let gridViewport: HTMLElement;
-  let channelsColumn: HTMLElement;
+  let sentinel = $state<HTMLElement>();
+  let gridViewport = $state<HTMLElement>();
+  let channelsColumn = $state<HTMLElement>();
 
   // Time / Date Selection
   let now = new Date();
@@ -454,14 +454,16 @@
       padding: 6px 12px;
       border-radius: var(--radius);
 
-      input, select {
-        background: transparent;
-        border: none;
-        color: var(--text-bright);
-        font-size: 13px;
-        font-weight: 500;
-        outline: none;
-      }
+    }
+
+    .date-selector input,
+    .time-selector select {
+      background: transparent;
+      border: none;
+      color: var(--text-bright);
+      font-size: 13px;
+      font-weight: 500;
+      outline: none;
     }
   }
 
@@ -772,7 +774,7 @@
     to { transform: rotate(360deg); }
   }
 
-  .spinning {
+  :global(.spinning) {
     animation: spin 1s linear infinite;
   }
 
