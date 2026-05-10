@@ -3,7 +3,7 @@
 	import { onMount } from 'svelte';
 	import { connectWS } from '$lib/ws.svelte';
 	import { loadUiSettings } from '$lib/settings.svelte';
-	import { Home, Tv, Library, Settings, Activity, Search, Sun, Moon, Palette, HardDrive, Link, Puzzle, HeartPulse, CalendarDays, Film } from 'lucide-svelte';
+	import { Home, Tv, Library, Settings, Activity, Search, Sun, Moon, Palette, HardDrive, Link, Puzzle, TicketCheck, CalendarDays, Film } from 'lucide-svelte';
 	import ToastContainer from '$lib/components/ui/ToastContainer.svelte';
 
 	let { children } = $props();
@@ -20,7 +20,7 @@
 		{ name: 'TV Guide', icon: CalendarDays, href: '/guide' },
 		{ name: 'VOD', icon: Film, href: '/vod' },
 		{ name: 'DVR', icon: HardDrive, href: '/dvr' },
-		{ name: 'Stream Checker', icon: HeartPulse, href: '/stream-checker' },
+		{ name: 'Stream Checker', icon: TicketCheck, href: '/stream-checker' },
 		{ name: 'Integrations', icon: Link, href: '/integrations' },
 		{ name: 'Plugins', icon: Puzzle, href: '/plugins' },
 		{ name: 'Activity', icon: Activity, href: '/activity' },

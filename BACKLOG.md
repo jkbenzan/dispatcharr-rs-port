@@ -50,7 +50,7 @@ Items queued for future implementation and audit phases.
 
 ## Phase 4: Consumption Interfaces (Playback & UI)
 
-- [ ] **UI Polish: Navigation Icons**
+- [x] **UI Polish: Navigation Icons**
   Update the sidebar navigation to use more appropriate icons (e.g., change Stream Checker to `ticket-check`).
 - [ ] **Finalize SvelteKit Migration**
   Complete the remaining UI skeletons for DVR scheduling and the Plugin management interface.
