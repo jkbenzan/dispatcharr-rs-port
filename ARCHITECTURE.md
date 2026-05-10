@@ -19,6 +19,7 @@ Dispatcharr is a high-performance M3U/XC/EPG proxy and management system built w
     - Provider refresh state is self-healing: startup and the background scheduler reset accounts left in `fetching` longer than `DISPATCHARR_M3U_FETCHING_STALE_MINUTES` (default `120`) to `failed` with a clear message.
     - Provider account API responses never return stored usernames or passwords. Responses expose `has_username` and `has_password` booleans so edit forms can preserve existing credentials unless the user enters replacements.
     - Provider status responses include normalized status, failure state, stream count, and last refresh timestamp; dashboard health treats both `error` and `failed` provider states as warnings.
+    - The Provider Grid displays normalized status, provider stream count, last refresh timestamp, and safe status messages so operators can triage provider health without inspecting Postgres.
     - **Case-Insensitive Account Detection**: A centralized `is_xc_account()` helper in `api.rs` normalizes all XC type comparisons. This prevents routing failures caused by case mismatches between the frontend (`"xc"`) and backend (`"XC"`) — ensuring provider creation, refresh, and background sync all correctly identify XC accounts regardless of case.
     - **VOD Support**: Segmented ingestion for Movies and Series.
     - **Enable VOD Toggle**: Providers can opt-out of VOD ingestion via a custom property `enable_vod`. **Disabled by default** to minimize unintended data ingestion.

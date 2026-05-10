@@ -93,6 +93,39 @@
 		}
 	}
 
+	function getProviderStatus(provider: any) {
+		return provider.normalized_status || provider.status || (provider.is_active ? 'active' : 'inactive');
+	}
+
+	function formatProviderStatus(provider: any) {
+		const status = getProviderStatus(provider);
+		const labels: Record<string, string> = {
+			healthy: 'Healthy',
+			refreshing: 'Refreshing',
+			failed: 'Failed',
+			pending_setup: 'Pending Setup',
+			pending: 'Pending',
+			active: 'Active',
+			inactive: 'Inactive',
+			success: 'Healthy',
+			fetching: 'Refreshing',
+			error: 'Failed'
+		};
+		return labels[status] || status;
+	}
+
+	function isProviderFailed(provider: any) {
+		return provider.is_failed || getProviderStatus(provider) === 'failed' || provider.status === 'error' || provider.status === 'failed';
+	}
+
+	function isProviderRefreshing(provider: any) {
+		return getProviderStatus(provider) === 'refreshing' || provider.status === 'fetching';
+	}
+
+	function canRefreshM3u(provider: any) {
+		return provider.is_active && !provider.locked && provider.name?.toLowerCase() !== 'custom';
+	}
+
 	// --- EPG Logic ---
 	async function loadEpgSources() {
 		epgLoading = true;
@@ -233,7 +266,12 @@
 									<h3>{provider.name}</h3>
 								</div>
 								<div class="actions">
-									<button class="icon-btn" title="Refresh Streams" onclick={() => handleRefreshM3u(provider.id)}><RefreshCw size={16} /></button>
+									<button
+										class="icon-btn"
+										title={canRefreshM3u(provider) ? 'Refresh Streams' : 'Refresh unavailable'}
+										onclick={() => handleRefreshM3u(provider.id)}
+										disabled={!canRefreshM3u(provider)}
+									><RefreshCw size={16} /></button>
 									<button class="icon-btn" title="Edit Provider" onclick={() => handleEditM3u(provider)}><Edit2 size={16} /></button>
 									<button class="icon-btn danger" title="Delete Provider" onclick={() => handleDeleteM3u(provider.id)}><Trash2 size={16} /></button>
 								</div>
@@ -249,13 +287,28 @@
 								
 								<div class="stats-grid">
 									<div class="stat-item"><span class="label">Conns</span><span class="value">{provider.max_streams}</span></div>
+									<div class="stat-item"><span class="label">Streams</span><span class="value">{provider.stream_count ?? 0}</span></div>
 									<div class="stat-item"><span class="label">Refresh</span><span class="value">{provider.refresh_interval > 0 ? `${provider.refresh_interval}h` : 'Manual'}</span></div>
-									<div class="stat-item"><span class="label">Status</span><span class="value status-badge" class:active={provider.is_active} class:error={provider.status === 'error'}>{provider.status || (provider.is_active ? 'Active' : 'Inactive')}</span></div>
+									<div class="stat-item">
+										<span class="label">Status</span>
+										<span
+											class="value status-badge"
+											class:active={getProviderStatus(provider) === 'healthy' || getProviderStatus(provider) === 'active'}
+											class:refreshing={isProviderRefreshing(provider)}
+											class:error={isProviderFailed(provider)}
+										>{formatProviderStatus(provider)}</span>
+									</div>
 								</div>
+
+								{#if provider.last_message}
+									<div class="status-message" class:error={isProviderFailed(provider)} title={provider.last_message}>
+										{provider.last_message}
+									</div>
+								{/if}
 							</div>
 
 							<div class="card-footer">
-								<div class="last-updated"><Clock size={12} /><span>Updated: {formatDate(provider.updated_at)}</span></div>
+								<div class="last-updated"><Clock size={12} /><span>Last refresh: {formatDate(provider.last_refresh_at || provider.updated_at)}</span></div>
 							</div>
 						</div>
 					{/each}
@@ -559,6 +612,16 @@
 			background: rgba(237, 28, 36, 0.1);
 			color: var(--accent);
 		}
+
+		&:disabled {
+			cursor: not-allowed;
+			opacity: 0.35;
+
+			&:hover {
+				background: transparent;
+				color: var(--text-dim);
+			}
+		}
 	}
 
 	.card-body {
@@ -585,7 +648,7 @@
 
 	.stats-grid {
 		display: grid;
-		grid-template-columns: repeat(3, 1fr);
+		grid-template-columns: repeat(4, 1fr);
 		gap: 12px;
 		background: rgba(0,0,0,0.2);
 		padding: 12px;
@@ -618,7 +681,29 @@
 		text-transform: capitalize;
 
 		&.active { color: #4ade80 !important; }
+		&.refreshing { color: #38bdf8 !important; }
 		&.error { color: var(--accent) !important; }
+	}
+
+	.status-message {
+		font-size: 12px;
+		line-height: 1.35;
+		color: var(--text-dim);
+		background: rgba(255,255,255,0.04);
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		padding: 8px 10px;
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+
+		&.error {
+			color: #fca5a5;
+			border-color: rgba(237, 28, 36, 0.35);
+			background: rgba(237, 28, 36, 0.08);
+		}
 	}
 
 	.card-footer {
