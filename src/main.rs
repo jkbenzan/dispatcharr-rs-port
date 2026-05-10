@@ -209,6 +209,16 @@ async fn main() {
 
     // Initialize core settings defaults
     crate::settings::initialize_core_settings(&db).await;
+    let stale_fetching_timeout_minutes = crate::m3u::stale_fetching_timeout_minutes();
+    match crate::m3u::reset_stale_fetching_accounts(&db, stale_fetching_timeout_minutes).await {
+        Ok(0) => {}
+        Ok(count) => tracing::warn!(
+            "Reset {} stale M3U provider refresh state(s) older than {} minutes",
+            count,
+            stale_fetching_timeout_minutes
+        ),
+        Err(e) => tracing::error!("Failed to reset stale M3U provider refresh states: {}", e),
+    }
 
     let offline_path = std::path::Path::new("data/offline.ts");
     if !offline_path.exists() {
@@ -642,10 +652,26 @@ async fn main() {
     let worker_db = state.db.clone();
     let m3u_state = state.clone();
     tokio::spawn(async move {
+        let stale_fetching_timeout_minutes = crate::m3u::stale_fetching_timeout_minutes();
         loop {
             tokio::time::sleep(tokio::time::Duration::from_secs(60 * 5)).await; // run every 5 minutes
             use chrono::Utc;
             use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+
+            match crate::m3u::reset_stale_fetching_accounts(
+                &worker_db,
+                stale_fetching_timeout_minutes,
+            )
+            .await
+            {
+                Ok(0) => {}
+                Ok(count) => tracing::warn!(
+                    "Reset {} stale M3U provider refresh state(s) older than {} minutes",
+                    count,
+                    stale_fetching_timeout_minutes
+                ),
+                Err(e) => tracing::error!("Failed to reset stale M3U provider refresh states: {}", e),
+            }
 
             if let Ok(accounts) = crate::entities::m3u_account::Entity::find()
                 .filter(crate::entities::m3u_account::Column::IsActive.eq(true))
@@ -695,6 +721,9 @@ async fn main() {
                     if let Ok(Some(m)) = crate::entities::m3u_account::Entity::find_by_id(account_id).one(&worker_db).await {
                         let mut am: crate::entities::m3u_account::ActiveModel = m.into();
                         am.status = sea_orm::Set("fetching".to_string());
+                        am.last_message =
+                            sea_orm::Set(Some("Background refresh queued...".to_string()));
+                        am.updated_at = sea_orm::Set(Some(chrono::Utc::now().into()));
                         use sea_orm::ActiveModelTrait;
                         let _ = am.update(&worker_db).await;
                     }

@@ -89,6 +89,49 @@ pub fn sanitize_provider_error_message(message: &str) -> String {
     re.replace_all(message, "${1}<redacted>").to_string()
 }
 
+pub fn stale_fetching_timeout_minutes() -> i64 {
+    std::env::var("DISPATCHARR_M3U_FETCHING_STALE_MINUTES")
+        .ok()
+        .and_then(|v| v.parse::<i64>().ok())
+        .filter(|v| *v > 0)
+        .unwrap_or(120)
+}
+
+pub async fn reset_stale_fetching_accounts(
+    db: &DatabaseConnection,
+    timeout_minutes: i64,
+) -> Result<u64, Box<dyn Error + Send + Sync>> {
+    let cutoff = Utc::now() - chrono::Duration::minutes(timeout_minutes);
+    let accounts = m3u_account::Entity::find()
+        .filter(m3u_account::Column::Status.eq("fetching"))
+        .all(db)
+        .await?;
+
+    let mut reset_count = 0;
+    for acc in accounts {
+        let is_stale = acc
+            .updated_at
+            .map(|updated_at| updated_at.with_timezone(&Utc) <= cutoff)
+            .unwrap_or(true);
+
+        if !is_stale {
+            continue;
+        }
+
+        let mut active: m3u_account::ActiveModel = acc.into();
+        active.status = Set("failed".to_string());
+        active.last_message = Set(Some(format!(
+            "Refresh was left fetching for more than {} minutes and was reset.",
+            timeout_minutes
+        )));
+        active.updated_at = Set(Some(Utc::now().into()));
+        active.update(db).await?;
+        reset_count += 1;
+    }
+
+    Ok(reset_count)
+}
+
 pub async fn handle_sync_error(
     db: &sea_orm::DatabaseConnection,
     account_id: i64,
@@ -171,6 +214,7 @@ pub async fn fetch_and_parse_m3u(
         let mut active: m3u_account::ActiveModel = acc.into();
         active.status = Set("fetching".to_string());
         active.last_message = Set(Some("Downloading & parsing M3U...".to_string()));
+        active.updated_at = Set(Some(Utc::now().into()));
         let _ = active.update(db).await;
         broadcast_progress(
             &ws_sender,
