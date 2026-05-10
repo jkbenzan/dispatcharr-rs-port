@@ -107,6 +107,46 @@ pub struct ProxyQuery {
     pub u: Option<String>,
     pub p: Option<String>,
     pub token: Option<String>,
+    pub format: Option<String>,
+}
+
+fn encode_query_component(value: &str) -> String {
+    let mut encoded = String::new();
+    for byte in value.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                encoded.push(byte as char)
+            }
+            _ => encoded.push_str(&format!("%{:02X}", byte)),
+        }
+    }
+    encoded
+}
+
+fn build_hls_manifest(channel_id: &str, query: &ProxyQuery) -> String {
+    let mut params = Vec::new();
+    if let Some(token) = &query.token {
+        params.push(format!("token={}", encode_query_component(token)));
+    } else if let (Some(username), Some(password)) = (&query.u, &query.p) {
+        params.push(format!("u={}", encode_query_component(username)));
+        params.push(format!("p={}", encode_query_component(password)));
+    }
+
+    let query_string = if params.is_empty() {
+        String::new()
+    } else {
+        format!("?{}", params.join("&"))
+    };
+    let segment_url = format!(
+        "/stream/{}{}",
+        encode_query_component(channel_id),
+        query_string
+    );
+
+    format!(
+        "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:3600\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-INDEPENDENT-SEGMENTS\n#EXTINF:3600.0,\n{}\n",
+        segment_url
+    )
 }
 
 async fn get_stream_fallback(
@@ -234,6 +274,41 @@ pub async fn handle_ts_status(State(state): State<Arc<AppState>>) -> axum::Json<
 
 pub async fn handle_vod_stats() -> axum::Json<serde_json::Value> {
     axum::Json(serde_json::json!([]))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hls_manifest_preserves_token_auth() {
+        let query = ProxyQuery {
+            u: None,
+            p: None,
+            token: Some("abc 123".to_string()),
+            format: Some("hls".to_string()),
+        };
+
+        let manifest = build_hls_manifest("channel uuid", &query);
+
+        assert!(manifest.starts_with("#EXTM3U"));
+        assert!(manifest.contains("/stream/channel%20uuid?token=abc%20123"));
+        assert!(!manifest.contains("format=hls"));
+    }
+
+    #[test]
+    fn hls_manifest_preserves_basic_auth() {
+        let query = ProxyQuery {
+            u: Some("user@example.com".to_string()),
+            p: Some("p@ss word".to_string()),
+            token: None,
+            format: Some("hls".to_string()),
+        };
+
+        let manifest = build_hls_manifest("abc", &query);
+
+        assert!(manifest.contains("/stream/abc?u=user%40example.com&p=p%40ss%20word"));
+    }
 }
 
 pub async fn broadcaster_pumper(
@@ -475,7 +550,7 @@ pub async fn handle_proxy(
 
     // 1. Identify User
     let mut authenticated_user: Option<user::Model> = None;
-    if let (Some(u), Some(p)) = (query.u, query.p) {
+    if let (Some(u), Some(p)) = (query.u.as_deref(), query.p.as_deref()) {
         let user_opt = user::Entity::find()
             .filter(user::Column::Username.eq(u))
             .one(&state.db)
@@ -487,7 +562,7 @@ pub async fn handle_proxy(
                 authenticated_user = Some(user);
             }
         }
-    } else if let Some(token) = query.token {
+    } else if let Some(token) = query.token.as_deref() {
         use jsonwebtoken::{decode, DecodingKey, Validation};
         use crate::auth::{Claims, JWT_SECRET};
         
@@ -591,6 +666,16 @@ pub async fn handle_proxy(
     if channel_streams.is_empty() {
         tracing::warn!("No streams found for identifier {}", channel_id);
         return Err(StatusCode::NOT_FOUND);
+    }
+
+    if query.format.as_deref() == Some("hls") {
+        let manifest = build_hls_manifest(&channel_id, &query);
+        return Ok(Response::builder()
+            .status(StatusCode::OK)
+            .header("Content-Type", "application/vnd.apple.mpegurl")
+            .header("Cache-Control", "no-store")
+            .body(Body::from(manifest))
+            .unwrap());
     }
 
     let broadcaster = get_or_create_broadcaster(channel_id.clone(), state.clone(), channel_streams.clone()).await;

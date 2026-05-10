@@ -60,7 +60,7 @@ Items queued for future implementation and audit phases.
   Verify metadata retrieval for VOD posters and descriptions using TMDB IDs.
 - [ ] **Multi-Browser Playback Stress Test**
   Conduct a final stress test of the Hybrid Video Player across Safari, Chrome, and Firefox to resolve any remaining "Format Unsupported" issues.
-- [ ] **HLS Streaming Endpoint**
+- [x] **HLS Streaming Endpoint**
   Implement `/api/streams/:id?format=hls` for better mobile/native compatibility.
 - [x] **VOD Category Filtering**
   Update backend `get_vod` handlers to support filtering by `category_id`.

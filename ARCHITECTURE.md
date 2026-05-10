@@ -57,6 +57,8 @@ Dispatcharr is a high-performance M3U/XC/EPG proxy and management system built w
     - `npm run check` passes with zero Svelte diagnostics.
     - `npm run build` completes successfully and writes the static frontend to `../dist`.
     - The frontend includes explicit Node typings via `@types/node` for the SvelteKit generated TypeScript configuration.
+- **Playback**:
+    - The TV Guide player requests `/api/streams/:id?format=hls`. The backend serves a lightweight HLS manifest that points clients at the existing MPEG-TS proxy stream while preserving token or username/password query authentication.
 
 ## Telemetry & Logging
 - **System Events**: Stored in `core_systemevent`. M3U Provider creations, deletions, and manual refreshes explicitly log their status (success, info, or error) to this table.

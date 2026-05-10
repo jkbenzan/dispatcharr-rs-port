@@ -557,6 +557,8 @@ async fn main() {
             "/api/streams/:id/check/",
             post(stream_checker::checker::test_stream),
         )
+        .route("/api/streams/:channel_id", get(proxy::handle_proxy))
+        .route("/api/streams/:channel_id/", get(proxy::handle_proxy))
         .route(
             "/api/streams/bulk-check/",
             post(stream_checker::checker::start_bulk_check),

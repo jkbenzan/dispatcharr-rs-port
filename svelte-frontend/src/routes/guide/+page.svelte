@@ -77,7 +77,7 @@
   // Playback State
   let showPlayerModal = $state(false);
   let playingChannel = $state<any>(null);
-  let streamUrl = $derived(playingChannel ? `/api/proxy/stream/${playingChannel.uuid}` : '');
+  let streamUrl = $derived(playingChannel ? `/api/streams/${playingChannel.uuid}?format=hls` : '');
 
   async function loadChannelsAndEpg(isLoadMore = false) {
     if (isLoadMore) loadingMore = true;
