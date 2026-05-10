@@ -106,22 +106,30 @@
     if (observer) observer.disconnect();
   });
 
-  // Helper to get image URL. Dispatcharr backend uses tmdb_id / custom_properties to construct it
+  function normalizePosterUrl(value: any) {
+    if (typeof value !== 'string' || value.trim() === '') return null;
+    const trimmed = value.trim();
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
+    if (trimmed.startsWith('/')) return `https://image.tmdb.org/t/p/w500${trimmed}`;
+    return null;
+  }
+
+  // Helper to get a real poster URL from provider or metadata fields.
   function getImageUrl(item: any) {
-    // If it has custom properties with a stream_icon (from M3U parsing)
+    const directPoster = normalizePosterUrl(item.poster_url || item.poster_path || item.cover || item.stream_icon);
+    if (directPoster) return directPoster;
+
     if (item.custom_properties) {
       let props;
       try {
         props = typeof item.custom_properties === 'string' ? JSON.parse(item.custom_properties) : item.custom_properties;
-        if (props.stream_icon) return props.stream_icon;
+        const poster = normalizePosterUrl(
+          props.stream_icon || props.cover || props.poster_url || props.poster_path || props.movie_image || props.image
+        );
+        if (poster) return poster;
       } catch (e) {}
     }
-    
-    // TMDB fallback
-    if (item.tmdb_id) {
-      return `https://image.tmdb.org/t/p/w500/${item.tmdb_id}.jpg`; // Note: actual TMDB needs the poster path, not just ID.
-    }
-    
+
     return null; // Fallback to placeholder
   }
 </script>

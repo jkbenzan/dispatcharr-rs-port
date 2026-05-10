@@ -1082,9 +1082,25 @@ pub async fn fetch_and_parse_xc_vod(
                 .unwrap_or(None);
 
             if rel.is_none() {
+                let mut custom_properties = serde_json::Map::new();
+                if let Some(stream_icon) = s.stream_icon.as_ref() {
+                    custom_properties.insert("stream_icon".to_string(), serde_json::json!(stream_icon));
+                }
+                if let Some(stream_type) = s.stream_type.as_ref() {
+                    custom_properties.insert("stream_type".to_string(), serde_json::json!(stream_type));
+                }
+                if let Some(added) = s.added.as_ref() {
+                    custom_properties.insert("added".to_string(), serde_json::json!(added));
+                }
+
                 let new_movie = vod_movie::ActiveModel {
                     uuid: Set(Uuid::new_v4()),
                     name: Set(s.name.clone()),
+                    custom_properties: Set(if custom_properties.is_empty() {
+                        None
+                    } else {
+                        Some(serde_json::Value::Object(custom_properties))
+                    }),
                     created_at: Set(Utc::now().into()),
                     updated_at: Set(Utc::now().into()),
                     ..Default::default()
@@ -1273,9 +1289,31 @@ pub async fn fetch_and_parse_xc_series(
                 .unwrap_or(None);
 
             if rel.is_none() {
+                let mut custom_properties = serde_json::Map::new();
+                if let Some(cover) = s.cover.as_ref() {
+                    custom_properties.insert("cover".to_string(), serde_json::json!(cover));
+                }
+                if let Some(cast) = s.cast.as_ref() {
+                    custom_properties.insert("cast".to_string(), serde_json::json!(cast));
+                }
+                if let Some(director) = s.director.as_ref() {
+                    custom_properties.insert("director".to_string(), serde_json::json!(director));
+                }
+                if let Some(release_date) = s.release_date.as_ref() {
+                    custom_properties.insert("release_date".to_string(), serde_json::json!(release_date));
+                }
+
                 let new_series = vod_series::ActiveModel {
                     uuid: Set(Uuid::new_v4()),
                     name: Set(s.name.clone()),
+                    description: Set(s.plot.clone()),
+                    rating: Set(s.rating.clone()),
+                    genre: Set(s.genre.clone()),
+                    custom_properties: Set(if custom_properties.is_empty() {
+                        None
+                    } else {
+                        Some(serde_json::Value::Object(custom_properties))
+                    }),
                     created_at: Set(Utc::now().into()),
                     updated_at: Set(Utc::now().into()),
                     ..Default::default()
