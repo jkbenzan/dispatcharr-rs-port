@@ -13,6 +13,10 @@ use crate::entities::core_settings;
 use crate::AppState;
 use sea_orm::{ColumnTrait, DatabaseConnection, QueryFilter};
 
+pub const DEFAULT_PROVIDER_REFRESH_CONCURRENCY: usize = 1;
+pub const MAX_PROVIDER_REFRESH_CONCURRENCY: usize = 8;
+pub const PROVIDER_REFRESH_CONCURRENCY_ENV: &str = "DISPATCHARR_PROVIDER_REFRESH_CONCURRENCY";
+
 pub async fn get_maintenance_settings(db: &DatabaseConnection) -> crate::background::MaintenanceSettings {
     let s = core_settings::Entity::find()
         .filter(core_settings::Column::Key.eq("maintenance_settings"))
@@ -208,6 +212,7 @@ pub async fn initialize_core_settings(db: &sea_orm::DatabaseConnection) {
                 "buffer_size": 1024,
                 "retry_count": 3,
                 "stream_checker_parallel_providers": 1,
+                "provider_refresh_concurrency": DEFAULT_PROVIDER_REFRESH_CONCURRENCY,
                 "default_user_agent": "TiviMate/5.0.4 (Linux;Android 11) iPTV-Client"
             }),
         ),
@@ -273,7 +278,22 @@ pub async fn initialize_core_settings(db: &sea_orm::DatabaseConnection) {
             .await
             .unwrap_or_default();
 
-        if existing.is_none() {
+        if let Some(setting) = existing {
+            if key == "stream_settings" && setting.value.get("provider_refresh_concurrency").is_none() {
+                let mut value = setting.value.clone();
+                if let Some(obj) = value.as_object_mut() {
+                    obj.insert(
+                        "provider_refresh_concurrency".to_string(),
+                        serde_json::json!(DEFAULT_PROVIDER_REFRESH_CONCURRENCY),
+                    );
+                    let mut active: crate::entities::core_settings::ActiveModel = setting.into();
+                    active.value = sea_orm::Set(value);
+                    if active.update(db).await.is_ok() {
+                        tracing::info!("âœ¨ Added default stream setting: provider_refresh_concurrency");
+                    }
+                }
+            }
+        } else {
             let _ = crate::entities::core_settings::ActiveModel {
                 key: sea_orm::Set(key.to_string()),
                 name: sea_orm::Set(name.to_string()),
@@ -289,6 +309,42 @@ pub async fn initialize_core_settings(db: &sea_orm::DatabaseConnection) {
 
     // Initialize default stream profiles
     initialize_stream_profiles(db).await;
+}
+
+fn parse_provider_refresh_concurrency_value(value: &serde_json::Value) -> Option<usize> {
+    match value {
+        serde_json::Value::Number(n) => n.as_u64().map(|v| v as usize),
+        serde_json::Value::String(s) => s.trim().parse::<usize>().ok(),
+        _ => None,
+    }
+    .filter(|value| *value > 0)
+    .map(|value| value.min(MAX_PROVIDER_REFRESH_CONCURRENCY))
+}
+
+pub fn parse_provider_refresh_concurrency_env(value: Option<&str>) -> usize {
+    value
+        .and_then(|v| v.trim().parse::<usize>().ok())
+        .filter(|v| *v > 0)
+        .map(|v| v.min(MAX_PROVIDER_REFRESH_CONCURRENCY))
+        .unwrap_or(DEFAULT_PROVIDER_REFRESH_CONCURRENCY)
+}
+
+pub async fn get_provider_refresh_concurrency(db: &sea_orm::DatabaseConnection) -> usize {
+    if let Ok(value) = std::env::var(PROVIDER_REFRESH_CONCURRENCY_ENV) {
+        return parse_provider_refresh_concurrency_env(Some(&value));
+    }
+
+    let setting = crate::entities::core_settings::Entity::find()
+        .filter(crate::entities::core_settings::Column::Key.eq("stream_settings"))
+        .one(db)
+        .await
+        .unwrap_or_default();
+
+    setting
+        .and_then(|s| s.value.get("provider_refresh_concurrency").cloned())
+        .as_ref()
+        .and_then(parse_provider_refresh_concurrency_value)
+        .unwrap_or(DEFAULT_PROVIDER_REFRESH_CONCURRENCY)
 }
 
 pub async fn initialize_stream_profiles(db: &sea_orm::DatabaseConnection) {
@@ -413,4 +469,39 @@ pub async fn get_proxy_settings(db: &sea_orm::DatabaseConnection) -> ProxySettin
     }
 
     proxy_settings
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_provider_refresh_concurrency_env_defaults_on_invalid_values() {
+        assert_eq!(parse_provider_refresh_concurrency_env(None), 1);
+        assert_eq!(parse_provider_refresh_concurrency_env(Some("")), 1);
+        assert_eq!(parse_provider_refresh_concurrency_env(Some("abc")), 1);
+        assert_eq!(parse_provider_refresh_concurrency_env(Some("0")), 1);
+    }
+
+    #[test]
+    fn test_provider_refresh_concurrency_env_clamps_high_values() {
+        assert_eq!(parse_provider_refresh_concurrency_env(Some("2")), 2);
+        assert_eq!(
+            parse_provider_refresh_concurrency_env(Some("99")),
+            MAX_PROVIDER_REFRESH_CONCURRENCY
+        );
+    }
+
+    #[test]
+    fn test_provider_refresh_concurrency_setting_accepts_number_or_string() {
+        assert_eq!(parse_provider_refresh_concurrency_value(&json!(3)), Some(3));
+        assert_eq!(parse_provider_refresh_concurrency_value(&json!("4")), Some(4));
+        assert_eq!(parse_provider_refresh_concurrency_value(&json!(0)), None);
+        assert_eq!(parse_provider_refresh_concurrency_value(&json!("nope")), None);
+        assert_eq!(
+            parse_provider_refresh_concurrency_value(&json!(99)),
+            Some(MAX_PROVIDER_REFRESH_CONCURRENCY)
+        );
+    }
 }

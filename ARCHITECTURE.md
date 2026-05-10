@@ -11,7 +11,7 @@ Dispatcharr is a high-performance M3U/XC/EPG proxy and management system built w
     - Handles periodic M3U and EPG refreshes.
     - **Staggering**: Refreshes are staggered across accounts with a 60s delay and a stable per-account jitter (±30s) to prevent thundering herd issues.
     - **Throttling**: Accounts are only refreshed if the `refresh_interval` has passed since the last successful update.
-    - **Global Provider Refresh Queue**: M3U/XC and EPG refresh jobs share a single process-wide refresh semaphore. The current default concurrency is `1`, so simultaneous manual, bulk, setup, VOD, and background provider refreshes queue and run sequentially. This is intentionally centralized so the limit can later be backed by a settings value.
+    - **Global Provider Refresh Queue**: M3U/XC and EPG refresh jobs share a single process-wide refresh semaphore. The default concurrency is `1`, so simultaneous manual, bulk, setup, VOD, and background provider refreshes queue and run sequentially. The limit can be raised through `stream_settings.provider_refresh_concurrency` or overridden at startup with `DISPATCHARR_PROVIDER_REFRESH_CONCURRENCY`; values are clamped to `1..=8`.
 - **M3U/XC Ingestion**:
     - Supports standard M3U playlists and Xtream Codes API.
     - Provider entries are ingested as `dispatcharr_channels_stream` rows first. The legacy auto-channel-sync path can promote unmapped streams into generated channels, and those generated channels are tied back to the provider through `auto_created_by_id` for cleanup, but normal operation should curate channels separately and assign one or more streams to them.

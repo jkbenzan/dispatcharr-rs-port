@@ -261,6 +261,11 @@ async fn main() {
     let (ws_sender, _) = tokio::sync::broadcast::channel(100);
 
     let http_client = crate::settings::get_http_client(&db).await;
+    let provider_refresh_concurrency = crate::settings::get_provider_refresh_concurrency(&db).await;
+    tracing::info!(
+        "Provider refresh queue concurrency set to {}",
+        provider_refresh_concurrency
+    );
 
     // Initialize optional channel data database
     // Default to data/ directory where other runtime files live (offline.ts, logos).
@@ -278,7 +283,7 @@ async fn main() {
         broadcasters: Arc::new(dashmap::DashMap::new()),
         bulk_check_status: Arc::new(tokio::sync::RwLock::new(Default::default())),
         bulk_check_cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
-        provider_refresh_semaphore: Arc::new(tokio::sync::Semaphore::new(1)),
+        provider_refresh_semaphore: Arc::new(tokio::sync::Semaphore::new(provider_refresh_concurrency)),
         background_telemetry: Arc::new(tokio::sync::RwLock::new(crate::background::BackgroundTelemetry::default())),
         last_activity_at: Arc::new(std::sync::atomic::AtomicU64::new(
             std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs()
