@@ -75,8 +75,8 @@
 				accountType = provider.account_type || 'm3u';
 				m3uUrl = provider.server_url || '';
 				serverUrl = provider.server_url || '';
-				username = provider.username || '';
-				password = provider.password || '';
+				username = '';
+				password = '';
 				maxStreams = provider.max_streams || 1;
 				refreshInterval = provider.refresh_interval || 24;
 				staleStreamDays = provider.stale_stream_days || 7;
@@ -147,19 +147,28 @@
 			return;
 		}
 
+		if (accountType === 'xc' && !provider?.id && (!username || !password)) {
+			error = 'Username and password are required for new XTREAM Codes providers';
+			loading = false;
+			return;
+		}
+
 		try {
-			const payload = {
+			const payload: Record<string, any> = {
 				name,
 				account_type: accountType,
 				server_url: accountType === 'xc' ? serverUrl : m3uUrl,
-				username: accountType === 'xc' ? username : null,
-				password: accountType === 'xc' ? password : null,
 				max_streams: maxStreams,
 				refresh_interval: refreshInterval,
 				stale_stream_days: staleStreamDays,
 				is_active: true,
 				enable_vod: enableVod
 			};
+
+			if (accountType === 'xc') {
+				if (username) payload.username = username;
+				if (password) payload.password = password;
+			}
 
 			// Save basic info
 			const result = await onSave(payload, provider?.id);
@@ -330,11 +339,30 @@
 						<div class="form-row">
 							<div class="form-group">
 								<label for="username">Username</label>
-								<input type="text" id="username" bind:value={username} required />
+								<input
+									type="text"
+									id="username"
+									bind:value={username}
+									required={!provider}
+									placeholder={provider?.has_username ? 'Saved - leave blank to keep' : 'Username'}
+								/>
+								{#if provider?.has_username}
+									<span class="helper-text">A username is saved. Enter a new one only to replace it.</span>
+								{/if}
 							</div>
 							<div class="form-group">
 								<label for="password">Password</label>
-								<input type="password" id="password" bind:value={password} required />
+								<input
+									type="password"
+									id="password"
+									bind:value={password}
+									required={!provider}
+									placeholder={provider?.has_password ? 'Saved - leave blank to keep' : 'Password'}
+									autocomplete="new-password"
+								/>
+								{#if provider?.has_password}
+									<span class="helper-text">A password is saved. Enter a new one only to replace it.</span>
+								{/if}
 							</div>
 						</div>
 					{/if}
@@ -717,6 +745,12 @@
 				border-color: var(--accent);
 				background: rgba(0, 0, 0, 0.4);
 			}
+		}
+
+		.helper-text {
+			font-size: 12px;
+			color: var(--text-dim);
+			line-height: 1.35;
 		}
 
 		select {
