@@ -52,7 +52,7 @@ Items queued for future implementation and audit phases.
 
 - [x] **UI Polish: Navigation Icons**
   Update the sidebar navigation to use more appropriate icons (e.g., change Stream Checker to `ticket-check`).
-- [ ] **Finalize SvelteKit Migration**
+- [x] **Finalize SvelteKit Migration**
   Complete the remaining UI skeletons for DVR scheduling and the Plugin management interface.
 - [ ] **EPG Timeline Accuracy**
   Audit vertical scrolling synchronization and the "Jump to Now" behavior in the TV Guide.

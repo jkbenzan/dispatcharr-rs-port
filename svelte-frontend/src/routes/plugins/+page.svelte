@@ -1,17 +1,18 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { api } from '$lib/api';
-	import { Puzzle, DownloadCloud, FileCode2, PackageOpen } from 'lucide-svelte';
+	import { AlertCircle, DownloadCloud, PackageOpen, Plug, Puzzle } from 'lucide-svelte';
 
 	let plugins: any[] = $state([]);
 	let loading = $state(true);
+	let error = $state('');
 
 	onMount(async () => {
 		try {
 			const res = await api.getPlugins();
 			plugins = res.results || [];
 		} catch (e) {
-			console.error('Failed to load plugins', e);
+			error = e instanceof Error ? e.message : 'Failed to load plugins';
 		} finally {
 			loading = false;
 		}
@@ -22,9 +23,9 @@
 	<header class="page-header">
 		<div>
 			<h1>Plugins</h1>
-			<p class="subtitle">Extend the Dispatcharr engine with custom parsers, EPG scrapers, and metadata agents.</p>
+			<p class="subtitle">Inspect installed extension packages and parser integrations.</p>
 		</div>
-		<button class="btn-primary" disabled>
+		<button class="btn-primary" disabled title="Plugin installation is not exposed in the UI yet">
 			<DownloadCloud size={16} />
 			<span>Install Plugin</span>
 		</button>
@@ -33,39 +34,40 @@
 	<main class="content-area">
 		{#if loading}
 			<div class="loading-state">Loading plugins...</div>
+		{:else if error}
+			<div class="empty-state">
+				<AlertCircle size={42} />
+				<p>{error}</p>
+			</div>
 		{:else if plugins.length === 0}
 			<div class="empty-state">
-				<div class="icon-circle primary large">
-					<Puzzle size={48} />
+				<div class="icon-circle">
+					<Puzzle size={42} />
 				</div>
 				<h2>No Plugins Installed</h2>
-				<p>The plugin engine is currently initializing. In the future, this is where you will manage community-built Lua and WebAssembly scripts to parse custom IPTV provider layouts or fetch localized EPG data.</p>
-				
-				<div class="feature-preview">
-					<h3>Upcoming Capabilities</h3>
-					<div class="grid">
-						<div class="preview-card">
-							<FileCode2 size={20} class="text-accent" />
-							<h4>Custom Parsers</h4>
-							<span>Inject scripts to normalize non-standard M3U tags or complex VOD hierarchies before they hit the database.</span>
-						</div>
-						<div class="preview-card">
-							<PackageOpen size={20} class="text-accent" />
-							<h4>Metadata Agents</h4>
-							<span>Pull rich poster art and descriptions from TMDB/IMDB for your VOD libraries dynamically.</span>
-						</div>
-					</div>
-				</div>
+				<p>The backend returned an empty plugin registry. Installed plugins will appear here when the registry endpoint reports them.</p>
 			</div>
 		{:else}
-			<div class="grid-list">
+			<div class="plugin-list">
 				{#each plugins as plugin}
-					<div class="plugin-card">
-						{plugin.name}
-					</div>
+					<article class="plugin-card">
+						<div class="plugin-icon">
+							<Plug size={22} />
+						</div>
+						<div class="plugin-body">
+							<h2>{plugin.name || plugin.key || 'Unnamed plugin'}</h2>
+							<p>{plugin.description || plugin.summary || 'No description provided.'}</p>
+						</div>
+						<span class="status-pill">{plugin.enabled === false ? 'Disabled' : 'Enabled'}</span>
+					</article>
 				{/each}
 			</div>
 		{/if}
+
+		<section class="registry-note">
+			<PackageOpen size={18} />
+			<span>Plugin data is sourced from `/api/plugins/plugins/`.</span>
+		</section>
 	</main>
 </div>
 
@@ -103,127 +105,134 @@
 		background: var(--accent);
 		color: white;
 		border: none;
-		padding: 10px 24px;
+		padding: 10px 18px;
 		border-radius: var(--radius);
 		font-weight: 600;
 		font-size: 14px;
-		cursor: pointer;
-		transition: all 0.2s;
-
-		&:hover:not(:disabled) {
-			background: var(--accent-dim);
-		}
-
-		&:disabled {
-			opacity: 0.5;
-			cursor: not-allowed;
-		}
+		opacity: 0.55;
+		cursor: not-allowed;
 	}
 
 	.content-area {
 		flex: 1;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: var(--radius);
 		display: flex;
 		flex-direction: column;
-		overflow: hidden;
+		gap: 16px;
+		overflow: auto;
 	}
 
-	.loading-state {
+	.loading-state,
+	.empty-state {
 		margin: auto;
 		color: var(--text-dim);
-		font-style: italic;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 12px;
+		max-width: 520px;
+		text-align: center;
 	}
 
 	.empty-state {
-		margin: auto;
-		max-width: 650px;
-		padding: 40px;
-		text-align: center;
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-
 		h2 {
-			margin: 24px 0 12px;
 			color: var(--text-bright);
-			font-size: 24px;
+			margin: 8px 0 0;
+			font-size: 20px;
 		}
 
 		p {
-			color: var(--text-dim);
-			line-height: 1.6;
-			margin-bottom: 40px;
+			margin: 0;
+			line-height: 1.5;
 		}
 	}
 
-	.icon-circle {
-		width: 64px;
-		height: 64px;
-		border-radius: 50%;
-		background: rgba(255, 255, 255, 0.05);
+	.icon-circle,
+	.plugin-icon {
+		width: 56px;
+		height: 56px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		color: var(--text-dim);
+		border-radius: var(--radius);
+		background: var(--accent-transparent);
+		color: var(--accent);
+	}
+
+	.plugin-list {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+	}
+
+	.plugin-card,
+	.registry-note {
+		background: var(--surface);
 		border: 1px solid var(--border);
-
-		&.primary {
-			background: var(--accent-transparent);
-			color: var(--accent);
-			border-color: rgba(237, 28, 36, 0.2);
-		}
-
-		&.large {
-			width: 96px;
-			height: 96px;
-		}
+		border-radius: var(--radius);
 	}
 
-	.feature-preview {
-		width: 100%;
-		border-top: 1px solid var(--border);
-		padding-top: 32px;
+	.plugin-card {
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr) auto;
+		gap: 16px;
+		align-items: center;
+		padding: 16px;
+	}
 
-		h3 {
-			font-size: 14px;
-			text-transform: uppercase;
-			letter-spacing: 1px;
+	.plugin-icon {
+		width: 44px;
+		height: 44px;
+	}
+
+	.plugin-body {
+		min-width: 0;
+
+		h2 {
+			margin: 0 0 4px;
+			color: var(--text-bright);
+			font-size: 16px;
+		}
+
+		p {
+			margin: 0;
 			color: var(--text-dim);
-			margin-bottom: 24px;
-		}
-
-		.grid {
-			display: grid;
-			grid-template-columns: 1fr 1fr;
-			gap: 16px;
-		}
-
-		.preview-card {
-			background: rgba(0, 0, 0, 0.2);
-			border: 1px solid var(--border);
-			border-radius: var(--radius);
-			padding: 20px;
-			text-align: left;
-			display: flex;
-			flex-direction: column;
-			gap: 8px;
-
-			h4 {
-				margin: 0;
-				color: var(--text-bright);
-			}
-
-			span {
-				font-size: 13px;
-				color: var(--text-dim);
-				line-height: 1.5;
-			}
+			font-size: 13px;
+			overflow-wrap: anywhere;
 		}
 	}
 
-	:global(.text-accent) {
-		color: var(--accent) !important;
+	.status-pill {
+		border: 1px solid var(--border);
+		border-radius: 999px;
+		padding: 5px 10px;
+		color: var(--text-bright);
+		font-size: 12px;
+		background: rgba(255, 255, 255, 0.04);
+	}
+
+	.registry-note {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 12px 14px;
+		color: var(--text-dim);
+		font-size: 13px;
+	}
+
+	@media (max-width: 760px) {
+		.page-header {
+			align-items: flex-start;
+			flex-direction: column;
+			gap: 14px;
+		}
+
+		.plugin-card {
+			grid-template-columns: auto minmax(0, 1fr);
+		}
+
+		.status-pill {
+			grid-column: 2;
+			justify-self: start;
+		}
 	}
 </style>

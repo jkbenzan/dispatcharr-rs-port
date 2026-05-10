@@ -138,6 +138,7 @@ export const api = {
 
   // =================== SETTINGS & DASHBOARD ===================
   getSettings: () => fetchApi('/api/core/settings/'),
+  getComskipConfig: () => fetchApi('/api/channels/dvr/comskip-config/'),
   getDashboardStats: () => fetchApi('/api/stats'),
   updateSetting: (id: number, data: any) => fetchApi(`/api/core/settings/${id}/`, {
     method: 'PUT',
