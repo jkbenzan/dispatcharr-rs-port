@@ -4,6 +4,17 @@ Items queued for future implementation and audit phases.
 
 ---
 
+## Completed API Parity Work [DONE]
+
+- [x] **Core Notifications API**
+  Replaced mock notification handlers with database-backed endpoints for active notifications and notification counts.
+- [x] **Notification Visibility Rules**
+  Filter notifications by active status, expiry, dismissals, and admin-only visibility for non-admin users.
+- [x] **Notification Response Shape**
+  Return DRF-compatible list responses with `count`, `next`, `previous`, and `results`, plus `{ "count": X }` for the count endpoint.
+
+---
+
 ## Phase 2: Data Ingestion & Streaming Infrastructure [DONE]
 
 - [x] **Background Worker Hardening**:
