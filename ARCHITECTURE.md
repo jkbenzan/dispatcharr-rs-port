@@ -35,6 +35,11 @@ Dispatcharr is a high-performance M3U/XC/EPG proxy and management system built w
     - **Initial Prefetch**: During provider setup, a "full fetch" is performed to tally streams per category, allowing the UI to display "{n} streams found" before categories are selected.
     - **Periodic Updates**: Background sync tasks for Live, VOD, and Series now include a tallying phase that updates category `stream_count` in the database `custom_properties` field.
     - **Global Metrics**: Counts are updated for all categories (groups) provided by the source, ensuring the management UI always reflects current provider content.
+- **Stream Checker & Maintenance**:
+    - Manual stream checks, bulk checks, and background maintenance share the same health bookkeeping path.
+    - Stream diagnostics are stored in each stream row's `custom_properties.stream_stats` and `stream_stats_updated_at` fields.
+    - Auto-pruning marks streams as stale after `maintenance_settings.auto_prune_failed_count` consecutive failed checks. The default threshold is `3`, and `0` disables stale marking.
+    - Maintenance settings are stored in `core_settings` under `maintenance_settings` and surfaced in the Svelte Settings page.
 - **Channel Matching**:
     - Channel name parsing removes provider noise, country prefixes, resolution markers, and generic terms before scoring.
     - Match scoring uses Jaro-Winkler similarity plus resolution, country, and logo context.

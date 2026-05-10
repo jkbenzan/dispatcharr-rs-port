@@ -35,7 +35,7 @@ Items queued for future implementation and audit phases.
   Add an option to run longer tests (2-5 minutes) to monitor for buffering or bit-rate drops after the initial connection.
 - [x] **Stream Checker: Static/Fake Stream Detection**
   Integrate FFmpeg/FFprobe filters to detect frozen images or black screens to identify non-functional but "active" streams.
-- [ ] **Stream Checker: Auto-Pruning**
+- [x] **Stream Checker: Auto-Pruning**
   Implement logic to automatically delete or disable streams that consistently fail health checks or are flagged as fake.
 - [ ] **Channel Manager UX Refinement**
   Verify drag-and-drop assignments between the Stream Pane and Channel Pane. Ensure smooth performance with large lists.

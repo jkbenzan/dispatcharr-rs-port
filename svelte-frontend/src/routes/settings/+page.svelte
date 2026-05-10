@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { Settings, Server, Globe, HardDrive, Shield, Users, Database, MonitorPlay, Save, CheckCircle2 } from 'lucide-svelte';
+	import { Settings, Server, Globe, HardDrive, Shield, Users, Database, MonitorPlay, Save, CheckCircle2, Activity } from 'lucide-svelte';
 	import { api } from '$lib/api';
 	import { toast } from '$lib/toast.svelte';
 	import { loadUiSettings } from '$lib/settings.svelte';
@@ -14,6 +14,7 @@
 		{ id: 'ui_settings', label: 'UI Settings', icon: MonitorPlay },
 		{ id: 'system_settings', label: 'System', icon: Settings },
 		{ id: 'stream_settings', label: 'Stream Engine', icon: Server },
+		{ id: 'maintenance_settings', label: 'Maintenance', icon: Activity },
 		{ id: 'dvr_settings', label: 'DVR & Comskip', icon: HardDrive },
 		{ id: 'proxy_settings', label: 'Proxy & Cache', icon: Shield },
 		{ id: 'network_access', label: 'Network Access', icon: Globe },
@@ -191,6 +192,57 @@
 								<label for="default-user-agent">Default User Agent</label>
 								<input id="default-user-agent" type="text" bind:value={formData['stream_settings'].default_user_agent} />
 								<span class="help-text">The default HTTP User-Agent sent to IPTV providers if not specifically overridden on the playlist.</span>
+							</div>
+						</div>
+
+					<!-- MAINTENANCE -->
+					{:else if activeTab === 'maintenance_settings' && formData['maintenance_settings']}
+						<div class="form-header">
+							<h2>Maintenance</h2>
+							<p>Background stream checks, longer diagnostics, and automatic failed-stream pruning.</p>
+						</div>
+						<div class="form-grid">
+							<div class="form-group">
+								<label for="stream-check-frequency-days">Check Frequency (Days)</label>
+								<input id="stream-check-frequency-days" type="number" bind:value={formData['maintenance_settings'].stream_check_frequency_days} min="1" />
+								<span class="help-text">How old stream diagnostics can be before background maintenance rechecks them.</span>
+							</div>
+							<div class="form-group">
+								<label for="maintenance-batch-size">Batch Size</label>
+								<input id="maintenance-batch-size" type="number" bind:value={formData['maintenance_settings'].batch_size} min="1" />
+								<span class="help-text">Maximum streams tested during one maintenance pass.</span>
+							</div>
+							<div class="form-group">
+								<label for="maintenance-off-hours-start">Off-Hours Start</label>
+								<input id="maintenance-off-hours-start" type="number" bind:value={formData['maintenance_settings'].off_hours_start} min="0" max="23" />
+								<span class="help-text">Hour of day when background stream checking may begin.</span>
+							</div>
+							<div class="form-group">
+								<label for="maintenance-off-hours-end">Off-Hours End</label>
+								<input id="maintenance-off-hours-end" type="number" bind:value={formData['maintenance_settings'].off_hours_end} min="0" max="23" />
+								<span class="help-text">Hour of day when background stream checking should stop.</span>
+							</div>
+							<div class="form-group">
+								<label for="maintenance-idle-threshold">Idle Threshold (Minutes)</label>
+								<input id="maintenance-idle-threshold" type="number" bind:value={formData['maintenance_settings'].idle_threshold_minutes} min="0" />
+								<span class="help-text">Reserved for idle-window scheduling.</span>
+							</div>
+							<div class="form-group">
+								<label for="auto-prune-failed-count">Auto-Prune Failure Count</label>
+								<input id="auto-prune-failed-count" type="number" bind:value={formData['maintenance_settings'].auto_prune_failed_count} min="0" />
+								<span class="help-text">Consecutive failed checks before a stream is marked stale. Use 0 to disable.</span>
+							</div>
+							<div class="form-group switch-group">
+								<label>
+									<span>Extended Stream Tests</span>
+									<input type="checkbox" bind:checked={formData['maintenance_settings'].extended_test_enabled} />
+									<div class="switch"></div>
+								</label>
+								<span class="help-text">Run longer checks to catch buffering or fake/live-loop behavior.</span>
+							</div>
+							<div class="form-group">
+								<label for="extended-test-duration">Extended Test Duration (Seconds)</label>
+								<input id="extended-test-duration" type="number" bind:value={formData['maintenance_settings'].extended_test_duration_seconds} min="10" disabled={!formData['maintenance_settings'].extended_test_enabled} />
 							</div>
 						</div>
 

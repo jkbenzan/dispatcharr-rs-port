@@ -217,6 +217,20 @@ pub async fn initialize_core_settings(db: &sea_orm::DatabaseConnection) {
             }),
         ),
         (
+            "maintenance_settings",
+            "Maintenance Settings",
+            serde_json::json!({
+                "stream_check_frequency_days": 7,
+                "off_hours_start": 2,
+                "off_hours_end": 6,
+                "idle_threshold_minutes": 30,
+                "batch_size": 50,
+                "extended_test_enabled": false,
+                "extended_test_duration_seconds": 60,
+                "auto_prune_failed_count": 3
+            }),
+        ),
+        (
             "system_settings",
             "System Settings",
             serde_json::json!({
@@ -290,6 +304,33 @@ pub async fn initialize_core_settings(db: &sea_orm::DatabaseConnection) {
                     active.value = sea_orm::Set(value);
                     if active.update(db).await.is_ok() {
                         tracing::info!("âœ¨ Added default stream setting: provider_refresh_concurrency");
+                    }
+                }
+            } else if key == "maintenance_settings" {
+                let mut value = setting.value.clone();
+                let mut changed = false;
+                if let Some(obj) = value.as_object_mut() {
+                    for (field, default_value) in [
+                        ("stream_check_frequency_days", serde_json::json!(7)),
+                        ("off_hours_start", serde_json::json!(2)),
+                        ("off_hours_end", serde_json::json!(6)),
+                        ("idle_threshold_minutes", serde_json::json!(30)),
+                        ("batch_size", serde_json::json!(50)),
+                        ("extended_test_enabled", serde_json::json!(false)),
+                        ("extended_test_duration_seconds", serde_json::json!(60)),
+                        ("auto_prune_failed_count", serde_json::json!(3)),
+                    ] {
+                        if obj.get(field).is_none() {
+                            obj.insert(field.to_string(), default_value);
+                            changed = true;
+                        }
+                    }
+                }
+                if changed {
+                    let mut active: crate::entities::core_settings::ActiveModel = setting.into();
+                    active.value = sea_orm::Set(value);
+                    if active.update(db).await.is_ok() {
+                        tracing::info!("Added missing maintenance settings defaults");
                     }
                 }
             }

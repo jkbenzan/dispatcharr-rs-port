@@ -540,14 +540,32 @@ pub async fn test_stream(
     };
 
     match check_single_stream(&state, stream_id, duration).await {
-        Ok(stream_data) => (
-            StatusCode::OK,
-            Json(json!({ "success": true, "stream": stream_data })),
-        ),
-        Err((status, message)) => (
-            status,
-            Json(json!({ "success": false, "message": message })),
-        ),
+        Ok(stream_data) => {
+            let _ = update_stream_health(
+                &state.db,
+                stream_id,
+                true,
+                settings.auto_prune_failed_count,
+            )
+            .await;
+            (
+                StatusCode::OK,
+                Json(json!({ "success": true, "stream": stream_data })),
+            )
+        }
+        Err((status, message)) => {
+            let _ = update_stream_health(
+                &state.db,
+                stream_id,
+                false,
+                settings.auto_prune_failed_count,
+            )
+            .await;
+            (
+                status,
+                Json(json!({ "success": false, "message": message })),
+            )
+        }
     }
 }
 
@@ -694,6 +712,14 @@ pub async fn start_bulk_check(
                         }
 
                         let res = check_single_stream(&state_c, stream_obj.id, duration).await;
+                        let health_succeeded = res.is_ok();
+                        let _ = update_stream_health(
+                            &state_c.db,
+                            stream_obj.id,
+                            health_succeeded,
+                            m_settings.auto_prune_failed_count,
+                        )
+                        .await;
 
                         {
                             let mut st = state_c.bulk_check_status.write().await;
@@ -1037,12 +1063,19 @@ pub async fn bulk_sort_streams(
 
 pub async fn update_stream_health(
     db: &DatabaseConnection,
-    stream: &stream::Model,
+    stream_id: i64,
     is_success: bool,
     threshold: i32,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let mut active: stream::ActiveModel = stream.clone().into();
-    let mut props = stream.custom_properties.clone().unwrap_or_else(|| json!({}));
+    let Some(current_stream) = stream::Entity::find_by_id(stream_id).one(db).await? else {
+        return Ok(());
+    };
+
+    let mut active: stream::ActiveModel = current_stream.clone().into();
+    let mut props = current_stream
+        .custom_properties
+        .clone()
+        .unwrap_or_else(|| json!({}));
     
     let mut stats = props.get("stream_stats").cloned().unwrap_or_else(|| json!({}));
     let mut failure_count = stats.get("consecutive_failures").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
@@ -1052,7 +1085,10 @@ pub async fn update_stream_health(
     } else {
         failure_count += 1;
         if threshold > 0 && failure_count >= threshold {
-            info!("[Maintenance] Pruning stream {}: reached {} consecutive failures.", stream.id, failure_count);
+            info!(
+                "[Maintenance] Pruning stream {}: reached {} consecutive failures.",
+                current_stream.id, failure_count
+            );
             active.is_stale = sea_orm::Set(true);
         }
     }
@@ -1123,12 +1159,12 @@ pub async fn run_automated_maintenance(state: Arc<AppState>) -> Result<(), Box<d
         match check_single_stream(&state, stream_id, duration).await {
             Ok(_) => {
                 success_count += 1;
-                let _ = update_stream_health(&state.db, &s, true, settings.auto_prune_failed_count).await;
+                let _ = update_stream_health(&state.db, s.id, true, settings.auto_prune_failed_count).await;
             }
             Err(e) => {
                 failure_count += 1;
                 error!("[Maintenance] Check failed for stream {}: {:?}", stream_id, e);
-                let _ = update_stream_health(&state.db, &s, false, settings.auto_prune_failed_count).await;
+                let _ = update_stream_health(&state.db, s.id, false, settings.auto_prune_failed_count).await;
             }
         }
 
