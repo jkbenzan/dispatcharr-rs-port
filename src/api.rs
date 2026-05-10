@@ -24,6 +24,38 @@ fn redact_m3u_account_credentials(acc: &m3u_account::Model, acc_json: &mut Value
     }
 }
 
+fn is_m3u_failure_status(status: &str) -> bool {
+    matches!(status, "error" | "failed")
+}
+
+fn normalized_m3u_status(status: &str) -> &'static str {
+    match status {
+        "error" | "failed" => "failed",
+        "fetching" => "refreshing",
+        "success" => "healthy",
+        "pending_setup" => "pending_setup",
+        "pending" => "pending",
+        _ => "unknown",
+    }
+}
+
+async fn add_m3u_account_status_fields(
+    db: &sea_orm::DatabaseConnection,
+    acc: &m3u_account::Model,
+    acc_json: &mut Value,
+) {
+    let stream_count = stream::Entity::find()
+        .filter(stream::Column::M3uAccountId.eq(acc.id))
+        .count(db)
+        .await
+        .unwrap_or(0);
+
+    acc_json["stream_count"] = json!(stream_count);
+    acc_json["last_refresh_at"] = json!(acc.updated_at);
+    acc_json["normalized_status"] = json!(normalized_m3u_status(&acc.status));
+    acc_json["is_failed"] = json!(is_m3u_failure_status(&acc.status));
+}
+
 /// 1. FLAT ARRAY: Solves the `TypeError: .reduce is not a function`
 #[allow(dead_code)]
 pub async fn get_flat_array() -> Json<Value> {
@@ -1338,7 +1370,10 @@ pub async fn get_dashboard_stats(State(state): State<Arc<AppState>>) -> Json<Val
         .await
         .unwrap_or_default();
     let accounts_count = accounts.len();
-    let failed_accounts = accounts.iter().filter(|a| a.status == "error").count();
+    let failed_accounts = accounts
+        .iter()
+        .filter(|a| is_m3u_failure_status(&a.status))
+        .count();
 
     let sources = epg_source::Entity::find()
         .all(&state.db)
@@ -1929,6 +1964,7 @@ pub async fn get_m3u_accounts(State(state): State<Arc<AppState>>) -> Json<Value>
     for acc in accounts {
         let mut acc_json = serde_json::to_value(&acc).unwrap();
         redact_m3u_account_credentials(&acc, &mut acc_json);
+        add_m3u_account_status_fields(&state.db, &acc, &mut acc_json).await;
         extract_custom_props_to_root(&acc, &mut acc_json);
         acc_json["profiles"] = json!([]);
         acc_json["filters"] = json!([]);
@@ -2361,6 +2397,7 @@ pub async fn add_m3u_account(
 
                 let mut acc_json = serde_json::to_value(&acc).unwrap();
                 redact_m3u_account_credentials(&acc, &mut acc_json);
+                add_m3u_account_status_fields(&state.db, &acc, &mut acc_json).await;
                 extract_custom_props_to_root(&acc, &mut acc_json);
                 acc_json["profiles"] = json!([]);
                 acc_json["filters"] = json!([]);
@@ -2400,6 +2437,7 @@ pub async fn get_m3u_account(
         Ok(Some(acc)) => {
             let mut acc_json = serde_json::to_value(&acc).unwrap();
             redact_m3u_account_credentials(&acc, &mut acc_json);
+            add_m3u_account_status_fields(&state.db, &acc, &mut acc_json).await;
             extract_custom_props_to_root(&acc, &mut acc_json);
             acc_json["profiles"] = json!([]);
             acc_json["filters"] = json!([]);
@@ -3156,6 +3194,7 @@ pub async fn update_m3u_account(
 
         let mut acc_json = serde_json::to_value(&updated).unwrap();
         redact_m3u_account_credentials(&updated, &mut acc_json);
+        add_m3u_account_status_fields(&state.db, &updated, &mut acc_json).await;
         extract_custom_props_to_root(&updated, &mut acc_json);
         acc_json["profiles"] = json!([]);
         acc_json["filters"] = json!([]);
@@ -4007,6 +4046,18 @@ mod tests {
         assert!(value.get("password").is_none());
         assert_eq!(value["has_username"], true);
         assert_eq!(value["has_password"], true);
+    }
+
+    #[test]
+    fn test_m3u_failure_status_includes_failed_and_error() {
+        assert!(is_m3u_failure_status("failed"));
+        assert!(is_m3u_failure_status("error"));
+        assert!(!is_m3u_failure_status("success"));
+
+        assert_eq!(normalized_m3u_status("failed"), "failed");
+        assert_eq!(normalized_m3u_status("error"), "failed");
+        assert_eq!(normalized_m3u_status("fetching"), "refreshing");
+        assert_eq!(normalized_m3u_status("success"), "healthy");
     }
 }
 
