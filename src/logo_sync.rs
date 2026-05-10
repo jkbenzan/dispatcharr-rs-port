@@ -32,6 +32,11 @@ pub async fn sync_logo_repositories(_state: Arc<AppState>) {
             url: "https://github.com/tv-logo/tv-logos.git".to_string(),
             enabled: true,
         },
+        LogoRepository {
+            name: "iptv-org-logos".to_string(),
+            url: "https://github.com/iptv-org/logos.git".to_string(),
+            enabled: true,
+        },
     ];
 
     let base_dir = Path::new("data/logo-libraries");

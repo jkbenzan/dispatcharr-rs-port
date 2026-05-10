@@ -45,6 +45,9 @@ Dispatcharr is a high-performance M3U/XC/EPG proxy and management system built w
     - Match scoring uses Jaro-Winkler similarity plus resolution, country, and logo context.
     - A token-overlap guard caps unrelated short-name matches below medium confidence when the channel name shares no significant token with the station name or call sign.
     - Applying a match now persists selected station metadata to the external PostgreSQL channel row, including station ID, channel name, TVG-ID, and logo lookup/creation.
+- **Logo Libraries**:
+    - A background worker syncs external logo repositories into `data/logo-libraries` on startup and every 24 hours.
+    - Default repositories are `tv-logo/tv-logos` and `iptv-org/logos`; local logo-library search is exposed through `/api/channels/logos/search-libraries/`.
 
 ## Frontend (Svelte)
 - **State Management**: Svelte 5 Runes ($state, $derived, $effect).
