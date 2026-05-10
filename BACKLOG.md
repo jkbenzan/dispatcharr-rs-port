@@ -54,7 +54,7 @@ Items queued for future implementation and audit phases.
   Update the sidebar navigation to use more appropriate icons (e.g., change Stream Checker to `ticket-check`).
 - [x] **Finalize SvelteKit Migration**
   Complete the remaining UI skeletons for DVR scheduling and the Plugin management interface.
-- [ ] **EPG Timeline Accuracy**
+- [x] **EPG Timeline Accuracy**
   Audit vertical scrolling synchronization and the "Jump to Now" behavior in the TV Guide.
 - [ ] **TMDB VOD Integration**
   Verify metadata retrieval for VOD posters and descriptions using TMDB IDs.

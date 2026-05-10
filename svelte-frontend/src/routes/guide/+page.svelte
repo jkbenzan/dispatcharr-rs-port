@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, tick } from 'svelte';
   import { api } from '$lib/api';
   import Modal from '$lib/components/ui/Modal.svelte';
   import VideoPlayer from '$lib/components/ui/VideoPlayer.svelte';
@@ -21,9 +21,20 @@
   let channelsColumn = $state<HTMLElement>();
 
   // Time / Date Selection
-  let now = new Date();
-  let selectedDate = $state(now.toISOString().split('T')[0]); // YYYY-MM-DD
-  let selectedTime = $state(now.getHours().toString().padStart(2, '0') + ':00'); // HH:00
+  function localDateInputValue(date: Date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  function hourSelectValue(date: Date) {
+    return `${String(date.getHours()).padStart(2, '0')}:00`;
+  }
+
+  const initialNow = new Date();
+  let selectedDate = $state(localDateInputValue(initialNow));
+  let selectedTime = $state(hourSelectValue(initialNow));
   
   // Computed Time Window
   let timeStart = $derived.by(() => {
@@ -146,23 +157,24 @@
     channelsColumn.scrollTop = gridViewport.scrollTop;
   }
 
-  function jumpToNow() {
+  function scrollToCurrentMarker() {
     if (!gridViewport) return;
-    
-    // Reset date/time to now if we are looking at a different day
-    const currentDayStr = new Date().toISOString().split('T')[0];
-    if (selectedDate !== currentDayStr) {
-      selectedDate = currentDayStr;
-      selectedTime = new Date().getHours().toString().padStart(2, '0') + ':00';
-      // loadChannelsAndEpg will be triggered by $effect
-    }
 
-    // Scroll horizontal to marker position
     const viewportWidth = gridViewport.clientWidth;
+    const targetLeft = Math.max(0, markerPosition - (viewportWidth / 3));
     gridViewport.scrollTo({
-      left: markerPosition - (viewportWidth / 3), // Center marker roughly at 1/3 of view
+      left: targetLeft,
       behavior: 'smooth'
     });
+  }
+
+  async function jumpToNow() {
+    const current = new Date();
+    currentTimestamp = current.getTime();
+    selectedDate = localDateInputValue(current);
+    selectedTime = hourSelectValue(current);
+    await tick();
+    scrollToCurrentMarker();
   }
 
   function openProgramDetails(program: any, channel: any) {
