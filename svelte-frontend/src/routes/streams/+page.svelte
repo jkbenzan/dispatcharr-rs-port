@@ -22,6 +22,15 @@
 	let showEpgModal = $state(false);
 	let selectedEpgSource: any = $state(null);
 
+	function normalizeAccountType(value?: string) {
+		return (value || '').toLowerCase();
+	}
+
+	function isXcProvider(provider: any) {
+		const accountType = normalizeAccountType(provider?.account_type);
+		return accountType === 'xc' || accountType === 'xtream';
+	}
+
 	onMount(() => {
 		loadM3uProviders();
 		loadEpgSources();
@@ -260,8 +269,8 @@
 						<div class="provider-card">
 							<div class="card-header">
 								<div class="title-row">
-									<div class="type-badge" class:xc={provider.account_type === 'xc'}>
-										{provider.account_type === 'xc' ? 'XTREAM' : 'M3U'}
+									<div class="type-badge" class:xc={isXcProvider(provider)}>
+										{isXcProvider(provider) ? 'XTREAM' : 'M3U'}
 									</div>
 									<h3>{provider.name}</h3>
 								</div>

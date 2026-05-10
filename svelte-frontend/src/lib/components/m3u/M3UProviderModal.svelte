@@ -43,6 +43,19 @@
 	let groupSettings = $state<Record<number, { enabled: boolean; auto_channel_sync: boolean }>>({});
 	let categorySettings = $state<Record<number, { enabled: boolean }>>({});
 
+	function normalizeAccountType(value?: string) {
+		const accountType = (value || '').toLowerCase();
+		return accountType === 'xtream' ? 'xc' : accountType;
+	}
+
+	function isXcAccountType(value?: string) {
+		return normalizeAccountType(value) === 'xc';
+	}
+
+	function isM3uAccountType(value?: string) {
+		return normalizeAccountType(value) === 'm3u';
+	}
+
 	// Filtered lists
 	const filteredGroups = $derived(
 		allChannelGroups.filter(g => 
@@ -72,7 +85,7 @@
 		if (show) {
 			if (provider) {
 				name = provider.name || '';
-				accountType = provider.account_type || 'm3u';
+				accountType = normalizeAccountType(provider.account_type) || 'm3u';
 				m3uUrl = provider.server_url || '';
 				serverUrl = provider.server_url || '';
 				username = '';
@@ -147,7 +160,7 @@
 			return;
 		}
 
-		if (accountType === 'xc' && !provider?.id && (!username || !password)) {
+		if (isXcAccountType(accountType) && !provider?.id && (!username || !password)) {
 			error = 'Username and password are required for new XTREAM Codes providers';
 			loading = false;
 			return;
@@ -156,8 +169,8 @@
 		try {
 			const payload: Record<string, any> = {
 				name,
-				account_type: accountType,
-				server_url: accountType === 'xc' ? serverUrl : m3uUrl,
+				account_type: normalizeAccountType(accountType),
+				server_url: isXcAccountType(accountType) ? serverUrl : m3uUrl,
 				max_streams: maxStreams,
 				refresh_interval: refreshInterval,
 				stale_stream_days: staleStreamDays,
@@ -165,7 +178,7 @@
 				enable_vod: enableVod
 			};
 
-			if (accountType === 'xc') {
+			if (isXcAccountType(accountType)) {
 				if (username) payload.username = username;
 				if (password) payload.password = password;
 			}
@@ -326,7 +339,7 @@
 						</div>
 					</div>
 
-					{#if accountType === 'm3u'}
+					{#if isM3uAccountType(accountType)}
 						<div class="form-group">
 							<label for="m3uUrl">Playlist URL</label>
 							<input type="url" id="m3uUrl" bind:value={m3uUrl} placeholder="http://example.com/playlist.m3u" required />
