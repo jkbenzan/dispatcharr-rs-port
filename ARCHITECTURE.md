@@ -11,11 +11,12 @@ Dispatcharr is a high-performance M3U/XC/EPG proxy and management system built w
     - Handles periodic M3U and EPG refreshes.
     - **Staggering**: Refreshes are staggered across accounts with a 60s delay and a stable per-account jitter (±30s) to prevent thundering herd issues.
     - **Throttling**: Accounts are only refreshed if the `refresh_interval` has passed since the last successful update.
+    - **Global Provider Refresh Queue**: M3U/XC and EPG refresh jobs share a single process-wide refresh semaphore. The current default concurrency is `1`, so simultaneous manual, bulk, setup, VOD, and background provider refreshes queue and run sequentially. This is intentionally centralized so the limit can later be backed by a settings value.
 - **M3U/XC Ingestion**:
     - Supports standard M3U playlists and Xtream Codes API.
     - Provider entries are ingested as `dispatcharr_channels_stream` rows first. The legacy auto-channel-sync path can promote unmapped streams into generated channels, and those generated channels are tied back to the provider through `auto_created_by_id` for cleanup, but normal operation should curate channels separately and assign one or more streams to them.
     - Legacy auto-channel-sync is disabled unless `DISPATCHARR_ENABLE_LEGACY_AUTO_CHANNEL_SYNC=true` is set, and it refuses to generate more than `DISPATCHARR_AUTO_CHANNEL_SYNC_LIMIT` channels in one sync (default `100`).
-    - Locked/custom providers are excluded from manual, bulk, and background refresh paths.
+    - Locked/custom providers are excluded from manual, bulk, and background refresh paths. Custom-provider detection is case-insensitive, and bulk refresh skips providers already in `fetching` so an operator cannot queue duplicate work for an in-flight account.
     - Provider refresh state is self-healing: startup and the background scheduler reset accounts left in `fetching` longer than `DISPATCHARR_M3U_FETCHING_STALE_MINUTES` (default `120`) to `failed` with a clear message.
     - Provider account API responses never return stored usernames or passwords. Responses expose `has_username` and `has_password` booleans so edit forms can preserve existing credentials unless the user enters replacements.
     - The Svelte provider modal treats provider credentials as write-only: edit forms leave credential inputs blank, show saved-credential hints, and only submit replacements when the user types them.
@@ -24,7 +25,7 @@ Dispatcharr is a high-performance M3U/XC/EPG proxy and management system built w
     - The Provider Grid displays normalized status, provider stream count, last refresh timestamp, and safe status messages so operators can triage provider health without inspecting Postgres.
     - **Case-Insensitive Account Detection**: A centralized `is_xc_account()` helper in `api.rs` normalizes all XC type comparisons. This prevents routing failures caused by case mismatches between the frontend (`"xc"`) and backend (`"XC"`) — ensuring provider creation, refresh, and background sync all correctly identify XC accounts regardless of case.
     - **VOD Support**: Segmented ingestion for Movies and Series.
-    - **Enable VOD Toggle**: Providers can opt-out of VOD ingestion via a custom property `enable_vod`. **Disabled by default** to minimize unintended data ingestion.
+    - **Enable VOD Toggle**: Providers can opt into VOD ingestion via a custom property `enable_vod`. **Disabled by default** in backend responses and in the Svelte provider modal to minimize unintended data ingestion.
     - **Mandatory Account Type**: New providers require an explicit choice between M3U and XC types; no system default is assumed.
     - **URL Normalization**: Robust XC base URL extraction logic preserves subpaths while stripping specific IPTV filenames (e.g., `get.php`, `player_api.php`) and query strings.
     - **Centralized Error Handling**: All synchronization routines (Live, VOD, Series) utilize a stabilized `async { ... }.await` Result-block pattern. This architectural pattern guarantees that all errors (connectivity, parsing, or API timeouts) are properly captured and propagated to a centralized `handle_sync_error` routine. 

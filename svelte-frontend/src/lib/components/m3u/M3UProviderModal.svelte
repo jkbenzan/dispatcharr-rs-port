@@ -93,7 +93,7 @@
 				maxStreams = provider.max_streams || 1;
 				refreshInterval = provider.refresh_interval || 24;
 				staleStreamDays = provider.stale_stream_days || 7;
-				enableVod = provider.enable_vod !== false; // Default to true if missing
+				enableVod = provider.enable_vod === true;
 
 				// Initialize mappings from provider data
 				const gSettings: Record<number, any> = {};

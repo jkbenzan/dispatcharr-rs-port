@@ -14,6 +14,52 @@ fn is_xc_account(account_type: &str) -> bool {
     lower == "xc" || lower == "xtream"
 }
 
+fn is_custom_m3u_account(name: &str) -> bool {
+    name.eq_ignore_ascii_case("custom")
+}
+
+async fn mark_m3u_refresh_queued(db: &sea_orm::DatabaseConnection, account_id: i64) {
+    if let Ok(Some(acc)) = m3u_account::Entity::find_by_id(account_id).one(db).await {
+        let mut active: m3u_account::ActiveModel = acc.into();
+        active.status = sea_orm::Set("fetching".to_string());
+        active.last_message = sea_orm::Set(Some(
+            "Refresh queued; waiting for another provider refresh to finish.".to_string(),
+        ));
+        active.updated_at = sea_orm::Set(Some(chrono::Utc::now().into()));
+        use sea_orm::ActiveModelTrait;
+        let _ = active.update(db).await;
+    }
+}
+
+async fn mark_m3u_refresh_failed(
+    db: &sea_orm::DatabaseConnection,
+    account_id: i64,
+    message: String,
+) {
+    if let Ok(Some(acc)) = m3u_account::Entity::find_by_id(account_id).one(db).await {
+        let mut active: m3u_account::ActiveModel = acc.into();
+        active.status = sea_orm::Set("failed".to_string());
+        let sanitized = crate::m3u::sanitize_provider_error_message(&message);
+        active.last_message = sea_orm::Set(Some(sanitized.chars().take(255).collect()));
+        active.updated_at = sea_orm::Set(Some(chrono::Utc::now().into()));
+        use sea_orm::ActiveModelTrait;
+        let _ = active.update(db).await;
+    }
+}
+
+async fn mark_epg_refresh_queued(db: &sea_orm::DatabaseConnection, source_id: i64) {
+    if let Ok(Some(source)) = epg_source::Entity::find_by_id(source_id).one(db).await {
+        let mut active: epg_source::ActiveModel = source.into();
+        active.status = sea_orm::Set("fetching".to_string());
+        active.last_message = sea_orm::Set(Some(
+            "Refresh queued; waiting for another provider refresh to finish.".to_string(),
+        ));
+        active.updated_at = sea_orm::Set(Some(chrono::Utc::now().into()));
+        use sea_orm::ActiveModelTrait;
+        let _ = active.update(db).await;
+    }
+}
+
 fn redact_m3u_account_credentials(acc: &m3u_account::Model, acc_json: &mut Value) {
     acc_json["has_username"] = json!(acc.username.as_ref().is_some_and(|v| !v.is_empty()));
     acc_json["has_password"] = json!(acc.password.as_ref().is_some_and(|v| !v.is_empty()));
@@ -2155,6 +2201,7 @@ async fn start_epg_refresh(
     source_id: i64,
     url_or_path: String,
     ws_sender: Option<tokio::sync::broadcast::Sender<serde_json::Value>>,
+    provider_refresh_semaphore: Arc<tokio::sync::Semaphore>,
 ) -> Option<epg_source::Model> {
     let source = epg_source::Entity::find_by_id(source_id)
         .one(db)
@@ -2170,6 +2217,20 @@ async fn start_epg_refresh(
     let db_clone = db.clone();
     let ws_clone = ws_sender.clone();
     tokio::spawn(async move {
+        mark_epg_refresh_queued(&db_clone, source_id).await;
+        let _refresh_permit = match provider_refresh_semaphore.acquire_owned().await {
+            Ok(permit) => permit,
+            Err(e) => {
+                mark_epg_source_error(
+                    &db_clone,
+                    source_id,
+                    format!("Refresh queue closed: {}", e),
+                )
+                .await;
+                return;
+            }
+        };
+
         let message = match epg::refresh_all_guides(&db_clone, &url_or_path, source_id, ws_clone).await {
             Ok(_) => return,
             Err(e) => format!("Failed to parse EPG: {}", e),
@@ -2333,8 +2394,23 @@ pub async fn add_m3u_account(
                     let ws_clone = state.ws_sender.clone();
                     let final_url = url.clone();
                     let file_path_clone = file_path.clone();
+                    let provider_refresh_semaphore = state.provider_refresh_semaphore.clone();
 
                     tokio::spawn(async move {
+                        mark_m3u_refresh_queued(&db_clone, account_id).await;
+                        let _refresh_permit = match provider_refresh_semaphore.acquire_owned().await {
+                            Ok(permit) => permit,
+                            Err(e) => {
+                                mark_m3u_refresh_failed(
+                                    &db_clone,
+                                    account_id,
+                                    format!("Refresh queue closed: {}", e),
+                                )
+                                .await;
+                                return;
+                            }
+                        };
+
                         let error_msg = if is_xc {
                             let mut err = None;
                             let is_success = match crate::m3u::fetch_and_parse_xc_categories(
@@ -2561,7 +2637,13 @@ pub async fn create_epg_source(
         inserted
     } else if inserted.is_active {
         if let Some(url) = inserted.url.clone().or_else(|| inserted.file_path.clone()) {
-            start_epg_refresh(&state.db, inserted.id, url, Some(state.ws_sender.clone()))
+            start_epg_refresh(
+                &state.db,
+                inserted.id,
+                url,
+                Some(state.ws_sender.clone()),
+                state.provider_refresh_semaphore.clone(),
+            )
                 .await
                 .unwrap_or(inserted)
         } else {
@@ -2788,7 +2870,7 @@ pub async fn refresh_m3u_account(
         }
     };
 
-    if account.locked || account.name.eq_ignore_ascii_case("custom") {
+    if account.locked || is_custom_m3u_account(&account.name) {
         return (
             StatusCode::BAD_REQUEST,
             Json(json!({"error": "Custom provider cannot be refreshed"})),
@@ -2821,7 +2903,17 @@ pub async fn refresh_m3u_account(
         let db_clone = state.db.clone();
         let is_xc = is_xc_account(&account.account_type);
         let ws_clone_outer = state.ws_sender.clone();
+        let provider_refresh_semaphore = state.provider_refresh_semaphore.clone();
         tokio::spawn(async move {
+            mark_m3u_refresh_queued(&db_clone, account_id).await;
+            let _refresh_permit = match provider_refresh_semaphore.acquire_owned().await {
+                Ok(permit) => permit,
+                Err(e) => {
+                    mark_m3u_refresh_failed(&db_clone, account_id, format!("Refresh queue closed: {}", e)).await;
+                    return;
+                }
+            };
+
             let error_msg = if is_xc {
                 let ws_clone = ws_clone_outer.clone();
                 let xc_err = if let Err(e) =
@@ -2881,13 +2973,16 @@ pub async fn refresh_all_m3u_accounts(
     let accounts = m3u_account::Entity::find()
         .filter(m3u_account::Column::IsActive.eq(true))
         .filter(m3u_account::Column::Locked.eq(false))
-        .filter(m3u_account::Column::Name.ne("custom"))
         .all(&state.db)
         .await
-        .unwrap_or_default();
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|acc| !is_custom_m3u_account(&acc.name) && acc.status != "fetching")
+        .collect::<Vec<_>>();
 
     let db_clone = state.db.clone();
     let ws_clone = state.ws_sender.clone();
+    let provider_refresh_semaphore = state.provider_refresh_semaphore.clone();
     
     tokio::spawn(async move {
         for acc in accounts {
@@ -2904,6 +2999,15 @@ pub async fn refresh_all_m3u_accounts(
             };
 
             if !url.is_empty() {
+                mark_m3u_refresh_queued(&db_clone, acc.id).await;
+                let _refresh_permit = match provider_refresh_semaphore.clone().acquire_owned().await {
+                    Ok(permit) => permit,
+                    Err(e) => {
+                        mark_m3u_refresh_failed(&db_clone, acc.id, format!("Refresh queue closed: {}", e)).await;
+                        continue;
+                    }
+                };
+
                 if is_xc_account(&acc.account_type) {
                     let _ = crate::m3u::fetch_and_parse_xc(&db_clone, acc.id, Some(ws_clone.clone()), false).await;
                 } else {
@@ -2930,16 +3034,33 @@ pub async fn refresh_all_epg_sources(
         .filter(epg_source::Column::IsActive.eq(true))
         .all(&state.db)
         .await
-        .unwrap_or_default();
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|src| src.status != "fetching" && src.status != "parsing")
+        .collect::<Vec<_>>();
 
     let db_clone = state.db.clone();
     let ws_clone = state.ws_sender.clone();
+    let provider_refresh_semaphore = state.provider_refresh_semaphore.clone();
     
     tokio::spawn(async move {
         for src in sources {
             println!("[Manual Refresh All] Staggered refresh for EPG source {} ({})", src.id, src.name);
             let url = src.url.clone().or_else(|| src.file_path.clone()).unwrap_or_default();
             if !url.is_empty() {
+                mark_epg_refresh_queued(&db_clone, src.id).await;
+                let _refresh_permit = match provider_refresh_semaphore.clone().acquire_owned().await {
+                    Ok(permit) => permit,
+                    Err(e) => {
+                        mark_epg_source_error(
+                            &db_clone,
+                            src.id,
+                            format!("Refresh queue closed: {}", e),
+                        )
+                        .await;
+                        continue;
+                    }
+                };
                 let _ = crate::epg::refresh_all_guides(&db_clone, &url, src.id, Some(ws_clone.clone())).await;
                 let _ = crate::epg::update_source_timestamp(&db_clone, src.id).await;
             }
@@ -2990,7 +3111,17 @@ pub async fn refresh_vod(
     }
 
     let db_clone = state.db.clone();
+    let provider_refresh_semaphore = state.provider_refresh_semaphore.clone();
     tokio::spawn(async move {
+        mark_m3u_refresh_queued(&db_clone, account_id).await;
+        let _refresh_permit = match provider_refresh_semaphore.acquire_owned().await {
+            Ok(permit) => permit,
+            Err(e) => {
+                mark_m3u_refresh_failed(&db_clone, account_id, format!("Refresh queue closed: {}", e)).await;
+                return;
+            }
+        };
+
         if let Err(e) = crate::m3u::fetch_and_parse_xc_vod(&db_clone, account_id, false).await {
             eprintln!("Failed to refresh VOD: {}", e);
         }
@@ -3055,7 +3186,14 @@ async fn queue_epg_refresh(state: &Arc<AppState>, source_id: i64) -> (StatusCode
     }
 
     if let Some(url) = source.url.clone().or_else(|| source.file_path.clone()) {
-        let queued = start_epg_refresh(&state.db, source_id, url, Some(state.ws_sender.clone())).await;
+        let queued = start_epg_refresh(
+            &state.db,
+            source_id,
+            url,
+            Some(state.ws_sender.clone()),
+            state.provider_refresh_semaphore.clone(),
+        )
+        .await;
         let queued_json = match queued {
             Some(src) => epg_source_json(&state.db, src).await,
             None => json!(null),
@@ -3186,7 +3324,17 @@ pub async fn update_m3u_account(
     if let Ok(updated) = active.update(&state.db).await {
         if enable_vod_opt == Some(true) && is_xc_account(&updated.account_type) {
             let db_clone = state.db.clone();
+            let provider_refresh_semaphore = state.provider_refresh_semaphore.clone();
             tokio::spawn(async move {
+                mark_m3u_refresh_queued(&db_clone, account_id).await;
+                let _refresh_permit = match provider_refresh_semaphore.acquire_owned().await {
+                    Ok(permit) => permit,
+                    Err(e) => {
+                        mark_m3u_refresh_failed(&db_clone, account_id, format!("Refresh queue closed: {}", e)).await;
+                        return;
+                    }
+                };
+
                 let _ = crate::m3u::fetch_and_parse_xc_vod(&db_clone, account_id, false).await;
                 let _ = crate::m3u::fetch_and_parse_xc_series(&db_clone, account_id, false).await;
             });
@@ -3770,7 +3918,6 @@ pub async fn refresh_m3u_all(State(state): State<Arc<AppState>>) -> impl IntoRes
     let accounts = match m3u_account::Entity::find()
         .filter(m3u_account::Column::IsActive.eq(true))
         .filter(m3u_account::Column::Locked.eq(false))
-        .filter(m3u_account::Column::Name.ne("custom"))
         .all(&state.db)
         .await
     {
@@ -3783,7 +3930,10 @@ pub async fn refresh_m3u_all(State(state): State<Arc<AppState>>) -> impl IntoRes
         }
     };
 
-    for account in accounts {
+    for account in accounts
+        .into_iter()
+        .filter(|account| !is_custom_m3u_account(&account.name) && account.status != "fetching")
+    {
         let db_clone = state.db.clone();
         let account_id = account.id;
         let is_xc = is_xc_account(&account.account_type);
@@ -3804,7 +3954,22 @@ pub async fn refresh_m3u_all(State(state): State<Arc<AppState>>) -> impl IntoRes
 
         if !url.is_empty() {
             let ws_clone_outer = state.ws_sender.clone();
+            let provider_refresh_semaphore = state.provider_refresh_semaphore.clone();
             tokio::spawn(async move {
+                mark_m3u_refresh_queued(&db_clone, account_id).await;
+                let _refresh_permit = match provider_refresh_semaphore.acquire_owned().await {
+                    Ok(permit) => permit,
+                    Err(e) => {
+                        mark_m3u_refresh_failed(
+                            &db_clone,
+                            account_id,
+                            format!("Refresh queue closed: {}", e),
+                        )
+                        .await;
+                        return;
+                    }
+                };
+
                 let error_msg = if is_xc {
                     let ws_clone = ws_clone_outer.clone();
                     let xc_err = if let Err(e) =
@@ -4058,6 +4223,14 @@ mod tests {
         assert_eq!(normalized_m3u_status("error"), "failed");
         assert_eq!(normalized_m3u_status("fetching"), "refreshing");
         assert_eq!(normalized_m3u_status("success"), "healthy");
+    }
+
+    #[test]
+    fn test_custom_m3u_account_detection_is_case_insensitive() {
+        assert!(is_custom_m3u_account("custom"));
+        assert!(is_custom_m3u_account("Custom"));
+        assert!(is_custom_m3u_account("CUSTOM"));
+        assert!(!is_custom_m3u_account("Customer playlist"));
     }
 }
 

@@ -133,6 +133,7 @@ pub struct AppState {
     /// Cooperative cancellation flag for the bulk check worker loop.
     /// Set to true by the cancel endpoint; workers check this before each stream.
     pub bulk_check_cancelled: Arc<std::sync::atomic::AtomicBool>,
+    pub provider_refresh_semaphore: Arc<tokio::sync::Semaphore>,
     pub background_telemetry: crate::background::Telemetry,
     pub last_activity_at: std::sync::Arc<std::sync::atomic::AtomicU64>,
 }
@@ -277,6 +278,7 @@ async fn main() {
         broadcasters: Arc::new(dashmap::DashMap::new()),
         bulk_check_status: Arc::new(tokio::sync::RwLock::new(Default::default())),
         bulk_check_cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        provider_refresh_semaphore: Arc::new(tokio::sync::Semaphore::new(1)),
         background_telemetry: Arc::new(tokio::sync::RwLock::new(crate::background::BackgroundTelemetry::default())),
         last_activity_at: Arc::new(std::sync::atomic::AtomicU64::new(
             std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs()
@@ -728,6 +730,15 @@ async fn main() {
                         let _ = am.update(&worker_db).await;
                     }
 
+                    let provider_refresh_semaphore = m3u_state.provider_refresh_semaphore.clone();
+                    let _refresh_permit = match provider_refresh_semaphore.acquire_owned().await {
+                        Ok(permit) => permit,
+                        Err(e) => {
+                            tracing::error!("M3U provider refresh queue closed: {}", e);
+                            continue;
+                        }
+                    };
+
                     if account_type == "xc" || account_type == "xtream" {
                         let _ = crate::m3u::fetch_and_parse_xc(&worker_db, account_id, None, true).await;
                     } else {
@@ -802,6 +813,15 @@ async fn main() {
                         );
                         let url = src.url.clone().or_else(|| src.file_path.clone()).unwrap_or_default();
                         if !url.is_empty() {
+                            let provider_refresh_semaphore = epg_state.provider_refresh_semaphore.clone();
+                            let _refresh_permit = match provider_refresh_semaphore.acquire_owned().await {
+                                Ok(permit) => permit,
+                                Err(e) => {
+                                    tracing::error!("EPG provider refresh queue closed: {}", e);
+                                    continue;
+                                }
+                            };
+
                             let _ = crate::epg::refresh_all_guides(
                                 &epg_worker_db, 
                                 &url, 
