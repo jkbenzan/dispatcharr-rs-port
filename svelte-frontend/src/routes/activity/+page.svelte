@@ -82,7 +82,12 @@
 		}
 	}
 
-	function getSeverityColor(type: string): string {
+	function getSeverityColor(type: string, details?: any): string {
+		const status = typeof details === 'object' && details ? String(details.status || '').toLowerCase() : '';
+		if (status === 'error' || status === 'failed') return 'var(--accent)';
+		if (status === 'warning' || status === 'warn') return '#facc15';
+		if (status === 'success') return '#4ade80';
+
 		const t = type.toLowerCase();
 		if (t.includes('error') || t.includes('fail') || t.includes('timeout')) return 'var(--accent)';
 		if (t.includes('warn')) return '#facc15';
@@ -114,6 +119,62 @@
 		} catch {
 			return String(details);
 		}
+	}
+
+	function humanizeEventType(type?: string): string {
+		const labels: Record<string, string> = {
+			m3u_refresh: 'M3U refresh',
+			provider_sync: 'Provider sync',
+			epg_refresh: 'EPG refresh'
+		};
+		const normalized = (type || '').toLowerCase();
+		if (labels[normalized]) return labels[normalized];
+
+		return (type || 'event')
+			.split('_')
+			.filter(Boolean)
+			.map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+			.join(' ');
+	}
+
+	function formatStatus(status?: string): string {
+		if (!status) return '';
+		return status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
+	}
+
+	function formatEventMessage(event: any): string {
+		const details = event?.details;
+		const eventType = String(event?.event_type || '');
+
+		if (typeof details === 'string' && details.trim()) {
+			return details;
+		}
+
+		if (details && typeof details === 'object') {
+			// Prefer explicit message/event fields from backend system events before deriving a fallback.
+			if (typeof details.message === 'string' && details.message.trim()) {
+				return details.message;
+			}
+
+			if (typeof details.event === 'string' && details.event.trim()) {
+				return details.error ? `${details.event}: ${details.error}` : details.event;
+			}
+
+			if (details.error) {
+				return `${humanizeEventType(eventType)} failed: ${details.error}`;
+			}
+
+			if (details.status) {
+				const status = formatStatus(String(details.status));
+				const background = details.is_background === true ? 'background ' : '';
+				if (String(details.status).toLowerCase() === 'success') {
+					return `${humanizeEventType(eventType)} ${background}completed.`;
+				}
+				return `${humanizeEventType(eventType)} ${background}${status.toLowerCase()}.`;
+			}
+		}
+
+		return humanizeEventType(eventType);
 	}
 </script>
 
@@ -160,7 +221,7 @@
 				<div class="empty-state">No events logged yet.</div>
 			{:else}
 				{#each mergedEvents() as event}
-					{@const color = getSeverityColor(event.event_type)}
+					{@const color = getSeverityColor(event.event_type, event.details)}
 					<div class="log-entry">
 						<div
 							class="log-line"
@@ -176,13 +237,7 @@
 							{/if}
 							
 							<span class="log-message">
-								{#if event.details && event.details.message}
-									{event.details.message}
-								{:else if event.details && typeof event.details === 'string'}
-									{event.details}
-								{:else}
-									Raw Event Data
-								{/if}
+								{formatEventMessage(event)}
 							</span>
 
 							<button class="expand-btn">

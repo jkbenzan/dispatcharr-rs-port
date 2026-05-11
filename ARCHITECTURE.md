@@ -53,6 +53,7 @@ Dispatcharr is a high-performance M3U/XC/EPG proxy and management system built w
 - **State Management**: Svelte 5 Runes ($state, $derived, $effect).
 - **M3U Provider Management**:
     - Modal for adding/editing providers with tabbed interface (**Channel Categories**, VOD Movies, VOD Series).
+    - Provider delete and bulk-refresh actions use an in-app confirmation dialog instead of native browser prompts. The dialog keeps queued-refresh language aligned with the backend provider queue and guards against double-submit while the confirmed request is in flight.
     - **Stream Statistics**: Displays human-readable stream counts (e.g., "{n} streams found") for all categories, retrieved from persisted `custom_properties`.
     - **Sync Overlay**: Provides real-time feedback during initial provider synchronization.
     - **Reactive Tabs**: Groups and Categories are filtered based on the selected provider and discovered in real-time.
@@ -68,6 +69,7 @@ Dispatcharr is a high-performance M3U/XC/EPG proxy and management system built w
 - **Sync Visibility**: Both manual and background refreshes are recorded in the activity log. Events include an `is_background` flag in the payload to distinguish automated tasks.
 - **Errors**: All sync errors are propagated using the `?` operator to avoid silent failures. The `handle_sync_error` helper automatically updates the account `status` to `"failed"` and persists the error message for visibility in the Provider Grid.
 - **Frontend Error Propagation**: The Svelte frontend strictly bubbles up `errorData.error` from JSON API responses to ensure any backend failures (such as database constraint violations) are correctly exposed rather than being masked as generic 500 errors.
+- **Activity Log Rendering**: The Svelte activity page renders existing system event detail shapes (`message`, `event`, `status`, and `error`) into readable summaries while preserving the expandable raw JSON details for diagnostics.
 - **Diagnostic Logging**: Backend sync tasks log discovered category and stream counts to stdout/stderr for operational monitoring and system integrity verification.
 
 ## Verification Status

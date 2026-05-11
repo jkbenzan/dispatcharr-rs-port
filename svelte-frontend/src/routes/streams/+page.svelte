@@ -5,6 +5,7 @@
 	import { toast } from '$lib/toast.svelte';
 	import M3UProviderModal from '$lib/components/m3u/M3UProviderModal.svelte';
 	import EpgProviderModal from '$lib/components/epg/EpgProviderModal.svelte';
+	import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
 
 	let activeTab = $state('m3u'); // 'm3u' or 'epg'
 
@@ -21,6 +22,45 @@
 	let epgError = $state('');
 	let showEpgModal = $state(false);
 	let selectedEpgSource: any = $state(null);
+
+	type ConfirmVariant = 'default' | 'danger';
+	type ConfirmationState = {
+		title: string;
+		message: string;
+		confirmLabel: string;
+		variant: ConfirmVariant;
+		onConfirm: () => Promise<void>;
+	};
+
+	let showConfirmDialog = $state(false);
+	let confirmBusy = $state(false);
+	let confirmation: ConfirmationState | null = $state(null);
+
+	function requestConfirmation(config: ConfirmationState) {
+		confirmation = config;
+		showConfirmDialog = true;
+	}
+
+	function cancelConfirmation() {
+		if (confirmBusy) return;
+		showConfirmDialog = false;
+		confirmation = null;
+	}
+
+	async function runConfirmedAction() {
+		if (!confirmation || confirmBusy) return;
+
+		// Copy the callback before awaiting so closing the dialog cannot clear the action mid-flight.
+		const action = confirmation.onConfirm;
+		confirmBusy = true;
+		try {
+			await action();
+			showConfirmDialog = false;
+			confirmation = null;
+		} finally {
+			confirmBusy = false;
+		}
+	}
 
 	function normalizeAccountType(value?: string) {
 		return (value || '').toLowerCase();
@@ -72,14 +112,20 @@
 	}
 
 	async function handleDeleteM3u(id: number) {
-		if (confirm('Are you sure you want to delete this M3U provider?')) {
-			try {
-				await api.deleteM3UAccount(id);
-				await loadM3uProviders();
-			} catch (err: any) {
-				toast.error(err.message || 'Failed to delete provider');
+		requestConfirmation({
+			title: 'Delete M3U Provider',
+			message: 'Delete this M3U provider? This removes the provider record and cannot be undone.',
+			confirmLabel: 'Delete',
+			variant: 'danger',
+			onConfirm: async () => {
+				try {
+					await api.deleteM3UAccount(id);
+					await loadM3uProviders();
+				} catch (err: any) {
+					toast.error(err.message || 'Failed to delete provider');
+				}
 			}
-		}
+		});
 	}
 
 	async function handleRefreshM3u(id: number) {
@@ -92,14 +138,20 @@
 	}
 
 	async function handleRefreshAllM3u() {
-		if (confirm('Start staggered refresh for all active M3U providers? This will process them one by one.')) {
-			try {
-				await api.refreshAllM3uAccounts();
-				toast.info('Bulk refresh started.');
-			} catch (err: any) {
-				toast.error(err.message || 'Failed to start bulk refresh');
+		requestConfirmation({
+			title: 'Refresh All M3U Providers',
+			message: 'Queue refreshes for all active M3U providers? The backend provider queue controls concurrency and will run them in order.',
+			confirmLabel: 'Queue Refreshes',
+			variant: 'default',
+			onConfirm: async () => {
+				try {
+					await api.refreshAllM3uAccounts();
+					toast.info('M3U provider refreshes queued.');
+				} catch (err: any) {
+					toast.error(err.message || 'Failed to start bulk refresh');
+				}
 			}
-		}
+		});
 	}
 
 	function getProviderStatus(provider: any) {
@@ -169,14 +221,20 @@
 	}
 
 	async function handleDeleteEpg(id: number) {
-		if (confirm('Are you sure you want to delete this EPG source?')) {
-			try {
-				await api.deleteEpgSource(id);
-				await loadEpgSources();
-			} catch (err: any) {
-				toast.error(err.message || 'Failed to delete EPG source');
+		requestConfirmation({
+			title: 'Delete EPG Source',
+			message: 'Delete this EPG source? This removes the source record and cannot be undone.',
+			confirmLabel: 'Delete',
+			variant: 'danger',
+			onConfirm: async () => {
+				try {
+					await api.deleteEpgSource(id);
+					await loadEpgSources();
+				} catch (err: any) {
+					toast.error(err.message || 'Failed to delete EPG source');
+				}
 			}
-		}
+		});
 	}
 
 	async function handleRefreshEpg(id: number) {
@@ -189,14 +247,20 @@
 	}
 
 	async function handleRefreshAllEpg() {
-		if (confirm('Start staggered refresh for all active EPG sources?')) {
-			try {
-				await api.refreshAllEpgSources();
-				toast.info('Bulk EPG refresh started.');
-			} catch (err: any) {
-				toast.error(err.message || 'Failed to start bulk refresh');
+		requestConfirmation({
+			title: 'Refresh All EPG Sources',
+			message: 'Queue refreshes for all active EPG sources? The backend provider queue controls concurrency and will run them in order.',
+			confirmLabel: 'Queue Refreshes',
+			variant: 'default',
+			onConfirm: async () => {
+				try {
+					await api.refreshAllEpgSources();
+					toast.info('EPG source refreshes queued.');
+				} catch (err: any) {
+					toast.error(err.message || 'Failed to start bulk refresh');
+				}
 			}
-		}
+		});
 	}
 
 	import { formatDateTime } from '$lib/settings.svelte';
@@ -381,6 +445,18 @@
 
 <M3UProviderModal bind:show={showM3uModal} provider={selectedM3uProvider} onSave={handleSaveM3u} />
 <EpgProviderModal bind:show={showEpgModal} provider={selectedEpgSource} onSave={handleSaveEpg} />
+{#if confirmation}
+	<ConfirmDialog
+		bind:show={showConfirmDialog}
+		title={confirmation.title}
+		message={confirmation.message}
+		confirmLabel={confirmation.confirmLabel}
+		variant={confirmation.variant}
+		busy={confirmBusy}
+		onConfirm={runConfirmedAction}
+		onCancel={cancelConfirmation}
+	/>
+{/if}
 
 <style lang="less">
 	.page-container {
