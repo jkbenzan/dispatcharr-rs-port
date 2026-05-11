@@ -66,6 +66,8 @@ Items queued for future implementation and audit phases.
   Update backend `get_vod` handlers to support filtering by `category_id`.
 - [ ] **Streams Tab Refresh UX**
   Add a toggleable alternate grid view that keeps the same provider actions, metadata, and progress indicators while reducing card crowding.
+- [ ] **Streams Category Country/Region Detection**
+  Replace the current small alias-only category detector with a data-backed classifier that handles provider prefix formats such as `US |`, `|US|`, and `┃DE┃`, while keeping ambiguous prefixes like `AR`, `AF`, `CH`, `IR`, `IS`, `IN`, `LA`, `EU`, `LAT`, and `EXYU` out of unsafe country matches. Add separate labels/filters for non-country clusters such as Sports, PPV, Live Events, League packages, 24/7, and Movies. The May 11 audit of 8,821 configured category mappings showed the current UI detector matching only 22.2%, improving to 63.2% with conservative structured-prefix handling.
 
 ---
 
