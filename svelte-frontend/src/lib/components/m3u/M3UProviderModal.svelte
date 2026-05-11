@@ -2,20 +2,24 @@
 	import { api } from '$lib/api';
 	import { toast } from '$lib/toast.svelte';
 	import Modal from '$lib/components/ui/Modal.svelte';
-	import { Save, AlertCircle, Search, Server, Tv, Film, Clapperboard, Check, X, RefreshCw } from 'lucide-svelte';
+	import { Save, AlertCircle, Search, Server, Tv, Film, Clapperboard, RefreshCw } from 'lucide-svelte';
 
 	let {
 		show = $bindable(false),
 		provider = null,
-		onSave = () => {}
+		onSave = () => {},
+		onRefreshQueued = () => {}
 	} = $props();
 
 	let loading = $state(false);
 	let syncing = $state(false);
+	let savingSelections = $state(false);
 	let syncStatus = $state('');
 	let error = $state('');
 	let activeTab = $state('general');
 	let searchQuery = $state('');
+	let countrySearch = $state('');
+	let countryFilter = $state('');
 
 	// System Data
 	let allChannelGroups = $state<any[]>([]);
@@ -26,6 +30,63 @@
 		m3u_account?: number | string;
 		stream_count?: number;
 	};
+
+	type CountryOption = {
+		code: string;
+		name: string;
+		aliases: string[];
+	};
+
+	type CategoryItem = {
+		id: number;
+		name: string;
+		m3u_accounts?: ProviderAccountSummary[];
+	};
+
+	const COUNTRY_OPTIONS: CountryOption[] = [
+		{ code: 'US', name: 'United States', aliases: ['usa', 'u.s.a', 'united states', 'us channels', 'america'] },
+		{ code: 'GB', name: 'United Kingdom', aliases: ['uk', 'u.k', 'united kingdom', 'great britain', 'england', 'britain'] },
+		{ code: 'CA', name: 'Canada', aliases: ['canada', 'canadian'] },
+		{ code: 'MX', name: 'Mexico', aliases: ['mexico', 'mexican'] },
+		{ code: 'BR', name: 'Brazil', aliases: ['brazil', 'brasil'] },
+		{ code: 'AR', name: 'Argentina', aliases: ['argentina'] },
+		{ code: 'CO', name: 'Colombia', aliases: ['colombia'] },
+		{ code: 'CL', name: 'Chile', aliases: ['chile'] },
+		{ code: 'PE', name: 'Peru', aliases: ['peru'] },
+		{ code: 'AU', name: 'Australia', aliases: ['australia', 'aussie'] },
+		{ code: 'NZ', name: 'New Zealand', aliases: ['new zealand'] },
+		{ code: 'FR', name: 'France', aliases: ['france', 'french'] },
+		{ code: 'DE', name: 'Germany', aliases: ['germany', 'deutschland', 'german'] },
+		{ code: 'ES', name: 'Spain', aliases: ['spain', 'espana', 'spanish'] },
+		{ code: 'IT', name: 'Italy', aliases: ['italy', 'italia', 'italian'] },
+		{ code: 'PT', name: 'Portugal', aliases: ['portugal', 'portuguese'] },
+		{ code: 'NL', name: 'Netherlands', aliases: ['netherlands', 'holland', 'dutch'] },
+		{ code: 'BE', name: 'Belgium', aliases: ['belgium'] },
+		{ code: 'CH', name: 'Switzerland', aliases: ['switzerland', 'swiss'] },
+		{ code: 'AT', name: 'Austria', aliases: ['austria'] },
+		{ code: 'IE', name: 'Ireland', aliases: ['ireland', 'irish'] },
+		{ code: 'SE', name: 'Sweden', aliases: ['sweden', 'swedish'] },
+		{ code: 'NO', name: 'Norway', aliases: ['norway', 'norwegian'] },
+		{ code: 'DK', name: 'Denmark', aliases: ['denmark', 'danish'] },
+		{ code: 'FI', name: 'Finland', aliases: ['finland', 'finnish'] },
+		{ code: 'PL', name: 'Poland', aliases: ['poland', 'polish'] },
+		{ code: 'GR', name: 'Greece', aliases: ['greece', 'greek'] },
+		{ code: 'TR', name: 'Turkey', aliases: ['turkey', 'turkish'] },
+		{ code: 'IN', name: 'India', aliases: ['india', 'indian'] },
+		{ code: 'PK', name: 'Pakistan', aliases: ['pakistan'] },
+		{ code: 'PH', name: 'Philippines', aliases: ['philippines', 'filipino'] },
+		{ code: 'ID', name: 'Indonesia', aliases: ['indonesia'] },
+		{ code: 'MY', name: 'Malaysia', aliases: ['malaysia'] },
+		{ code: 'SG', name: 'Singapore', aliases: ['singapore'] },
+		{ code: 'TH', name: 'Thailand', aliases: ['thailand', 'thai'] },
+		{ code: 'VN', name: 'Vietnam', aliases: ['vietnam'] },
+		{ code: 'CN', name: 'China', aliases: ['china', 'chinese'] },
+		{ code: 'JP', name: 'Japan', aliases: ['japan', 'japanese'] },
+		{ code: 'KR', name: 'South Korea', aliases: ['south korea', 'korea', 'korean'] },
+		{ code: 'RO', name: 'Romania', aliases: ['romania'] },
+		{ code: 'BG', name: 'Bulgaria', aliases: ['bulgaria'] },
+		{ code: 'AL', name: 'Albania', aliases: ['albania'] }
+	];
 
 	// Form state
 	let name = $state('');
@@ -56,12 +117,116 @@
 		return normalizeAccountType(value) === 'm3u';
 	}
 
+	function countryFlag(code?: string) {
+		if (!code || code.length !== 2) return '';
+		return code
+			.toUpperCase()
+			.split('')
+			.map((char) => String.fromCodePoint(127397 + char.charCodeAt(0)))
+			.join('');
+	}
+
+	function normalizeForDetection(value?: string) {
+		return ` ${(value || '')
+			.toLowerCase()
+			.normalize('NFD')
+			.replace(/[\u0300-\u036f]/g, '')
+			.replace(/[^a-z0-9]+/g, ' ')} `;
+	}
+
+	function detectCountry(name?: string): CountryOption | null {
+		const normalized = normalizeForDetection(name);
+		return COUNTRY_OPTIONS.find((country) =>
+			country.aliases.some((alias) => normalized.includes(normalizeForDetection(alias)))
+		) || null;
+	}
+
+	function getAccountSummary(item: CategoryItem) {
+		return item.m3u_accounts?.find((acc: ProviderAccountSummary) =>
+			Number(acc.id ?? acc.m3u_account) === Number(provider?.id)
+		);
+	}
+
+	function getStreamCount(item: CategoryItem) {
+		return getAccountSummary(item)?.stream_count || 0;
+	}
+
+	function belongsToCurrentProvider(item: CategoryItem) {
+		return item.m3u_accounts?.some((acc: ProviderAccountSummary) =>
+			Number(acc.id ?? acc.m3u_account) === Number(provider?.id)
+		);
+	}
+
+	function matchesSearch(item: CategoryItem) {
+		return item.name.toLowerCase().includes(searchQuery.toLowerCase());
+	}
+
+	function matchesCountry(item: CategoryItem) {
+		if (!countryFilter) return true;
+		return detectCountry(item.name)?.code === countryFilter;
+	}
+
+	function filteredByCountrySearch(country: CountryOption) {
+		const query = countrySearch.trim().toLowerCase();
+		if (!query) return true;
+		return country.name.toLowerCase().includes(query) || country.aliases.some((alias) => alias.includes(query));
+	}
+
+	function isGroupEnabled(groupId: number) {
+		return groupSettings[groupId]?.enabled === true;
+	}
+
+	function setVisibleGroups(enabled: boolean) {
+		// Bulk actions only touch currently visible rows, preserving hidden/filter-excluded selections.
+		for (const group of filteredGroups) {
+			const current = groupSettings[group.id] || { enabled: false, auto_channel_sync: false };
+			groupSettings[group.id] = { ...current, enabled };
+		}
+	}
+
+	function handleGroupKeydown(e: KeyboardEvent, groupId: number) {
+		if (e.key === 'Enter' || e.key === ' ') {
+			e.preventDefault();
+			toggleGroup(groupId, 'enabled');
+		}
+	}
+
+	function configSaveLabel() {
+		if (activeTab === 'movies') return 'Save Movie Selections';
+		if (activeTab === 'series') return 'Save Series Selections';
+		return 'Save Category Selections';
+	}
+
 	// Filtered lists
 	const filteredGroups = $derived(
 		allChannelGroups.filter(g => 
-			g.m3u_accounts?.some((acc: any) => Number(acc.id) === Number(provider?.id)) &&
-			g.name.toLowerCase().includes(searchQuery.toLowerCase())
+			belongsToCurrentProvider(g) &&
+			matchesSearch(g) &&
+			matchesCountry(g)
 		)
+	);
+
+	const detectedCountryOptions = $derived.by(() => {
+		const countryMap = new Map<string, CountryOption>();
+		for (const group of allChannelGroups) {
+			if (!belongsToCurrentProvider(group) || !matchesSearch(group)) continue;
+			const country = detectCountry(group.name);
+			if (country) countryMap.set(country.code, country);
+		}
+		return Array.from(countryMap.values())
+			.filter(filteredByCountrySearch)
+			.sort((a, b) => a.name.localeCompare(b.name));
+	});
+
+	const countryDetectionCoverage = $derived.by(() => {
+		const providerGroups = allChannelGroups.filter((group) => belongsToCurrentProvider(group));
+		if (providerGroups.length === 0) return 0;
+		const detected = providerGroups.filter((group) => detectCountry(group.name)).length;
+		return detected / providerGroups.length;
+	});
+
+	const shouldShowCountryFilter = $derived(
+		activeTab === 'categories' && countryDetectionCoverage >= 0.35 && detectedCountryOptions.length > 0
 	);
 
 	const filteredMovies = $derived(
@@ -94,6 +259,8 @@
 				refreshInterval = provider.refresh_interval || 24;
 				staleStreamDays = provider.stale_stream_days || 7;
 				enableVod = provider.enable_vod === true;
+				countrySearch = '';
+				countryFilter = '';
 
 				// Initialize mappings from provider data
 				const gSettings: Record<number, any> = {};
@@ -128,6 +295,8 @@
 				enableVod = false;
 				groupSettings = {};
 				categorySettings = {};
+				countrySearch = '';
+				countryFilter = '';
 				activeTab = 'general';
 			}
 			error = '';
@@ -149,8 +318,21 @@
 		}
 	}
 
-	async function handleSubmit(e: Event) {
-		e.preventDefault();
+	function buildGroupSettingsPayload() {
+		return {
+			group_settings: Object.entries(groupSettings).map(([id, settings]) => ({
+				channel_group: parseInt(id),
+				...settings
+			})),
+			category_settings: Object.entries(categorySettings).map(([id, settings]) => ({
+				id: parseInt(id),
+				...settings
+			}))
+		};
+	}
+
+	async function saveProviderDetails(e?: Event) {
+		e?.preventDefault();
 		error = '';
 		loading = true;
 		
@@ -217,22 +399,7 @@
 				return;
 			}
 
-			// If editing, save group settings too
-			if (provider?.id) {
-				const groupPayload = {
-					group_settings: Object.entries(groupSettings).map(([id, settings]) => ({
-						channel_group: parseInt(id),
-						...settings
-					})),
-					category_settings: Object.entries(categorySettings).map(([id, settings]) => ({
-						id: parseInt(id),
-						...settings
-					}))
-				};
-				await api.updateM3UGroupSettings(provider.id, groupPayload);
-				toast.success('Provider settings updated successfully');
-			}
-
+			toast.success('Provider saved successfully');
 			show = false;
 		} catch (err: any) {
 			error = err.message || 'Failed to save provider';
@@ -257,6 +424,26 @@
 	function toggleCategory(catId: number) {
 		const current = categorySettings[catId] || { enabled: false };
 		categorySettings[catId] = { ...current, enabled: !current.enabled };
+	}
+
+	async function saveImportSelections() {
+		if (!provider?.id || savingSelections) return;
+
+		error = '';
+		savingSelections = true;
+		try {
+			// Mapping changes affect local stream inventory, so persist them before queueing a refresh.
+			await api.updateM3UGroupSettings(provider.id, buildGroupSettingsPayload());
+			await api.refreshM3UAccount(provider.id);
+			onRefreshQueued();
+			await loadSystemData();
+			toast.success('Import selections saved. Provider refresh queued.');
+		} catch (err: any) {
+			error = err.message || 'Failed to save import selections';
+			toast.error(error);
+		} finally {
+			savingSelections = false;
+		}
 	}
 </script>
 
@@ -317,7 +504,7 @@
 			{/if}
 
 			{#if activeTab === 'general'}
-				<form id="provider-form" onsubmit={handleSubmit} class="tab-pane">
+				<form id="provider-form" onsubmit={saveProviderDetails} class="tab-pane">
 					<div class="form-group">
 						<label for="name">Provider Name</label>
 						<input type="text" id="name" bind:value={name} placeholder="e.g. My Premium IPTV" required />
@@ -408,30 +595,65 @@
 							<Search size={16} />
 							<input type="text" placeholder="Search categories..." bind:value={searchQuery} />
 						</div>
+						{#if activeTab === 'categories'}
+							<div class="category-actions">
+								{#if shouldShowCountryFilter}
+									<div class="country-filter">
+										<input type="search" placeholder="Search countries..." bind:value={countrySearch} />
+										<select bind:value={countryFilter} aria-label="Filter categories by detected country">
+											<option value="">All detected countries</option>
+											{#each detectedCountryOptions as country}
+												<option value={country.code}>{countryFlag(country.code)} {country.name}</option>
+											{/each}
+										</select>
+									</div>
+								{/if}
+								<div class="bulk-actions">
+									<button type="button" onclick={() => setVisibleGroups(true)}>Select visible</button>
+									<button type="button" onclick={() => setVisibleGroups(false)}>Deselect visible</button>
+								</div>
+							</div>
+						{/if}
 					</div>
 
 					<div class="settings-list">
 						{#if activeTab === 'categories'}
 							{#each filteredGroups as group}
-								<div class="setting-item">
+								{@const country = detectCountry(group.name)}
+								<div
+									class="setting-item selectable"
+									class:selected={isGroupEnabled(group.id)}
+									onclick={() => toggleGroup(group.id, 'enabled')}
+									onkeydown={(e) => handleGroupKeydown(e, group.id)}
+									role="button"
+									tabindex="0"
+									aria-pressed={isGroupEnabled(group.id)}
+								>
 									<div class="setting-info">
-										<span class="setting-name">{group.name}</span>
+										<span class="setting-name">
+											{#if country}
+												<span class="flag" title={country.name}>{countryFlag(country.code)}</span>
+											{/if}
+											{group.name}
+										</span>
 										<span class="setting-sub">
-											{(group.m3u_accounts?.find((a: ProviderAccountSummary) => Number(a.id) === Number(provider?.id))?.stream_count || 0)} streams found
+											{getStreamCount(group)} streams found
+											{#if country}
+												- {country.name}
+											{/if}
 										</span>
 									</div>
 									<div class="setting-controls">
-										<button 
-											class="toggle-btn" 
-											class:active={groupSettings[group.id]?.enabled}
-											onclick={() => toggleGroup(group.id, 'enabled')}
-										>
-											{groupSettings[group.id]?.enabled ? 'Enabled' : 'Disabled'}
-										</button>
+										<span class="selection-pill" class:active={isGroupEnabled(group.id)}>
+											{isGroupEnabled(group.id) ? 'Selected' : 'Not selected'}
+										</span>
 										<button 
 											class="toggle-btn" 
 											class:active={groupSettings[group.id]?.auto_channel_sync}
-											onclick={() => toggleGroup(group.id, 'auto_channel_sync')}
+											onclick={(e) => {
+												e.stopPropagation();
+												toggleGroup(group.id, 'auto_channel_sync');
+											}}
 										>
 											<RefreshCw size={14} />
 											<span>Auto-Sync</span>
@@ -439,6 +661,11 @@
 									</div>
 								</div>
 							{/each}
+							{#if filteredGroups.length === 0}
+								<div class="empty-settings">
+									No channel categories match the current filters.
+								</div>
+							{/if}
 						{:else if activeTab === 'movies'}
 							{#each filteredMovies as cat}
 								<div class="setting-item">
@@ -491,13 +718,20 @@
 					{/if}
 				</div>
 				<div class="footer-actions">
-					<button type="button" class="btn-cancel" onclick={() => show = false} disabled={loading}>
-						Cancel
+					<button type="button" class="btn-cancel" onclick={() => show = false} disabled={loading || savingSelections}>
+						{activeTab === 'general' ? 'Cancel' : 'Close'}
 					</button>
-					<button type="submit" form="provider-form" class="btn-submit" disabled={loading || syncing || !name}>
-						<Save size={18} />
-						<span>{loading ? 'Saving...' : syncing ? 'Syncing...' : 'Save Provider'}</span>
-					</button>
+					{#if activeTab === 'general'}
+						<button type="button" class="btn-submit" onclick={saveProviderDetails} disabled={loading || syncing || !name}>
+							<Save size={18} />
+							<span>{loading ? 'Saving...' : syncing ? 'Syncing...' : 'Save Provider'}</span>
+						</button>
+					{:else}
+						<button type="button" class="btn-submit" onclick={saveImportSelections} disabled={savingSelections || syncing || !provider?.id}>
+							<Save size={18} />
+							<span>{savingSelections ? 'Saving...' : configSaveLabel()}</span>
+						</button>
+					{/if}
 				</div>
 			</div>
 		</div>
@@ -624,6 +858,9 @@
 
 	.pane-header {
 		margin-bottom: 8px;
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
 	}
 
 	.search-box {
@@ -657,6 +894,65 @@
 		display: flex;
 		flex-direction: column;
 		gap: 8px;
+	}
+
+	.category-actions {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+		flex-wrap: wrap;
+	}
+
+	.country-filter {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		flex: 1;
+		min-width: 260px;
+
+		input, select {
+			background: rgba(0, 0, 0, 0.2);
+			border: 1px solid var(--border);
+			color: var(--text-bright);
+			padding: 8px 10px;
+			border-radius: var(--radius);
+			font-size: 13px;
+
+			&:focus {
+				outline: none;
+				border-color: var(--accent);
+			}
+		}
+
+		input {
+			width: 150px;
+		}
+
+		select {
+			min-width: 190px;
+		}
+	}
+
+	.bulk-actions {
+		display: flex;
+		gap: 8px;
+
+		button {
+			background: var(--surface-bright);
+			border: 1px solid var(--border);
+			color: var(--text);
+			border-radius: var(--radius);
+			padding: 8px 10px;
+			font-size: 12px;
+			font-weight: 600;
+			cursor: pointer;
+
+			&:hover {
+				border-color: var(--border-bright);
+				color: var(--text-bright);
+			}
+		}
 	}
 
 	.setting-item {
@@ -694,6 +990,56 @@
 			display: flex;
 			gap: 8px;
 		}
+
+		&.selectable {
+			cursor: pointer;
+
+			&:hover {
+				background: rgba(255, 255, 255, 0.06);
+				border-color: var(--border-bright);
+			}
+
+			&:focus {
+				outline: 2px solid var(--accent);
+				outline-offset: 2px;
+			}
+
+			&.selected {
+				background: rgba(59, 130, 246, 0.1);
+				border-color: rgba(96, 165, 250, 0.55);
+			}
+		}
+	}
+
+	.flag {
+		margin-right: 8px;
+	}
+
+	.selection-pill {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 92px;
+		padding: 6px 10px;
+		border-radius: 4px;
+		border: 1px solid var(--border);
+		color: var(--text-dim);
+		font-size: 12px;
+		font-weight: 600;
+
+		&.active {
+			background: rgba(74, 222, 128, 0.14);
+			border-color: rgba(74, 222, 128, 0.5);
+			color: #4ade80;
+		}
+	}
+
+	.empty-settings {
+		border: 1px dashed var(--border);
+		border-radius: var(--radius);
+		color: var(--text-dim);
+		padding: 20px;
+		text-align: center;
 	}
 
 	.toggle-btn {

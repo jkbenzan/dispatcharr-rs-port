@@ -1,8 +1,9 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import { Plus, RefreshCw, Edit2, Trash2, Link, Server, Clock, AlertCircle, FileText } from 'lucide-svelte';
 	import { api } from '$lib/api';
 	import { toast } from '$lib/toast.svelte';
+	import { connectWS, wsStore } from '$lib/ws.svelte';
 	import M3UProviderModal from '$lib/components/m3u/M3UProviderModal.svelte';
 	import EpgProviderModal from '$lib/components/epg/EpgProviderModal.svelte';
 	import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
@@ -22,6 +23,7 @@
 	let epgError = $state('');
 	let showEpgModal = $state(false);
 	let selectedEpgSource: any = $state(null);
+	let providerPollTimer: ReturnType<typeof setInterval> | null = null;
 
 	type ConfirmVariant = 'default' | 'danger';
 	type ConfirmationState = {
@@ -71,22 +73,92 @@
 		return accountType === 'xc' || accountType === 'xtream';
 	}
 
+	const queuedStatuses = new Set(['fetching', 'refreshing']);
+
+	let m3uRefreshSummary = $derived(() => {
+		const active = m3uProviders.filter((provider) => provider.is_active && !provider.locked);
+		const refreshing = active.filter(isProviderRefreshing).length;
+		const queued = active.filter((provider) => String(provider.last_message || '').toLowerCase().includes('queued')).length;
+		return { active: active.length, refreshing, queued };
+	});
+
+	let epgRefreshSummary = $derived(() => {
+		const active = epgSources.filter((source) => source.is_active);
+		const refreshing = active.filter((source) => queuedStatuses.has(String(source.status || '').toLowerCase())).length;
+		const queued = active.filter((source) => String(source.last_message || '').toLowerCase().includes('queued')).length;
+		return { active: active.length, refreshing, queued };
+	});
+
+	function hasRefreshActivity() {
+		return m3uRefreshSummary().refreshing > 0 || m3uRefreshSummary().queued > 0 || epgRefreshSummary().refreshing > 0 || epgRefreshSummary().queued > 0;
+	}
+
+	async function refreshProviderState({ silent = true } = {}) {
+		await Promise.all([
+			loadM3uProviders({ silent }),
+			loadEpgSources({ silent })
+		]);
+	}
+
+	function startProviderPolling() {
+		if (providerPollTimer) return;
+		providerPollTimer = setInterval(() => {
+			refreshProviderState({ silent: true }).catch((err) => {
+				console.error('Failed to refresh provider status:', err);
+			});
+		}, 5000);
+	}
+
+	function stopProviderPolling() {
+		if (!providerPollTimer) return;
+		clearInterval(providerPollTimer);
+		providerPollTimer = null;
+	}
+
+	$effect(() => {
+		if (hasRefreshActivity()) {
+			startProviderPolling();
+		} else {
+			stopProviderPolling();
+		}
+	});
+
+	$effect(() => {
+		// Provider progress and system-event websocket messages are a lightweight signal to refresh card state.
+		if (wsStore.lastMessage?.event === 'progress' || wsStore.lastMessage?.type === 'system_event') {
+			refreshProviderState({ silent: true }).catch((err) => {
+				console.error('Failed to refresh provider state after websocket event:', err);
+			});
+		}
+	});
+
 	onMount(() => {
+		connectWS();
 		loadM3uProviders();
 		loadEpgSources();
 	});
 
+	onDestroy(() => {
+		stopProviderPolling();
+	});
+
 	// --- M3U Logic ---
-	async function loadM3uProviders() {
-		m3uLoading = true;
-		m3uError = '';
+	async function loadM3uProviders({ silent = false } = {}) {
+		if (!silent) {
+			m3uLoading = true;
+			m3uError = '';
+		}
 		try {
 			m3uProviders = await api.getPlaylists();
 		} catch (err: any) {
-			m3uError = err.message || 'Failed to load M3U providers';
+			if (!silent) {
+				m3uError = err.message || 'Failed to load M3U providers';
+			}
 			console.error(err);
 		} finally {
-			m3uLoading = false;
+			if (!silent) {
+				m3uLoading = false;
+			}
 		}
 	}
 
@@ -130,8 +202,10 @@
 
 	async function handleRefreshM3u(id: number) {
 		try {
-			await api.refreshM3UAccount(id);
-			toast.success('Refresh triggered successfully. Monitor activity log for progress.');
+					await api.refreshM3UAccount(id);
+			await loadM3uProviders({ silent: true });
+			startProviderPolling();
+			toast.success('Provider refresh queued. The card status will update as work progresses.');
 		} catch (err: any) {
 			toast.error(err.message || 'Failed to refresh provider');
 		}
@@ -146,6 +220,8 @@
 			onConfirm: async () => {
 				try {
 					await api.refreshAllM3uAccounts();
+					await loadM3uProviders({ silent: true });
+					startProviderPolling();
 					toast.info('M3U provider refreshes queued.');
 				} catch (err: any) {
 					toast.error(err.message || 'Failed to start bulk refresh');
@@ -155,6 +231,7 @@
 	}
 
 	function getProviderStatus(provider: any) {
+		if (String(provider?.last_message || '').toLowerCase().includes('queued')) return 'queued';
 		return provider.normalized_status || provider.status || (provider.is_active ? 'active' : 'inactive');
 	}
 
@@ -163,6 +240,7 @@
 		const labels: Record<string, string> = {
 			healthy: 'Healthy',
 			refreshing: 'Refreshing',
+			queued: 'Queued',
 			failed: 'Failed',
 			pending_setup: 'Pending Setup',
 			pending: 'Pending',
@@ -183,21 +261,31 @@
 		return getProviderStatus(provider) === 'refreshing' || provider.status === 'fetching';
 	}
 
+	function isProviderQueued(provider: any) {
+		return getProviderStatus(provider) === 'queued';
+	}
+
 	function canRefreshM3u(provider: any) {
 		return provider.is_active && !provider.locked && provider.name?.toLowerCase() !== 'custom';
 	}
 
 	// --- EPG Logic ---
-	async function loadEpgSources() {
-		epgLoading = true;
-		epgError = '';
+	async function loadEpgSources({ silent = false } = {}) {
+		if (!silent) {
+			epgLoading = true;
+			epgError = '';
+		}
 		try {
 			epgSources = await api.getEpgSources();
 		} catch (err: any) {
-			epgError = err.message || 'Failed to load EPG sources';
+			if (!silent) {
+				epgError = err.message || 'Failed to load EPG sources';
+			}
 			console.error(err);
 		} finally {
-			epgLoading = false;
+			if (!silent) {
+				epgLoading = false;
+			}
 		}
 	}
 
@@ -240,7 +328,9 @@
 	async function handleRefreshEpg(id: number) {
 		try {
 			await api.refreshEpgSource(id);
-			toast.success('EPG Refresh triggered successfully.');
+			await loadEpgSources({ silent: true });
+			startProviderPolling();
+			toast.success('EPG refresh queued. The card status will update as work progresses.');
 		} catch (err: any) {
 			toast.error(err.message || 'Failed to refresh EPG source');
 		}
@@ -255,6 +345,8 @@
 			onConfirm: async () => {
 				try {
 					await api.refreshAllEpgSources();
+					await loadEpgSources({ silent: true });
+					startProviderPolling();
 					toast.info('EPG source refreshes queued.');
 				} catch (err: any) {
 					toast.error(err.message || 'Failed to start bulk refresh');
@@ -268,6 +360,11 @@
 	function formatDate(isoStr?: string) {
 		if (!isoStr) return 'Never';
 		return formatDateTime(isoStr);
+	}
+
+	function formatRefreshSummary(summary: { active: number; refreshing: number; queued: number }, label: string) {
+		if (summary.refreshing === 0 && summary.queued === 0) return `${label}: idle`;
+		return `${label}: ${summary.refreshing} refreshing, ${summary.queued} queued`;
 	}
 </script>
 
@@ -312,6 +409,16 @@
 	</header>
 
 	<div class="tab-content">
+		{#if hasRefreshActivity()}
+			<div class="refresh-monitor">
+				<RefreshCw size={18} class="spin" />
+				<div>
+					<strong>Provider refresh queue active</strong>
+					<span>{formatRefreshSummary(m3uRefreshSummary(), 'M3U')} / {formatRefreshSummary(epgRefreshSummary(), 'EPG')}</span>
+				</div>
+			</div>
+		{/if}
+
 		{#if activeTab === 'm3u'}
 			<!-- M3U VIEW -->
 			{#if m3uError}
@@ -368,6 +475,7 @@
 											class="value status-badge"
 											class:active={getProviderStatus(provider) === 'healthy' || getProviderStatus(provider) === 'active'}
 											class:refreshing={isProviderRefreshing(provider)}
+											class:queued={isProviderQueued(provider)}
 											class:error={isProviderFailed(provider)}
 										>{formatProviderStatus(provider)}</span>
 									</div>
@@ -443,7 +551,15 @@
 	</div>
 </div>
 
-<M3UProviderModal bind:show={showM3uModal} provider={selectedM3uProvider} onSave={handleSaveM3u} />
+<M3UProviderModal
+	bind:show={showM3uModal}
+	provider={selectedM3uProvider}
+	onSave={handleSaveM3u}
+	onRefreshQueued={() => {
+		loadM3uProviders({ silent: true });
+		startProviderPolling();
+	}}
+/>
 <EpgProviderModal bind:show={showEpgModal} provider={selectedEpgSource} onSave={handleSaveEpg} />
 {#if confirmation}
 	<ConfirmDialog
@@ -578,6 +694,28 @@
 		display: flex;
 		align-items: center;
 		gap: 12px;
+	}
+
+	.refresh-monitor {
+		background: rgba(96, 165, 250, 0.08);
+		border: 1px solid rgba(96, 165, 250, 0.35);
+		color: var(--text-bright);
+		padding: 12px 16px;
+		border-radius: var(--radius);
+		display: flex;
+		align-items: center;
+		gap: 12px;
+
+		div {
+			display: flex;
+			flex-direction: column;
+			gap: 2px;
+		}
+
+		span {
+			color: var(--text-dim);
+			font-size: 13px;
+		}
 	}
 
 	.loading-state, .empty-state {
@@ -767,6 +905,7 @@
 
 		&.active { color: #4ade80 !important; }
 		&.refreshing { color: #38bdf8 !important; }
+		&.queued { color: #facc15 !important; }
 		&.error { color: var(--accent) !important; }
 	}
 
