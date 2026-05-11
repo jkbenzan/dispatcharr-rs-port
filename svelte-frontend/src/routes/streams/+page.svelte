@@ -86,15 +86,29 @@
 	const queuedStatuses = new Set(['fetching', 'refreshing']);
 	const DEFAULT_REFRESH_ESTIMATE_MS = 120_000;
 
+	function isCustomM3uProvider(provider: any) {
+		return provider?.name?.toLowerCase() === 'custom';
+	}
+
+	function sortByName<T extends { name?: string }>(items: T[]) {
+		return [...items].sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
+	}
+
+	let visibleM3uProviders = $derived(
+		sortByName(m3uProviders.filter((provider) => !isCustomM3uProvider(provider)))
+	);
+
+	let visibleEpgSources = $derived(sortByName(epgSources));
+
 	let m3uRefreshSummary = $derived(() => {
-		const active = m3uProviders.filter((provider) => provider.is_active && !provider.locked);
+		const active = visibleM3uProviders.filter((provider) => provider.is_active && !provider.locked);
 		const refreshing = active.filter(isProviderRefreshing).length;
 		const queued = active.filter((provider) => String(provider.last_message || '').toLowerCase().includes('queued')).length;
 		return { active: active.length, refreshing, queued };
 	});
 
 	let epgRefreshSummary = $derived(() => {
-		const active = epgSources.filter((source) => source.is_active);
+		const active = visibleEpgSources.filter((source) => source.is_active);
 		const refreshing = active.filter((source) => queuedStatuses.has(String(source.status || '').toLowerCase())).length;
 		const queued = active.filter((source) => String(source.last_message || '').toLowerCase().includes('queued')).length;
 		return { active: active.length, refreshing, queued };
@@ -161,6 +175,14 @@
 				kind
 			}
 		};
+	}
+
+	function rememberQueuedProgress(kind: 'm3u' | 'epg', id: number | string, message = 'Refresh queued') {
+		rememberProgress(kind, id, {
+			status: 'queued',
+			message,
+			progress: 4
+		});
 	}
 
 	function forgetProgress(kind: 'm3u' | 'epg', id: number | string) {
@@ -363,7 +385,8 @@
 
 	async function handleRefreshM3u(id: number) {
 		try {
-					await api.refreshM3UAccount(id);
+			rememberQueuedProgress('m3u', id);
+			await api.refreshM3UAccount(id);
 			await loadM3uProviders({ silent: true });
 			startProviderPolling();
 			toast.success('Provider refresh queued. The card status will update as work progresses.');
@@ -380,7 +403,11 @@
 			variant: 'default',
 			onConfirm: async () => {
 				try {
-					await api.refreshAllM3uAccounts();
+					const result = await api.refreshAllM3uAccounts();
+					const queuedIds = Array.isArray(result?.queued_account_ids) ? new Set(result.queued_account_ids.map(Number)) : null;
+					for (const provider of visibleM3uProviders.filter((provider) => canRefreshM3u(provider) && (!queuedIds || queuedIds.has(Number(provider.id))))) {
+						rememberQueuedProgress('m3u', provider.id);
+					}
 					await loadM3uProviders({ silent: true });
 					startProviderPolling();
 					toast.info('M3U provider refreshes queued.');
@@ -427,7 +454,7 @@
 	}
 
 	function canRefreshM3u(provider: any) {
-		return provider.is_active && !provider.locked && provider.name?.toLowerCase() !== 'custom';
+		return provider.is_active && !provider.locked && !isCustomM3uProvider(provider);
 	}
 
 	// --- EPG Logic ---
@@ -491,6 +518,7 @@
 
 	async function handleRefreshEpg(id: number) {
 		try {
+			rememberQueuedProgress('epg', id);
 			await api.refreshEpgSource(id);
 			await loadEpgSources({ silent: true });
 			startProviderPolling();
@@ -509,6 +537,9 @@
 			onConfirm: async () => {
 				try {
 					await api.refreshAllEpgSources();
+					for (const source of visibleEpgSources.filter((source) => source.is_active)) {
+						rememberQueuedProgress('epg', source.id);
+					}
 					await loadEpgSources({ silent: true });
 					startProviderPolling();
 					toast.info('EPG source refreshes queued.');
@@ -591,7 +622,7 @@
 
 			{#if m3uLoading}
 				<div class="loading-state"><RefreshCw size={24} class="spin" /><p>Loading providers...</p></div>
-			{:else if m3uProviders.length === 0}
+			{:else if visibleM3uProviders.length === 0}
 				<div class="empty-state">
 					<Server size={48} />
 					<h3>No playlists found</h3>
@@ -600,7 +631,7 @@
 				</div>
 			{:else}
 				<div class="providers-grid">
-					{#each m3uProviders as provider}
+					{#each visibleM3uProviders as provider (provider.id)}
 						<div class="provider-card">
 							<div class="card-header">
 								<div class="title-row">
@@ -668,7 +699,7 @@
 
 			{#if epgLoading}
 				<div class="loading-state"><RefreshCw size={24} class="spin" /><p>Loading EPG sources...</p></div>
-			{:else if epgSources.length === 0}
+			{:else if visibleEpgSources.length === 0}
 				<div class="empty-state">
 					<FileText size={48} />
 					<h3>No EPG sources found</h3>
@@ -677,7 +708,7 @@
 				</div>
 			{:else}
 				<div class="providers-grid">
-					{#each epgSources as source}
+					{#each visibleEpgSources as source (source.id)}
 						<div class="provider-card">
 							<div class="card-header">
 								<div class="title-row">

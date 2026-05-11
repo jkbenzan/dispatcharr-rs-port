@@ -172,6 +172,12 @@
 		return country.name.toLowerCase().includes(query) || country.aliases.some((alias) => alias.includes(query));
 	}
 
+	function countryFilterPlaceholder() {
+		if (countryDetectionCoverage < 0.35) return 'No strong country pattern detected';
+		if (detectedCountryOptions.length === 0) return 'No detected countries match search';
+		return 'All detected countries';
+	}
+
 	function isGroupEnabled(groupId: number) {
 		return groupSettings[groupId]?.enabled === true;
 	}
@@ -234,7 +240,7 @@
 	});
 
 	const shouldShowCountryFilter = $derived(
-		activeTab === 'categories' && countryDetectionCoverage >= 0.35 && detectedCountryOptions.length > 0
+		activeTab === 'categories' && allChannelGroups.some((group) => belongsToCurrentProvider(group))
 	);
 
 	const filteredMovies = $derived(
@@ -614,7 +620,7 @@
 										<div class="filter-field">
 											<label for="countryFilter">Detected country</label>
 											<select id="countryFilter" bind:value={countryFilter} aria-label="Filter categories by detected country">
-												<option value="">All detected countries</option>
+												<option value="">{countryFilterPlaceholder()}</option>
 												{#each filteredCountryOptions as country}
 													<option value={country.code}>{countryFlag(country.code)} {country.name}</option>
 												{/each}

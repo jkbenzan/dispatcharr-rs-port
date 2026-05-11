@@ -1418,7 +1418,7 @@ pub async fn get_dashboard_stats(State(state): State<Arc<AppState>>) -> Json<Val
     let accounts_count = accounts.len();
     let failed_accounts = accounts
         .iter()
-        .filter(|a| is_m3u_failure_status(&a.status))
+        .filter(|a| !is_custom_m3u_account(&a.name) && is_m3u_failure_status(&a.status))
         .count();
 
     let sources = epg_source::Entity::find()
@@ -1999,7 +1999,7 @@ fn apply_custom_props_from_payload(
 pub async fn get_m3u_accounts(State(state): State<Arc<AppState>>) -> Json<Value> {
     use sea_orm::QueryOrder;
     let accounts = match m3u_account::Entity::find()
-        .order_by_asc(m3u_account::Column::Priority)
+        .order_by_asc(m3u_account::Column::Name)
         .all(&state.db)
         .await
     {
@@ -2979,6 +2979,7 @@ pub async fn refresh_all_m3u_accounts(
         .into_iter()
         .filter(|acc| !is_custom_m3u_account(&acc.name) && acc.status != "fetching")
         .collect::<Vec<_>>();
+    let queued_account_ids: Vec<i64> = accounts.iter().map(|acc| acc.id).collect();
 
     let db_clone = state.db.clone();
     let ws_clone = state.ws_sender.clone();
@@ -3021,7 +3022,11 @@ pub async fn refresh_all_m3u_accounts(
         }
     });
 
-    (StatusCode::ACCEPTED, Json(json!({"success": true, "message": "Staggered bulk refresh started"})))
+    (StatusCode::ACCEPTED, Json(json!({
+        "success": true,
+        "message": "Staggered bulk refresh started",
+        "queued_account_ids": queued_account_ids
+    })))
 }
 
 pub async fn refresh_all_epg_sources(
