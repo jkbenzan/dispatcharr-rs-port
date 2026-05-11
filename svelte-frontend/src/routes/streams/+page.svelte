@@ -7,6 +7,7 @@
 	import M3UProviderModal from '$lib/components/m3u/M3UProviderModal.svelte';
 	import EpgProviderModal from '$lib/components/epg/EpgProviderModal.svelte';
 	import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
+	import ProviderRefreshProgress from '$lib/components/ui/ProviderRefreshProgress.svelte';
 
 	let activeTab = $state('m3u'); // 'm3u' or 'epg'
 
@@ -24,6 +25,15 @@
 	let showEpgModal = $state(false);
 	let selectedEpgSource: any = $state(null);
 	let providerPollTimer: ReturnType<typeof setInterval> | null = null;
+	let elapsedTimer: ReturnType<typeof setInterval> | null = null;
+	let nowMs = $state(Date.now());
+	let providerProgress = $state<Record<string, {
+		startedAt: number;
+		progress: number | null;
+		status: string;
+		message: string;
+		kind: 'm3u' | 'epg';
+	}>>({});
 
 	type ConfirmVariant = 'default' | 'danger';
 	type ConfirmationState = {
@@ -74,6 +84,7 @@
 	}
 
 	const queuedStatuses = new Set(['fetching', 'refreshing']);
+	const DEFAULT_REFRESH_ESTIMATE_MS = 120_000;
 
 	let m3uRefreshSummary = $derived(() => {
 		const active = m3uProviders.filter((provider) => provider.is_active && !provider.locked);
@@ -115,6 +126,143 @@
 		providerPollTimer = null;
 	}
 
+	function startElapsedTimer() {
+		if (elapsedTimer) return;
+		elapsedTimer = setInterval(() => {
+			nowMs = Date.now();
+		}, 1000);
+	}
+
+	function stopElapsedTimer() {
+		if (!elapsedTimer) return;
+		clearInterval(elapsedTimer);
+		elapsedTimer = null;
+	}
+
+	function progressKey(kind: 'm3u' | 'epg', id: number | string) {
+		return `${kind}:${id}`;
+	}
+
+	function isActiveRefreshStatus(status?: string) {
+		const normalized = String(status || '').toLowerCase();
+		return normalized === 'queued' || normalized === 'fetching' || normalized === 'refreshing' || normalized === 'parsing';
+	}
+
+	function rememberProgress(kind: 'm3u' | 'epg', id: number | string, patch: Partial<Record<string, any>>) {
+		const key = progressKey(kind, id);
+		const existing = providerProgress[key];
+		providerProgress = {
+			...providerProgress,
+			[key]: {
+				startedAt: existing?.startedAt || Date.now(),
+				progress: typeof patch.progress === 'number' ? patch.progress : (existing?.progress ?? null),
+				status: String(patch.status || existing?.status || 'queued'),
+				message: String(patch.message || existing?.message || 'Refresh queued'),
+				kind
+			}
+		};
+	}
+
+	function forgetProgress(kind: 'm3u' | 'epg', id: number | string) {
+		const key = progressKey(kind, id);
+		if (!providerProgress[key]) return;
+		const next = { ...providerProgress };
+		delete next[key];
+		providerProgress = next;
+	}
+
+	function syncProgressFromProvider(kind: 'm3u' | 'epg', item: any) {
+		const status = kind === 'm3u' ? getProviderStatus(item) : String(item.status || '').toLowerCase();
+		const queued = String(item.last_message || '').toLowerCase().includes('queued');
+		if (queued || isActiveRefreshStatus(status)) {
+			rememberProgress(kind, item.id, {
+				status: queued ? 'queued' : status,
+				message: item.last_message || (queued ? 'Refresh queued' : 'Refresh in progress')
+			});
+			return;
+		}
+
+		if (['success', 'healthy', 'active', 'idle', 'inactive', 'disabled', 'failed', 'error', 'pending_setup'].includes(status)) {
+			forgetProgress(kind, item.id);
+		}
+	}
+
+	function handleRefreshMessage(message: any) {
+		if (!message || typeof message !== 'object') return;
+
+		if (message.type === 'm3u_refresh' && message.account != null) {
+			const status = String(message.status || '').toLowerCase();
+			const progress = Number(message.progress);
+			if (['success', 'failed', 'error', 'pending_setup'].includes(status) || progress >= 100) {
+				forgetProgress('m3u', message.account);
+				return;
+			}
+			rememberProgress('m3u', message.account, {
+				status: message.status,
+				message: message.message,
+				progress: Number.isFinite(progress) ? progress : undefined
+			});
+		}
+
+		if (message.type === 'epg_refresh' && message.source != null) {
+			if (['success', 'failed', 'error'].includes(String(message.status || '').toLowerCase())) {
+				forgetProgress('epg', message.source);
+				return;
+			}
+			rememberProgress('epg', message.source, {
+				status: message.status,
+				message: message.message,
+				progress: estimatedProgressForStatus(message.status)
+			});
+		}
+	}
+
+	function estimatedProgressForStatus(status?: string) {
+		const normalized = String(status || '').toLowerCase();
+		if (normalized === 'queued') return 4;
+		if (normalized === 'fetching') return 18;
+		if (normalized === 'parsing') return 62;
+		if (normalized === 'refreshing') return null;
+		return null;
+	}
+
+	function getProgressInfo(kind: 'm3u' | 'epg', item: any) {
+		const key = progressKey(kind, item.id);
+		const tracked = providerProgress[key];
+		const status = kind === 'm3u' ? getProviderStatus(item) : String(item.status || '').toLowerCase();
+		const queued = String(item.last_message || '').toLowerCase().includes('queued');
+		const active = queued || isActiveRefreshStatus(status) || !!tracked;
+		if (!active) return null;
+
+		const startedAt = tracked?.startedAt || Date.now();
+		const elapsedMs = Math.max(0, nowMs - startedAt);
+		const statusProgress = estimatedProgressForStatus(queued ? 'queued' : status);
+		const elapsedEstimate = Math.min(95, Math.max(8, Math.round((elapsedMs / DEFAULT_REFRESH_ESTIMATE_MS) * 100)));
+		const progress = Math.min(100, Math.max(0, tracked?.progress ?? statusProgress ?? elapsedEstimate));
+		const etaMs = progress > 5 && progress < 100 ? Math.max(0, Math.round((elapsedMs / progress) * (100 - progress))) : null;
+
+		return {
+			progress,
+			elapsedMs,
+			etaMs,
+			status: tracked?.status || (queued ? 'queued' : status),
+			message: tracked?.message || item.last_message || 'Refresh in progress'
+		};
+	}
+
+	function formatDuration(ms: number | null) {
+		if (ms == null) return '--';
+		const totalSeconds = Math.max(0, Math.round(ms / 1000));
+		const minutes = Math.floor(totalSeconds / 60);
+		const seconds = totalSeconds % 60;
+		if (minutes >= 60) {
+			const hours = Math.floor(minutes / 60);
+			const remainder = minutes % 60;
+			return `${hours}h ${remainder}m`;
+		}
+		return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+	}
+
 	$effect(() => {
 		if (hasRefreshActivity()) {
 			startProviderPolling();
@@ -124,8 +272,17 @@
 	});
 
 	$effect(() => {
+		if (Object.keys(providerProgress).length > 0) {
+			startElapsedTimer();
+		} else {
+			stopElapsedTimer();
+		}
+	});
+
+	$effect(() => {
 		// Provider progress and system-event websocket messages are a lightweight signal to refresh card state.
-		if (wsStore.lastMessage?.event === 'progress' || wsStore.lastMessage?.type === 'system_event') {
+		handleRefreshMessage(wsStore.lastMessage);
+		if (wsStore.lastMessage?.event === 'progress' || wsStore.lastMessage?.type === 'system_event' || wsStore.lastMessage?.type === 'm3u_refresh' || wsStore.lastMessage?.type === 'epg_refresh') {
 			refreshProviderState({ silent: true }).catch((err) => {
 				console.error('Failed to refresh provider state after websocket event:', err);
 			});
@@ -140,6 +297,7 @@
 
 	onDestroy(() => {
 		stopProviderPolling();
+		stopElapsedTimer();
 	});
 
 	// --- M3U Logic ---
@@ -150,6 +308,9 @@
 		}
 		try {
 			m3uProviders = await api.getPlaylists();
+			for (const provider of m3uProviders) {
+				syncProgressFromProvider('m3u', provider);
+			}
 		} catch (err: any) {
 			if (!silent) {
 				m3uError = err.message || 'Failed to load M3U providers';
@@ -277,6 +438,9 @@
 		}
 		try {
 			epgSources = await api.getEpgSources();
+			for (const source of epgSources) {
+				syncProgressFromProvider('epg', source);
+			}
 		} catch (err: any) {
 			if (!silent) {
 				epgError = err.message || 'Failed to load EPG sources';
@@ -489,6 +653,7 @@
 							</div>
 
 							<div class="card-footer">
+								<ProviderRefreshProgress info={getProgressInfo('m3u', provider)} {formatDuration} />
 								<div class="last-updated"><Clock size={12} /><span>Last refresh: {formatDate(provider.last_refresh_at || provider.updated_at)}</span></div>
 							</div>
 						</div>
@@ -541,6 +706,7 @@
 							</div>
 
 							<div class="card-footer">
+								<ProviderRefreshProgress info={getProgressInfo('epg', source)} {formatDuration} />
 								<div class="last-updated"><Clock size={12} /><span>Updated: {formatDate(source.updated_at)}</span></div>
 							</div>
 						</div>
@@ -934,6 +1100,9 @@
 		padding: 12px 16px;
 		border-top: 1px solid var(--border);
 		background: rgba(0,0,0,0.1);
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
 
 		.last-updated {
 			display: flex;

@@ -214,8 +214,16 @@
 			if (country) countryMap.set(country.code, country);
 		}
 		return Array.from(countryMap.values())
-			.filter(filteredByCountrySearch)
 			.sort((a, b) => a.name.localeCompare(b.name));
+	});
+
+	const filteredCountryOptions = $derived.by(() => {
+		const selectedCountry = detectedCountryOptions.find((country) => country.code === countryFilter);
+		const filtered = detectedCountryOptions.filter(filteredByCountrySearch);
+		if (selectedCountry && !filtered.some((country) => country.code === selectedCountry.code)) {
+			return [selectedCountry, ...filtered];
+		}
+		return filtered;
 	});
 
 	const countryDetectionCoverage = $derived.by(() => {
@@ -596,16 +604,22 @@
 							<input type="text" placeholder="Search categories..." bind:value={searchQuery} />
 						</div>
 						{#if activeTab === 'categories'}
-							<div class="category-actions">
+							<div class="category-toolbar">
 								{#if shouldShowCountryFilter}
-									<div class="country-filter">
-										<input type="search" placeholder="Search countries..." bind:value={countrySearch} />
-										<select bind:value={countryFilter} aria-label="Filter categories by detected country">
-											<option value="">All detected countries</option>
-											{#each detectedCountryOptions as country}
-												<option value={country.code}>{countryFlag(country.code)} {country.name}</option>
-											{/each}
-										</select>
+									<div class="category-filter-panel">
+										<div class="filter-field">
+											<label for="countrySearch">Country search</label>
+											<input id="countrySearch" type="search" placeholder="Type to narrow countries..." bind:value={countrySearch} />
+										</div>
+										<div class="filter-field">
+											<label for="countryFilter">Detected country</label>
+											<select id="countryFilter" bind:value={countryFilter} aria-label="Filter categories by detected country">
+												<option value="">All detected countries</option>
+												{#each filteredCountryOptions as country}
+													<option value={country.code}>{countryFlag(country.code)} {country.name}</option>
+												{/each}
+											</select>
+										</div>
 									</div>
 								{/if}
 								<div class="bulk-actions">
@@ -896,20 +910,38 @@
 		gap: 8px;
 	}
 
-	.category-actions {
+	.category-toolbar {
 		display: flex;
-		align-items: center;
+		align-items: flex-end;
 		justify-content: space-between;
 		gap: 12px;
 		flex-wrap: wrap;
 	}
 
-	.country-filter {
-		display: flex;
-		align-items: center;
-		gap: 8px;
+	.category-filter-panel {
+		display: grid;
+		grid-template-columns: minmax(180px, 1fr) minmax(210px, 1.2fr);
+		gap: 10px;
 		flex: 1;
-		min-width: 260px;
+		min-width: min(100%, 420px);
+		padding: 10px;
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		background: rgba(255, 255, 255, 0.03);
+	}
+
+	.filter-field {
+		display: flex;
+		flex-direction: column;
+		gap: 5px;
+
+		label {
+			color: var(--text-dim);
+			font-size: 11px;
+			font-weight: 700;
+			text-transform: uppercase;
+			letter-spacing: 0.5px;
+		}
 
 		input, select {
 			background: rgba(0, 0, 0, 0.2);
@@ -926,17 +958,19 @@
 		}
 
 		input {
-			width: 150px;
+			width: 100%;
 		}
 
 		select {
-			min-width: 190px;
+			width: 100%;
+			max-width: 100%;
 		}
 	}
 
 	.bulk-actions {
 		display: flex;
 		gap: 8px;
+		margin-left: auto;
 
 		button {
 			background: var(--surface-bright);
