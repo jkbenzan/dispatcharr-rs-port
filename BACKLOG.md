@@ -64,6 +64,8 @@ Items queued for future implementation and audit phases.
   Implement `/api/streams/:id?format=hls` for better mobile/native compatibility.
 - [x] **VOD Category Filtering**
   Update backend `get_vod` handlers to support filtering by `category_id`.
+- [ ] **Streams Tab Refresh UX**
+  Add a horizontal progress bar to the bottom of provider cards during refresh/queue work; text status alone is not enough for quick scanning. Add a toggleable alternate grid view that keeps the same provider actions, metadata, and progress indicators while reducing card crowding.
 
 ---
 
