@@ -356,6 +356,15 @@ async fn parse_m3u_from_file(
     let mut group_counts: HashMap<i64, i32> = HashMap::new();
     let mut current_hashes = Vec::new();
 
+    // --- Import Diagnostic Counters ---
+    // These track exactly why each stream was or wasn't imported, making it
+    // trivial to diagnose "stream count didn't change" reports from logs.
+    let mut stats_inserted: usize = 0;
+    let mut stats_hash_dedup: usize = 0;
+    let mut stats_disabled_skip: usize = 0;
+    let mut stats_filter_skip: usize = 0;
+    let mut stats_total_lines: usize = 0;
+
     let file = std::fs::File::open(file_path)?;
     let reader: Box<dyn Read + Send> = if file_path.to_string_lossy().ends_with(".gz") {
         Box::new(GzDecoder::new(file))
@@ -508,7 +517,9 @@ async fn parse_m3u_from_file(
                 }
 
                 if is_excluded || !is_included {
-                    // Skip inserting this stream
+                    // Skip inserting this stream (matched an exclusion filter or
+                    // didn't match any required inclusion filter)
+                    stats_filter_skip += 1;
                     continue;
                 }
                 
@@ -520,9 +531,12 @@ async fn parse_m3u_from_file(
                 // Skip streams whose group is disabled for this account
                 if let sea_orm::ActiveValue::Set(Some(cg_id)) = &stream_model.channel_group_id {
                     if disabled_group_ids.contains(cg_id) {
+                        stats_disabled_skip += 1;
                         continue;
                     }
                 }
+
+                stats_total_lines += 1;
 
                 let mut hasher = Sha256::new();
                 hasher.update(line.as_bytes());
@@ -535,6 +549,7 @@ async fn parse_m3u_from_file(
                     stream_model.stream_hash = Set(Some(result.clone()));
                     hash_set.insert(result);
                     streams_batch.push(stream_model);
+                    stats_inserted += 1;
 
                     if streams_batch.len() >= 500 {
                         let chunk = std::mem::take(&mut streams_batch);
@@ -542,6 +557,8 @@ async fn parse_m3u_from_file(
                             println!("[M3U Sync] ERROR inserting stream chunk: {:?}", e);
                         }
                     }
+                } else {
+                    stats_hash_dedup += 1;
                 }
             }
         }
@@ -552,6 +569,18 @@ async fn parse_m3u_from_file(
             println!("[M3U Sync] ERROR inserting final stream batch: {:?}", e);
         }
     }
+
+    // --- Import Summary ---
+    // Log a concise summary so operators can immediately see why stream counts
+    // did or didn't change after a refresh.
+    tracing::info!(
+        "[M3U Sync] account_id={}: {} eligible streams, {} inserted (new), \
+         {} skipped (hash dedup / already in DB), {} skipped (disabled groups), \
+         {} skipped (filters), is_initial={}",
+        account_id, stats_total_lines, stats_inserted,
+        stats_hash_dedup, stats_disabled_skip,
+        stats_filter_skip, is_initial
+    );
 
     // --- Update Group Stream Counts ---
     for (cg_id, count) in group_counts {
@@ -793,6 +822,13 @@ pub async fn fetch_and_parse_xc(
             );
         }
 
+        // --- Import Diagnostic Counters ---
+        // Track exactly why each stream was or wasn't imported for operator diagnostics.
+        let mut xc_stats_inserted: usize = 0;
+        let mut xc_stats_hash_dedup: usize = 0;
+        let mut xc_stats_disabled_skip: usize = 0;
+        let xc_stats_total = xc_streams.len();
+
         for s in xc_streams {
             let group_title = category_map
                 .get(&s.category_id)
@@ -832,6 +868,7 @@ pub async fn fetch_and_parse_xc(
                 if let Some(gid) = cg_id {
                     *group_counts.entry(gid).or_insert(0) += 1;
                     if xc_disabled_group_ids.contains(&gid) {
+                        xc_stats_disabled_skip += 1;
                         continue;
                     }
                 }
@@ -854,6 +891,7 @@ pub async fn fetch_and_parse_xc(
                     ..Default::default()
                 };
                 streams_batch.push(stream_model);
+                xc_stats_inserted += 1;
 
                 if streams_batch.len() >= 500 {
                     let chunk = std::mem::take(&mut streams_batch);
@@ -861,6 +899,8 @@ pub async fn fetch_and_parse_xc(
                         println!("[XC Sync] ERROR inserting stream chunk: {:?}", e);
                     }
                 }
+            } else {
+                xc_stats_hash_dedup += 1;
             }
         }
 
@@ -869,6 +909,16 @@ pub async fn fetch_and_parse_xc(
                 println!("[XC Sync] ERROR inserting final stream batch: {:?}", e);
             }
         }
+
+        // --- Import Summary ---
+        // Log a concise summary so operators can immediately see why stream counts
+        // did or didn't change after a refresh.
+        tracing::info!(
+            "[XC Sync] account_id={}: {} total from API, {} inserted (new), \
+             {} skipped (hash dedup / already in DB), {} skipped (disabled groups)",
+            account_id, xc_stats_total, xc_stats_inserted,
+            xc_stats_hash_dedup, xc_stats_disabled_skip
+        );
 
         // --- Stale Stream Cleanup ---
         let now_fixed: chrono::DateTime<chrono::FixedOffset> = Utc::now().into();

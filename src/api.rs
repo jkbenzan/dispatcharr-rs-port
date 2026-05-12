@@ -3557,6 +3557,11 @@ pub async fn update_m3u_group_settings(
                                 .await;
                         }
                     }
+                } else {
+                    tracing::warn!(
+                        "[M3U] No mapping found for channel_group_id={:?} on account_id={} — skipping group settings update",
+                        cg_id, account_id
+                    );
                 }
             }
         }
@@ -3585,22 +3590,28 @@ pub async fn update_m3u_group_settings(
 
     let _ = crate::channel_sync::sync_channels_for_account(&state.db, account_id).await;
 
+    // NOTE: Do NOT set status to "success" here. The caller (saveImportSelections)
+    // typically queues a refresh immediately after this endpoint returns. Setting
+    // "success" + broadcasting "completed" would cause the Streams page to stop
+    // polling before the refresh task even starts, resulting in stale stream counts.
+    // Instead, use "pending" so the UI keeps watching until the refresh lifecycle
+    // (queued → fetching → success) takes over.
     if let Ok(Some(acc)) = crate::entities::m3u_account::Entity::find_by_id(account_id)
         .one(&state.db)
         .await
     {
         let mut active: crate::entities::m3u_account::ActiveModel = acc.into();
-        active.status = sea_orm::Set("success".to_string());
-        active.last_message = sea_orm::Set(Some("Groups mapped successfully".to_string()));
+        active.status = sea_orm::Set("pending".to_string());
+        active.last_message = sea_orm::Set(Some("Category selections saved, refresh pending...".to_string()));
         let _ = active.update(&state.db).await;
         let _ = state.ws_sender.send(serde_json::json!({
             "channel": format!("progress_{}", account_id),
             "event": "progress",
             "data": {
-                "status": "success",
-                "step": "completed",
-                "progress": 100,
-                "message": "Groups mapped successfully"
+                "status": "pending",
+                "step": "groups_saved",
+                "progress": 10,
+                "message": "Category selections saved, refresh pending..."
             }
         }));
     }

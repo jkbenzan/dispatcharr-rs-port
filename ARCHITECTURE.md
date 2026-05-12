@@ -35,6 +35,14 @@ Dispatcharr is a high-performance M3U/XC/EPG proxy and management system built w
     - **Initial Prefetch**: During provider setup, a "full fetch" is performed to tally streams per category, allowing the UI to display "{n} streams found" before categories are selected.
     - **Periodic Updates**: Background sync tasks for Live, VOD, and Series now include a tallying phase that updates category `stream_count` in the database `custom_properties` field.
     - **Global Metrics**: Counts are updated for all categories (groups) provided by the source, ensuring the management UI always reflects current provider content.
+- **Category Save → Refresh Status Lifecycle**:
+    - When a user saves category selections, `update_m3u_group_settings` sets the account status to `"pending"` and broadcasts a non-terminal progress event (`step: "groups_saved"`, `progress: 10`). It must NOT set `"success"` or broadcast `"completed"` because the caller (`saveImportSelections`) immediately queues a refresh via `refreshM3UAccount`. Setting `"success"` prematurely would cause the Streams page to stop polling (`forgetProgress`) before the refresh task starts, leaving the UI with stale stream counts.
+    - The correct lifecycle is: `pending` (groups saved) → `queued` (refresh task spawned) → `fetching` (parsing in progress) → `success` (import complete). The Streams page polling loop remains active throughout because none of the intermediate statuses trigger `forgetProgress`.
+    - Missing group-to-account mappings during `update_m3u_group_settings` are logged at `WARN` level to surface edge cases where a user's toggle would be silently lost.
+- **Import Diagnostic Tracing**:
+    - Both `parse_m3u_from_file` (M3U) and `fetch_and_parse_xc` (XC) log an import summary at `INFO` level upon completion. The summary includes: total eligible streams, newly inserted, hash-dedup skipped (already in DB), disabled-group skipped, and filter-skipped counts.
+    - Example: `[M3U Sync] account_id=5: 12450 eligible streams, 340 inserted (new), 12100 skipped (hash dedup / already in DB), 10 skipped (disabled groups), 0 skipped (filters), is_initial=false`
+    - This makes diagnosing "stream count didn't change" issues trivial from backend logs without requiring database inspection.
 - **Stream Checker & Maintenance**:
     - Manual stream checks, bulk checks, and background maintenance share the same health bookkeeping path.
     - Stream diagnostics are stored in each stream row's `custom_properties.stream_stats` and `stream_stats_updated_at` fields.
