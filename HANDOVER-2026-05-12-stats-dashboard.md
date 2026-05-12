@@ -1,10 +1,14 @@
-# Handover — 2026-05-12 Stats Dashboard Implementation
+# Handover — 2026-05-12 Session Summary
 
-## Session Objective
+## Session Overview
 
-Implement the Active Connections (Stats) dashboard as a tab on the Dashboard page, with live polling, connection cards, and stop controls.
+Two major features were implemented this session, both focused on Phase 5: Observability & Event Coverage.
 
-## What Was Done
+---
+
+## Feature 1: Active Connections (Stats Dashboard)
+
+**Commit**: `3393281`
 
 ### Backend (`src/proxy.rs`, `src/main.rs`)
 
@@ -18,9 +22,9 @@ Implement the Active Connections (Stats) dashboard as a tab on the Dashboard pag
 
 ### Frontend
 
-1. **Dashboard Tab System** (`svelte-frontend/src/routes/+page.svelte`): Added Overview and Active Connections tabs. The connections tab starts polling on activation and stops on deactivation.
+1. **Dashboard Tab System** (`+page.svelte`): Added Overview and Active Connections tabs. The connections tab starts polling on activation and stops on deactivation.
 
-2. **ConnectionCard Component** (`svelte-frontend/src/lib/components/stats/ConnectionCard.svelte`): Dark card with:
+2. **ConnectionCard Component** (`lib/components/stats/ConnectionCard.svelte`): Dark card with:
    - Channel logo/name/number + LIVE pulse indicator
    - Uptime, data transferred, client count stats bar
    - Profile badges (stream profile, M3U provider)
@@ -31,45 +35,71 @@ Implement the Active Connections (Stats) dashboard as a tab on the Dashboard pag
 
 4. **API Methods** (`api.ts`): `getActiveConnections()`, `stopChannel()`, `stopClient()`.
 
-### Documentation
+### Known Limitations / Phase 2
+- No bitrate history graphs — requires `total_bytes` delta tracking
+- No EPG "Now Playing" overlay — needs `get_current_programs` integration
+- No VOD connection cards — backend returns empty stub
+- No stream switch dropdown — no endpoint to change active stream mid-broadcast
 
-- `ARCHITECTURE.md`: New "Active Connections (Stats Dashboard)" section
-- `BACKLOG.md`: Stats item marked complete
-- This handoff document
+---
+
+## Feature 2: Advanced Event Logging
+
+**Commit**: `ff9a43b`
+
+Added 9 `record_event()` calls across 2 backend files, covering 3 previously-silent subsystems:
+
+### Stream Checker (`src/stream_checker/checker.rs`)
+- `stream_check_completed` — emitted for every single stream test, includes `is_single: true` flag so the Activity page can filter/collapse individual checks vs bulk
+- `bulk_check_started` — emitted when a bulk check launches (includes stream count + provider count)
+- `bulk_check_completed` — emitted at task completion (includes pass/fail counts + cancelled flag)
+- `bulk_check_cancelled` — emitted when user cancels mid-run
+
+### Sorting Rules (`src/stream_checker/checker.rs`)
+- `sorting_rule_created` — includes rule name, property, operator
+- `sorting_rule_updated` — includes rule ID and name
+- `sorting_rule_deleted` — includes rule ID (warning severity)
+
+### Settings (`src/settings.rs`)
+- `settings_created` — key + name only (values omitted for security)
+- `settings_updated` — key + name only (values omitted for security)
+
+### Activity Page (`svelte-frontend/src/routes/activity/+page.svelte`)
+- Extended `humanizeEventType` with 10 new label mappings
+- Extended `formatEventMessage` with structured formatting for all 9 new event types
+- Each event type produces a human-readable summary (e.g., "Bulk check complete: 45/50 passed, 5 failed")
+
+---
 
 ## Build Status
 
-- `cargo check`: ✅ Clean
-- `svelte-check`: ✅ 0 errors, 2 pre-existing a11y warnings (unrelated)
+- `cargo check`: ✅ Clean (0 errors)
+- `svelte-check`: ✅ 0 errors, 2 pre-existing a11y warnings (ChannelsPane menu)
+- `cargo test`: Not run this session (no test changes)
 
-## Known Limitations / Phase 2
+## Git Log
 
-- **No bitrate history graphs** — would require tracking `total_bytes` deltas over time
-- **No EPG "Now Playing" overlay** — needs `get_current_programs` integration
-- **No VOD connection cards** — backend returns empty stub
-- **No stream switch dropdown** — no endpoint to change active stream mid-broadcast
-- **Sidebar shortcut uses hash routing** (`/#connections`) — SvelteKit doesn't natively handle hash-based tab state; the Dashboard page checks `window.location.hash` on mount
+| Commit | Description |
+|--------|-------------|
+| `482a3a3` | docs: update handoff with advanced logging completion |
+| `ff9a43b` | feat: Advanced event logging (stream checker, sorting rules, settings) |
+| `3393281` | feat: Active Connections dashboard tab with live polling and stop controls |
 
-## Pending Backlog Items (Priority Order)
+## Documentation Updated
 
-1. Stream Checker ↔ Channel Manager Integration
-2. ~~Stream Checker Event Logging~~ ✅ Completed (commit `ff9a43b`)
-3. ~~Settings Change Events~~ ✅ Completed (commit `ff9a43b`)
-4. ~~Sorting Rule Change Events~~ ✅ Completed (commit `ff9a43b`)
+- `ARCHITECTURE.md` — New "Active Connections" section + 3 new Telemetry bullet points
+- `BACKLOG.md` — 4 items marked `[x]` (Stats, Stream Checker Events, Sorting Rules, Settings)
+- This handoff document
 
-## Advanced Logging (commit `ff9a43b`)
+## Remaining Backlog (Phase 5)
 
-Added 9 `record_event()` calls across 2 backend files:
+Only 1 item left in Phase 5: Observability & Event Coverage:
 
-**Stream Checker** (`checker.rs`):
-- `stream_check_completed` (single check, `is_single: true` for Activity page filtering)
-- `bulk_check_started` / `bulk_check_completed` / `bulk_check_cancelled`
+- [ ] **Stream Checker ↔ Channel Manager Integration** — Expose per-channel "Check Streams" and "Sort by Health" buttons in ChannelsPane. Add Sorting Rules management UI to `/stream-checker`. Show stream health badges in channel sub-lists.
 
-**Sorting Rules** (`checker.rs`):
-- `sorting_rule_created` / `sorting_rule_updated` / `sorting_rule_deleted`
+## Deferred / Known Issues (from prior sessions)
 
-**Settings** (`settings.rs`):
-- `settings_created` / `settings_updated` (values omitted from payload for security)
-
-**Frontend** (`activity/+page.svelte`):
-- All 9 event types render with structured human-readable summaries
+- **CreateChannelModal**: Fast "No result found" flicker on channel DB lookup (not priority)
+- **Tooltip styling**: Clashes with UI (not priority)
+- **Some providers still showing "Ungrouped"**: Category detection covers ~63% of streams
+- **UI sluggishness**: Noted but no optimization needed yet
