@@ -134,6 +134,25 @@ export const api = {
   cancelBulkCheck: () => fetchApi('/api/streams/bulk-check/cancel/', { method: 'POST' }),
 
   // =================== STREAM SORTING ===================
+  /** Fetch all sorting rules, ordered by priority */
+  getSortingRules: () => fetchApi('/api/stream-checker/sorting-rules/'),
+  /** Create a new sorting rule */
+  createSortingRule: (data: any) => fetchApi('/api/stream-checker/sorting-rules/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  }),
+  /** Update an existing sorting rule by ID */
+  updateSortingRule: (id: number, data: any) => fetchApi(`/api/stream-checker/sorting-rules/${id}/`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  }),
+  /** Delete a sorting rule by ID */
+  deleteSortingRule: (id: number) => fetchApi(`/api/stream-checker/sorting-rules/${id}/`, {
+    method: 'DELETE'
+  }),
+  /** Reorder channel streams by health score using sorting rules */
   bulkSortStreams: (channelIds: number[]) => fetchApi('/api/channels/bulk-sort-streams/', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

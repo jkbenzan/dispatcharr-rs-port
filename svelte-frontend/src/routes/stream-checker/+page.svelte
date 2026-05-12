@@ -1,8 +1,12 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { Activity, Play, Square, Settings, CheckCircle2, XCircle, Clock, AlertCircle, RefreshCw } from 'lucide-svelte';
+	import { Activity, Play, Square, Settings, CheckCircle2, XCircle, Clock, AlertCircle, RefreshCw, Plus, Pencil, Trash2, ListOrdered } from 'lucide-svelte';
 	import { api } from '$lib/api';
 	import { toast } from '$lib/toast.svelte';
+
+	// =================== TAB STATE ===================
+	// Controls which view is shown: 'testing' (bulk stream checker) or 'rules' (sorting rules CRUD)
+	let activeTab: 'testing' | 'rules' = $state('testing');
 
 	// State
 	let providers: any[] = $state([]);
@@ -23,10 +27,35 @@
 	let parallelProviders = $state(1);
 	let loadingSettings = $state(false);
 
+	// =================== SORTING RULES STATE ===================
+	interface SortingRule {
+		id?: number;
+		name: string;
+		priority: number;
+		property: string;
+		operator: string;
+		value: string;
+		score_modifier: number;
+	}
+
+	// Known stream stat properties for the property dropdown
+	const RULE_PROPERTIES = ['resolution', 'video_codec', 'audio_codec', 'fps', 'bitrate', 'status', 'reachable'];
+	const RULE_OPERATORS = ['==', '!=', '>=', '<=', 'contains'];
+
+	let rules: SortingRule[] = $state([]);
+	let loadingRules = $state(false);
+	let editingRuleId: number | null = $state(null);
+	// Form state for adding/editing a rule
+	let ruleForm: SortingRule = $state({ name: '', priority: 0, property: 'resolution', operator: '==', value: '', score_modifier: 10 });
+	let showAddRow = $state(false);
+	let savingRule = $state(false);
+	let deletingRuleId: number | null = $state(null);
+
 	onMount(async () => {
 		loadSettings();
 		providers = await api.getPlaylists().catch(() => []);
 		checkStatus();
+		loadRules();
 	});
 
 	onDestroy(() => {
@@ -147,15 +176,106 @@
 		if (!status || status.total === 0) return 0;
 		return Math.round((status.completed / status.total) * 100);
 	}
+
+	// =================== SORTING RULES CRUD ===================
+
+	/** Load all sorting rules from the backend */
+	async function loadRules() {
+		loadingRules = true;
+		try {
+			const data = await api.getSortingRules();
+			// Sort by priority ascending for display
+			rules = (Array.isArray(data) ? data : []).sort((a: SortingRule, b: SortingRule) => a.priority - b.priority);
+		} catch (err) {
+			console.error('Failed to load sorting rules:', err);
+			toast.error('Failed to load sorting rules');
+		} finally {
+			loadingRules = false;
+		}
+	}
+
+	/** Reset the form to default empty state */
+	function resetRuleForm() {
+		ruleForm = { name: '', priority: 0, property: 'resolution', operator: '==', value: '', score_modifier: 10 };
+		showAddRow = false;
+		editingRuleId = null;
+	}
+
+	/** Start editing an existing rule — populate form with its values */
+	function startEditRule(rule: SortingRule) {
+		editingRuleId = rule.id!;
+		ruleForm = { ...rule };
+		showAddRow = false;
+	}
+
+	/** Save a new or updated rule to the backend */
+	async function saveRule() {
+		if (!ruleForm.name.trim()) {
+			toast.error('Rule name is required');
+			return;
+		}
+		savingRule = true;
+		try {
+			if (editingRuleId) {
+				await api.updateSortingRule(editingRuleId, ruleForm);
+				toast.success('Rule updated');
+			} else {
+				await api.createSortingRule(ruleForm);
+				toast.success('Rule created');
+			}
+			resetRuleForm();
+			await loadRules();
+		} catch (err: any) {
+			toast.error(err.message || 'Failed to save rule');
+		} finally {
+			savingRule = false;
+		}
+	}
+
+	/** Delete a sorting rule with confirmation (two-click) */
+	async function deleteRule(id: number) {
+		if (deletingRuleId !== id) {
+			// First click: enter confirmation state
+			deletingRuleId = id;
+			return;
+		}
+		// Second click: actually delete
+		try {
+			await api.deleteSortingRule(id);
+			toast.success('Rule deleted');
+			if (editingRuleId === id) resetRuleForm();
+			await loadRules();
+		} catch (err: any) {
+			toast.error(err.message || 'Failed to delete rule');
+		} finally {
+			deletingRuleId = null;
+		}
+	}
 </script>
 
 <div class="page-container">
 	<header class="page-header">
 		<div>
 			<h1>Stream Checker</h1>
-			<p class="subtitle">Bulk health testing for M3U streams</p>
+			<p class="subtitle">Bulk health testing & stream sorting rules</p>
 		</div>
 		
+		<!-- Tab bar: Testing (bulk checker) vs Sorting Rules (CRUD) -->
+		<div class="tab-bar">
+			<button class="tab-btn" class:active={activeTab === 'testing'} onclick={() => activeTab = 'testing'}>
+				<Activity size={15} />
+				<span>Testing</span>
+			</button>
+			<button class="tab-btn" class:active={activeTab === 'rules'} onclick={() => activeTab = 'rules'}>
+				<ListOrdered size={15} />
+				<span>Sorting Rules</span>
+				{#if rules.length > 0}
+					<span class="tab-badge">{rules.length}</span>
+				{/if}
+			</button>
+		</div>
+
+		{#if activeTab === 'testing'}
 		<div class="header-settings">
 			<div class="setting-item" title="Parallel Providers">
 				<Settings size={16} class="icon-dim" />
@@ -171,9 +291,11 @@
 				/>
 			</div>
 		</div>
+		{/if}
 	</header>
 
 	<div class="main-content">
+		{#if activeTab === 'testing'}
 		<!-- Left Panel: Selection -->
 		<div class="selection-panel pane">
 			<div class="pane-header">
@@ -350,6 +472,153 @@
 				{/if}
 			</div>
 		</div>
+		<!-- End of Testing Tab -->
+
+		{:else}
+		<!-- =================== SORTING RULES TAB =================== -->
+		<div class="rules-panel pane" style="max-width: 100%;">
+			<div class="pane-header">
+				<h3>Sorting Rules</h3>
+				<p class="rules-desc">Define rules that assign score modifiers to streams based on health properties.</p>
+			</div>
+
+			<div class="pane-content">
+				{#if loadingRules}
+					<div class="empty-state">
+						<RefreshCw class="spin" size={24} />
+						<p>Loading rules...</p>
+					</div>
+				{:else if rules.length === 0 && !showAddRow}
+					<div class="empty-state">
+						<ListOrdered size={48} class="icon-dim" style="opacity: 0.5;" />
+						<p>No sorting rules defined yet.</p>
+						<p class="text-dim">Rules assign score modifiers to streams based on their health properties.</p>
+						<button class="btn-primary" onclick={() => showAddRow = true}>
+							<Plus size={16} />
+							<span>Add First Rule</span>
+						</button>
+					</div>
+				{:else}
+					<div class="table-container">
+						<table class="data-table rules-table">
+							<thead>
+								<tr>
+									<th class="col-priority">Priority</th>
+									<th class="col-name">Name</th>
+									<th class="col-prop">Property</th>
+									<th class="col-op">Operator</th>
+									<th class="col-val">Value</th>
+									<th class="col-score">Score Mod.</th>
+									<th class="col-actions">Actions</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each rules as rule (rule.id)}
+									{#if editingRuleId === rule.id}
+										<!-- Inline edit mode for this rule -->
+										<tr class="editing-row">
+											<td><input type="number" bind:value={ruleForm.priority} min="0" class="input-sm" /></td>
+											<td><input type="text" bind:value={ruleForm.name} class="input-sm" placeholder="Rule name" /></td>
+											<td>
+												<select bind:value={ruleForm.property} class="input-sm">
+													{#each RULE_PROPERTIES as prop}
+														<option value={prop}>{prop}</option>
+													{/each}
+												</select>
+											</td>
+											<td>
+												<select bind:value={ruleForm.operator} class="input-sm">
+													{#each RULE_OPERATORS as op}
+														<option value={op}>{op}</option>
+													{/each}
+												</select>
+											</td>
+											<td><input type="text" bind:value={ruleForm.value} class="input-sm" placeholder="e.g. 1080p" /></td>
+											<td><input type="number" bind:value={ruleForm.score_modifier} class="input-sm" /></td>
+											<td class="actions-cell">
+												<button class="btn-icon btn-save" onclick={saveRule} disabled={savingRule} title="Save">
+													<CheckCircle2 size={16} />
+												</button>
+												<button class="btn-icon btn-dim" onclick={resetRuleForm} title="Cancel">
+													<XCircle size={16} />
+												</button>
+											</td>
+										</tr>
+									{:else}
+										<!-- Display row -->
+										<tr>
+											<td class="col-priority">{rule.priority}</td>
+											<td class="col-name">{rule.name}</td>
+											<td><span class="badge prop">{rule.property}</span></td>
+											<td><code>{rule.operator}</code></td>
+											<td>{rule.value}</td>
+											<td class:positive={rule.score_modifier > 0} class:negative={rule.score_modifier < 0}>
+												{rule.score_modifier > 0 ? '+' : ''}{rule.score_modifier}
+											</td>
+											<td class="actions-cell">
+												<button class="btn-icon" onclick={() => startEditRule(rule)} title="Edit">
+													<Pencil size={14} />
+												</button>
+												<button
+													class="btn-icon btn-danger"
+													class:confirming={deletingRuleId === rule.id}
+													onclick={() => deleteRule(rule.id!)}
+													title={deletingRuleId === rule.id ? 'Click again to confirm' : 'Delete'}
+												>
+													<Trash2 size={14} />
+												</button>
+											</td>
+										</tr>
+									{/if}
+								{/each}
+
+								<!-- Inline add row (shown when user clicks "Add Rule") -->
+								{#if showAddRow}
+									<tr class="editing-row add-row">
+										<td><input type="number" bind:value={ruleForm.priority} min="0" class="input-sm" /></td>
+										<td><input type="text" bind:value={ruleForm.name} class="input-sm" placeholder="Rule name" /></td>
+										<td>
+											<select bind:value={ruleForm.property} class="input-sm">
+												{#each RULE_PROPERTIES as prop}
+													<option value={prop}>{prop}</option>
+												{/each}
+											</select>
+										</td>
+										<td>
+											<select bind:value={ruleForm.operator} class="input-sm">
+												{#each RULE_OPERATORS as op}
+													<option value={op}>{op}</option>
+												{/each}
+											</select>
+										</td>
+										<td><input type="text" bind:value={ruleForm.value} class="input-sm" placeholder="e.g. 1080p" /></td>
+										<td><input type="number" bind:value={ruleForm.score_modifier} class="input-sm" /></td>
+										<td class="actions-cell">
+											<button class="btn-icon btn-save" onclick={saveRule} disabled={savingRule} title="Create Rule">
+												<CheckCircle2 size={16} />
+											</button>
+											<button class="btn-icon btn-dim" onclick={resetRuleForm} title="Cancel">
+												<XCircle size={16} />
+											</button>
+										</td>
+									</tr>
+								{/if}
+							</tbody>
+						</table>
+					</div>
+
+					{#if !showAddRow && !editingRuleId}
+						<div class="rules-footer">
+							<button class="btn-primary" onclick={() => { resetRuleForm(); showAddRow = true; }}>
+								<Plus size={16} />
+								<span>Add Rule</span>
+							</button>
+						</div>
+					{/if}
+				{/if}
+			</div>
+		</div>
+		{/if}
 	</div>
 </div>
 
@@ -789,12 +1058,150 @@
 			}
 		}
 	}
-
 	:global(.spin) {
 		animation: spin 1s linear infinite;
 	}
 
 	@keyframes spin {
 		100% { transform: rotate(360deg); }
+	}
+
+	/* =================== TAB BAR =================== */
+	.tab-bar {
+		display: flex;
+		gap: 4px;
+		background: rgba(0,0,0,0.15);
+		border-radius: var(--radius);
+		padding: 3px;
+	}
+	.tab-btn {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 7px 16px;
+		border: none;
+		border-radius: calc(var(--radius) - 2px);
+		background: transparent;
+		color: var(--text-dim);
+		font-size: 13px;
+		font-weight: 500;
+		cursor: pointer;
+		transition: all 0.2s ease;
+
+		&:hover { color: var(--text-bright); background: rgba(255,255,255,0.04); }
+		&.active {
+			background: var(--accent);
+			color: #fff;
+			box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+		}
+	}
+	.tab-badge {
+		background: rgba(255,255,255,0.15);
+		padding: 1px 7px;
+		border-radius: 10px;
+		font-size: 11px;
+		font-weight: 600;
+		line-height: 1.4;
+	}
+	.tab-btn.active .tab-badge { background: rgba(255,255,255,0.25); }
+
+	/* =================== SORTING RULES TABLE =================== */
+	.rules-panel {
+		flex: 1;
+	}
+	.rules-desc {
+		color: var(--text-dim);
+		font-size: 12px;
+		margin: 0;
+	}
+	.rules-table {
+		th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+		.col-priority { width: 80px; text-align: center; }
+		.col-name { min-width: 140px; }
+		.col-prop { width: 120px; }
+		.col-op { width: 90px; text-align: center; }
+		.col-val { min-width: 100px; }
+		.col-score { width: 100px; text-align: center; }
+		.col-actions { width: 90px; text-align: right; }
+
+		code {
+			background: rgba(0,0,0,0.2);
+			padding: 2px 6px;
+			border-radius: 4px;
+			font-size: 12px;
+			color: var(--text-bright);
+		}
+	}
+	.badge.prop {
+		background: rgba(99,102,241,0.15);
+		color: #a5b4fc;
+		font-size: 11px;
+		padding: 2px 8px;
+		border-radius: 4px;
+	}
+	.positive { color: #4ade80; font-weight: 600; }
+	.negative { color: #f87171; font-weight: 600; }
+
+	/* Inline form inputs for add/edit rows */
+	.input-sm {
+		background: rgba(0,0,0,0.25);
+		border: 1px solid var(--border);
+		color: var(--text-bright);
+		padding: 5px 8px;
+		border-radius: 4px;
+		font-size: 12px;
+		width: 100%;
+		box-sizing: border-box;
+
+		&:focus { outline: none; border-color: var(--accent); }
+	}
+	select.input-sm { cursor: pointer; }
+	.editing-row {
+		background: rgba(99,102,241,0.06) !important;
+		td { padding-top: 6px; padding-bottom: 6px; }
+	}
+	.add-row { border-top: 1px dashed var(--border); }
+
+	/* Action buttons inside table rows */
+	.actions-cell {
+		display: flex;
+		gap: 4px;
+		justify-content: flex-end;
+		align-items: center;
+	}
+	.btn-icon {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 28px;
+		height: 28px;
+		border: none;
+		border-radius: 4px;
+		background: transparent;
+		color: var(--text-dim);
+		cursor: pointer;
+		transition: all 0.15s ease;
+
+		&:hover { background: rgba(255,255,255,0.08); color: var(--text-bright); }
+		&:disabled { opacity: 0.4; cursor: not-allowed; }
+	}
+	.btn-save { color: #4ade80; &:hover { background: rgba(74,222,128,0.12); } }
+	.btn-dim { color: var(--text-dim); }
+	.btn-danger {
+		&:hover { color: #f87171; background: rgba(248,113,113,0.12); }
+		&.confirming {
+			color: #fff;
+			background: #dc2626;
+			animation: pulse-danger 0.8s ease infinite;
+		}
+	}
+	@keyframes pulse-danger {
+		0%, 100% { opacity: 1; }
+		50% { opacity: 0.7; }
+	}
+
+	.rules-footer {
+		padding: 12px 16px;
+		border-top: 1px solid var(--border);
 	}
 </style>

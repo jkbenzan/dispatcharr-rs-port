@@ -1,10 +1,27 @@
 <script lang="ts">
 	import { api } from '$lib/api';
-	import { ChevronDown, ChevronRight, ChevronUp, MoreVertical, Play, Pencil, Trash2, Tv, GripVertical } from 'lucide-svelte';
+	import { ChevronDown, ChevronRight, ChevronUp, MoreVertical, Play, Pencil, Trash2, Tv, GripVertical, ArrowUpDown } from 'lucide-svelte';
+	import { toast } from '$lib/toast.svelte';
 	import CreateChannelModal from './CreateChannelModal.svelte';
 
 	// --- Types ---
-	interface StreamView { id: number; name: string; url: string | null; m3u_account_name: string; }
+	// StreamView now includes stream_stats for health display in the sub-list
+	interface StreamStats {
+		status?: string;      // 'online', 'offline', 'frozen', 'black_screen'
+		reachable?: boolean;
+		resolution?: string;
+		video_codec?: string;
+		audio_codec?: string;
+		fps?: number;
+		bitrate?: number;
+	}
+	interface StreamView {
+		id: number; name: string; url: string | null; m3u_account_name: string;
+		stream_stats?: StreamStats | null;
+		stream_stats_updated_at?: string | null;
+		// UI toggle for expanded stats view per stream
+		statsExpanded?: boolean;
+	}
 	interface ChannelView { id: number; uuid: string; name: string; channel_number: number | null; logo_url: string | null; expanded: boolean; streams: StreamView[]; }
 	interface GroupView { id: number; name: string; expanded: boolean; channels: ChannelView[]; }
 
@@ -23,6 +40,9 @@
 	// Delete confirmation
 	let deletingId = $state<number | null>(null);
 	let deleteConfirmId = $state<number | null>(null);
+
+	// Sort-by-health state
+	let sortingChannelId = $state<number | null>(null);
 
 	// Edit modal
 	let showEditModal = $state(false);
@@ -143,6 +163,36 @@
 		editInitialData = channel;
 		showEditModal = true;
 		openMenuId = null;
+	}
+
+	// --- Sort by Health ---
+	// Reorders streams within a channel based on health score using backend sorting rules.
+	async function sortByHealth(channel: ChannelView) {
+		sortingChannelId = channel.id;
+		openMenuId = null;
+		try {
+			await api.bulkSortStreams([channel.id]);
+			toast.success(`Streams sorted for "${channel.name}"`);
+			await loadData();
+		} catch (err: any) {
+			toast.error(err.message || 'Failed to sort streams');
+		} finally {
+			sortingChannelId = null;
+		}
+	}
+
+	// --- Helper: determine health status class for row shading ---
+	function getStreamHealthClass(stream: StreamView): string {
+		if (!stream.stream_stats) return '';  // untested = no shading
+		const status = stream.stream_stats.status;
+		if (status === 'online') return '';   // online = normal display
+		return 'health-offline';              // offline/frozen/black_screen = red tint
+	}
+
+	// --- Helper: safe display of stream stat values (no 'null' strings) ---
+	function displayStat(val: any): string {
+		if (val === null || val === undefined || val === 'null') return '';
+		return String(val);
 	}
 
 	// --- Remove stream from channel ---
@@ -307,6 +357,14 @@
 												<button class="menu-item" onclick={() => openEdit(channel)}>
 													<Pencil size={13} /> Edit
 												</button>
+												<!-- Sort by Health: reorder streams using backend health scoring -->
+												<button
+													class="menu-item"
+													disabled={channel.streams.length < 2 || sortingChannelId === channel.id}
+													onclick={(e) => { e.stopPropagation(); sortByHealth(channel); }}
+												>
+													<ArrowUpDown size={13} /> {sortingChannelId === channel.id ? 'Sorting…' : 'Sort by Health'}
+												</button>
 												{#if deleteConfirmId === channel.id}
 													<button class="menu-item danger confirm" onclick={(e) => { e.stopPropagation(); deleteChannel(channel); }}>
 														<Trash2 size={13} /> Confirm Delete
@@ -330,7 +388,7 @@
 									{:else}
 										{#each channel.streams as stream, idx (stream.id)}
 											<div
-												class="sub-stream-row"
+												class="sub-stream-row {getStreamHealthClass(stream)}"
 												class:drag-over={dragOverStreamId === stream.id}
 												draggable="true"
 												role="listitem"
@@ -339,12 +397,33 @@
 												ondragleave={() => dragOverStreamId = null}
 												ondrop={(e) => handleStreamDrop(e, channel, stream.id)}
 											>
-												<!-- Position number (1-based) -->
+												<!-- Condensed view: position, grip, name, key stats, actions -->
 												<span class="sub-stream-pos">{idx + 1}.</span>
 												<GripVertical size={13} class="grip-icon" />
+												<!-- Health indicator dot: gray for untested -->
+												{#if !stream.stream_stats}
+													<span class="health-dot untested" title="Untested"></span>
+												{/if}
 												<span class="sub-stream-name">{stream.name}</span>
+												<!-- Condensed stats: resolution + codec when available -->
+												{#if stream.stream_stats}
+													<span class="condensed-stats">
+														{#if displayStat(stream.stream_stats.resolution)}
+															<span class="stat-chip">{displayStat(stream.stream_stats.resolution)}</span>
+														{/if}
+														{#if displayStat(stream.stream_stats.video_codec)}
+															<span class="stat-chip">{displayStat(stream.stream_stats.video_codec)}</span>
+														{/if}
+													</span>
+												{/if}
 												{#if stream.m3u_account_name}
 													<span class="sub-provider">{stream.m3u_account_name}</span>
+												{/if}
+												<!-- Expand/collapse stats detail -->
+												{#if stream.stream_stats}
+													<button class="stats-toggle" title="Toggle detailed stats" onclick={() => stream.statsExpanded = !stream.statsExpanded}>
+														{#if stream.statsExpanded}<ChevronUp size={11}/>{:else}<ChevronDown size={11}/>{/if}
+													</button>
 												{/if}
 												<!-- Play individual stream -->
 												<button class="sub-play-btn" title="Play this stream" onclick={() => { if (onPlayStream) onPlayStream({ url: stream.url || '', title: stream.name, uuid: '' }); }}>
@@ -352,6 +431,29 @@
 												</button>
 												<button class="remove-btn" title="Remove from channel" onclick={() => removeStream(channel, stream.id)}>✕</button>
 											</div>
+											<!-- Expanded stats detail (3 sub-rows) -->
+											{#if stream.statsExpanded && stream.stream_stats}
+												<div class="stream-stats-detail {getStreamHealthClass(stream)}">
+													<div class="stats-row">
+														<span class="stat-label">Status</span>
+														<span class="stat-value" class:text-online={stream.stream_stats.status === 'online'} class:text-offline={stream.stream_stats.status !== 'online'}>{displayStat(stream.stream_stats.status) || '—'}</span>
+														<span class="stat-label">Resolution</span>
+														<span class="stat-value">{displayStat(stream.stream_stats.resolution) || '—'}</span>
+													</div>
+													<div class="stats-row">
+														<span class="stat-label">Video</span>
+														<span class="stat-value">{displayStat(stream.stream_stats.video_codec) || '—'}</span>
+														<span class="stat-label">Audio</span>
+														<span class="stat-value">{displayStat(stream.stream_stats.audio_codec) || '—'}</span>
+													</div>
+													<div class="stats-row">
+														<span class="stat-label">FPS</span>
+														<span class="stat-value">{displayStat(stream.stream_stats.fps) || '—'}</span>
+														<span class="stat-label">Bitrate</span>
+														<span class="stat-value">{stream.stream_stats.bitrate ? `${Math.round(stream.stream_stats.bitrate / 1000)}k` : '—'}</span>
+													</div>
+												</div>
+											{/if}
 										{/each}
 									{/if}
 								</div>
@@ -446,4 +548,60 @@
 .sub-provider { font-size: 10px; color: var(--text-dim); background: var(--surface-bright); padding: 1px 5px; border-radius: 4px; flex-shrink: 0; }
 .sub-play-btn { background: transparent; border: none; color: var(--text-dim); cursor: pointer; opacity: 0; padding: 2px 3px; border-radius: 3px; transition: opacity 0.15s; display: flex; align-items: center; &:hover { color: #4ade80; background: rgba(74,222,128,0.1); } }
 .remove-btn { background: transparent; border: none; color: #f87171; font-size: 12px; cursor: pointer; opacity: 0; padding: 2px 4px; border-radius: 3px; transition: opacity 0.15s; &:hover { background: rgba(239,68,68,0.15); } }
+
+/* =================== STREAM HEALTH DISPLAY =================== */
+/* Offline/frozen/black_screen row shading — subtle red tint, not high contrast */
+.sub-stream-row.health-offline,
+.stream-stats-detail.health-offline {
+	background: rgba(239, 68, 68, 0.06);
+	border-left: 2px solid rgba(239, 68, 68, 0.25);
+}
+
+/* Untested indicator: gray dot */
+.health-dot {
+	display: inline-block;
+	width: 6px; height: 6px;
+	border-radius: 50%;
+	flex-shrink: 0;
+}
+.health-dot.untested { background: var(--text-dim); opacity: 0.4; }
+
+/* Condensed stats chips (resolution, codec) shown inline */
+.condensed-stats {
+	display: flex; gap: 3px; flex-shrink: 0;
+}
+.stat-chip {
+	font-size: 9px; padding: 1px 5px; border-radius: 3px;
+	background: rgba(99,102,241,0.12); color: #a5b4fc;
+	text-transform: uppercase; letter-spacing: 0.3px; font-weight: 500;
+}
+
+/* Stats toggle chevron button */
+.stats-toggle {
+	background: transparent; border: none; color: var(--text-dim);
+	cursor: pointer; padding: 2px 3px; border-radius: 3px;
+	display: flex; align-items: center; flex-shrink: 0;
+	&:hover { color: var(--text-bright); background: rgba(255,255,255,0.06); }
+}
+
+/* Expanded stats detail card — 3 sub-rows of label/value pairs */
+.stream-stats-detail {
+	display: flex; flex-direction: column; gap: 2px;
+	padding: 4px 8px 6px 36px;
+	margin-bottom: 2px;
+	font-size: 11px;
+}
+.stats-row {
+	display: flex; gap: 6px; align-items: center;
+}
+.stat-label {
+	color: var(--text-dim); font-size: 10px; min-width: 52px;
+	text-transform: uppercase; letter-spacing: 0.3px;
+}
+.stat-value {
+	color: var(--text-bright); font-size: 11px; font-weight: 500;
+	min-width: 60px;
+}
+.text-online { color: #4ade80; }
+.text-offline { color: #f87171; }
 </style>

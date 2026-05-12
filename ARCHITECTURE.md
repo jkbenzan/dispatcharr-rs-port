@@ -48,6 +48,8 @@ Dispatcharr is a high-performance M3U/XC/EPG proxy and management system built w
     - Stream diagnostics are stored in each stream row's `custom_properties.stream_stats` and `stream_stats_updated_at` fields.
     - Auto-pruning marks streams as stale after `maintenance_settings.auto_prune_failed_count` consecutive failed checks. The default threshold is `3`, and `0` disables stale marking.
     - Maintenance settings are stored in `core_settings` under `maintenance_settings` and surfaced in the Svelte Settings page.
+    - **Sorting Rules**: CRUD endpoints (`/api/stream-checker/sorting-rules/`) manage `stream_sorting_rule` rows that define property-operator-value conditions with score modifiers. The `POST /api/stream-checker/sort-streams/` endpoint accepts channel IDs and reorders each channel's streams by cumulative rule score.
+    - **Sorting Rules UI**: The Stream Checker page (`/stream-checker`) uses a tabbed interface (Testing | Sorting Rules). The Sorting Rules tab provides an inline CRUD table with property/operator dropdowns, priority sequencing, score modifier input, and two-click delete confirmation. The table supports both inline editing of existing rules and inline creation of new rules.
 - **Channel Matching**:
     - Channel name parsing removes provider noise, country prefixes, resolution markers, and generic terms before scoring.
     - Match scoring uses Jaro-Winkler similarity plus resolution, country, and logo context.
@@ -93,6 +95,8 @@ Dispatcharr is a high-performance M3U/XC/EPG proxy and management system built w
     - **Provider filter**: StreamsPane header includes a `<select>` dropdown to filter streams by M3U provider. Default is "All Providers".
     - **Global Select All**: StreamsPane provides a header-level Select All / Deselect All toggle that applies to all currently visible (filtered) streams.
     - **Stream enumeration**: Each stream in a channel's expanded sub-list shows a 1-based position number (e.g., `1.`, `2.`, `3.`) and a Play button to preview individual streams.
+    - **Stream health display**: Stream sub-list rows show health status through row shading (subtle red tint for offline/frozen/black_screen, no shading for online, gray dot indicator for untested). A condensed view shows key stats (resolution, video codec) as inline chips. Clicking a stats chevron expands to a 3-row detail view showing status, resolution, video/audio codecs, FPS, and bitrate. All stat values are null-safe (blank instead of literal "null").
+    - **Sort by Health action**: The kebab menu includes a "Sort by Health" action that calls `POST /api/stream-checker/sort-streams/` with the channel's ID, reordering its streams by cumulative sorting rule score. The action is disabled when a channel has fewer than 2 streams.
     - **DELETE endpoint**: `DELETE /api/channels/channels/:id/` removes channel-stream join rows first (FK cleanup), then deletes the channel row. Returns `204 No Content`. Both trailing-slash and non-trailing-slash routes are registered.
 
 ## Telemetry & Logging
