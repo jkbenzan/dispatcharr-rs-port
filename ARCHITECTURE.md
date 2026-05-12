@@ -105,6 +105,18 @@ Dispatcharr is a high-performance M3U/XC/EPG proxy and management system built w
 - **Channel Manager Events**: All channel lifecycle mutations emit `record_event()` calls: `channel_created` (with channel name, number), `channel_updated` (metadata changes), `streams_assigned` (stream assignment/reorder with count), `channel_deleted` (with channel name as warning), `channel_group_created` (with group name), and `channels_bulk_updated`. Events fire only on success paths using fire-and-forget (`let _ =`) to avoid blocking the HTTP response.
 - **Diagnostic Logging**: Backend sync tasks log discovered category and stream counts to stdout/stderr for operational monitoring and system integrity verification.
 
+## Active Connections (Stats Dashboard)
+- **Dashboard Integration**: Active connection monitoring lives as a tab on the Dashboard page (`/` → "Active Connections" tab), not a separate route. This avoids sidebar clutter while keeping the stats easily accessible.
+- **Sidebar Shortcut**: A persistent green Radio icon in the sidebar footer (next to theme controls) links directly to `/#connections`, allowing quick access from any page.
+- **Enriched Status Endpoint**: `GET /proxy/ts/status` batch-fetches channel metadata (name, number, logo URL) for all active channel UUIDs in a single DB query, eliminating the need for separate frontend lookups on each poll cycle.
+- **Stop Controls**: Two DELETE endpoints provide connection management:
+  - `DELETE /proxy/ts/stop/:channel_id` — Stops all streaming for a channel (removes clients, aborts broadcaster pumper task).
+  - `DELETE /proxy/ts/stop/:channel_id/:client_id` — Disconnects a single client without stopping the broadcaster. The client's byte stream terminates on the next read cycle.
+- **Polling Architecture**: The connections tab uses a configurable `setInterval` polling loop (default 5s, persisted in localStorage). Polling starts when the tab is activated and stops when switching away, preventing unnecessary network traffic.
+- **ConnectionCard Component**: Each active channel renders as a card (`ConnectionCard.svelte`) showing: channel logo/name/number, LIVE indicator with pulse animation, uptime timer (HH:MM:SS), data transferred (auto-scaled B/KB/MB/GB), profile badges (stream profile + M3U provider), and a client table with per-client disconnect buttons.
+- **Optimistic Updates**: Stop actions immediately remove the card/client from the UI for instant feedback, then re-fetch from the server to confirm the actual state.
+- **Two-Click Stop**: The "Stop Channel" button requires two clicks within 3 seconds (first click → confirm state with red highlight and shake animation, second click → execute). Auto-resets if not confirmed.
+
 ## Verification Status
 - `cargo check` passes with local Rust warning debt cleared; SeaORM is upgraded to the 1.1 line, which resolves the prior `sqlx-postgres v0.7.4` future-incompatibility notice.
 - `cargo test` passes all current unit tests.

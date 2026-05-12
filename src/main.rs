@@ -624,6 +624,11 @@ async fn main() {
         .route("/proxy/ts/status/", get(proxy::handle_ts_status))
         .route("/proxy/vod/stats", get(proxy::handle_vod_stats))
         .route("/proxy/vod/stats/", get(proxy::handle_vod_stats))
+        // Stop controls for the Stats / Active Connections dashboard
+        .route("/proxy/ts/stop/:channel_id", delete(proxy::handle_stop_channel))
+        .route("/proxy/ts/stop/:channel_id/", delete(proxy::handle_stop_channel))
+        .route("/proxy/ts/stop/:channel_id/:client_id", delete(proxy::handle_stop_client))
+        .route("/proxy/ts/stop/:channel_id/:client_id/", delete(proxy::handle_stop_client))
         // --- CHANNEL DATABASE ---
         .route("/api/channel-db/health/", get(channel_db_api::health))
         .route("/api/channel-db/metadata/", get(channel_db_api::get_metadata))

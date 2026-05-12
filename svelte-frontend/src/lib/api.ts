@@ -149,6 +149,11 @@ export const api = {
   getSettings: () => fetchApi('/api/core/settings/'),
   getComskipConfig: () => fetchApi('/api/channels/dvr/comskip-config/'),
   getDashboardStats: () => fetchApi('/api/stats'),
+
+  // =================== ACTIVE CONNECTIONS / STATS ===================
+  getActiveConnections: () => fetchApi('/proxy/ts/status'),
+  stopChannel: (channelId: string) => fetchApi(`/proxy/ts/stop/${channelId}`, { method: 'DELETE' }),
+  stopClient: (channelId: string, clientId: string) => fetchApi(`/proxy/ts/stop/${channelId}/${clientId}`, { method: 'DELETE' }),
   updateSetting: (id: number, data: any) => fetchApi(`/api/core/settings/${id}/`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },

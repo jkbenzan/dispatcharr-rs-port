@@ -81,8 +81,8 @@ Items queued for future implementation and audit phases.
   Log `sorting_rule_created`, `sorting_rule_updated`, `sorting_rule_deleted` when stream sorting rules are modified.
 - [ ] **Settings Change Events**
   Emit `settings_updated` events when `core_settings` are modified via the Settings page.
-- [ ] **Stats / Active Connections Page**
-  Implement a dedicated `/stats` route with active connection cards, live bitrate monitoring, client management, and stream switching. Reference: `Dispatcharr/frontend/src/pages/Stats.jsx` (438 lines), `StreamConnectionCard.jsx` (828 lines).
+- [x] **Stats / Active Connections Page**
+  Implemented as a Dashboard tab ("Active Connections") with connection cards, live polling (configurable interval), stop channel/client controls, and a sidebar shortcut icon. Phase 2 (bitrate graphs, EPG overlay, VOD cards) deferred.
 - [ ] **Stream Checker ↔ Channel Manager Integration**
   Expose per-channel "Check Streams" and "Sort by Health" buttons in the ChannelsPane. Add a Sorting Rules management UI to `/stream-checker`. Show stream health badges in channel sub-lists.
 

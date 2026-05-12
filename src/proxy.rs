@@ -239,6 +239,39 @@ pub async fn handle_ts_status(State(state): State<Arc<AppState>>) -> axum::Json<
         .unwrap()
         .as_secs();
 
+    // Batch-fetch channel metadata for all active channel UUIDs.
+    // This avoids the frontend needing a separate API call per poll cycle.
+    let channel_uuids: Vec<String> = active.keys().cloned().collect();
+    let mut channel_meta: std::collections::HashMap<String, (String, f64, Option<String>)> = std::collections::HashMap::new();
+    if !channel_uuids.is_empty() {
+        // Parse valid UUIDs for the DB query; non-UUID keys (stream hashes) are skipped
+        let valid_uuids: Vec<uuid::Uuid> = channel_uuids.iter()
+            .filter_map(|s| uuid::Uuid::parse_str(s).ok())
+            .collect();
+        if !valid_uuids.is_empty() {
+            if let Ok(channels) = channel::Entity::find()
+                .filter(channel::Column::Uuid.is_in(valid_uuids.clone()))
+                .all(&state.db)
+                .await
+            {
+                for ch in channels {
+                    // Resolve logo URL from the logo_id FK if present
+                    let logo_url = if let Some(logo_id) = ch.logo_id {
+                        if let Ok(Some(logo)) = crate::entities::logo::Entity::find_by_id(logo_id)
+                            .one(&state.db).await
+                        {
+                            Some(logo.url)
+                        } else { None }
+                    } else { None };
+                    channel_meta.insert(
+                        ch.uuid.to_string(),
+                        (ch.name.clone(), ch.channel_number, logo_url),
+                    );
+                }
+            }
+        }
+    }
+
     let mut channels = Vec::new();
     for (_, stat) in active.iter() {
         let mut clients = Vec::new();
@@ -255,8 +288,17 @@ pub async fn handle_ts_status(State(state): State<Arc<AppState>>) -> axum::Json<
             }));
         }
 
+        // Merge in the pre-fetched channel metadata (name, number, logo)
+        let (ch_name, ch_number, ch_logo) = channel_meta
+            .get(&stat.channel_id)
+            .cloned()
+            .unwrap_or_else(|| (stat.channel_id.clone(), 0.0, None));
+
         channels.push(serde_json::json!({
             "channel_id": stat.channel_id,
+            "channel_name": ch_name,
+            "channel_number": ch_number,
+            "logo_url": ch_logo,
             "stream_id": stat.stream_id,
             "stream_profile": stat.stream_profile,
             "provider_user_agent": stat.provider_user_agent,
@@ -274,6 +316,65 @@ pub async fn handle_ts_status(State(state): State<Arc<AppState>>) -> axum::Json<
 
 pub async fn handle_vod_stats() -> axum::Json<serde_json::Value> {
     axum::Json(serde_json::json!([]))
+}
+
+/// DELETE /proxy/ts/stop/:channel_id
+///
+/// Stops all streaming for a channel by removing all clients from the active
+/// streams map and removing the broadcaster. The broadcaster pumper task will
+/// detect the removal and shut down gracefully.
+pub async fn handle_stop_channel(
+    Path(channel_id): Path<String>,
+    State(state): State<Arc<AppState>>,
+) -> StatusCode {
+    // Remove all client tracking for this channel
+    {
+        let mut active = state.active_streams.write().await;
+        active.remove(&channel_id);
+    }
+
+    // Remove the broadcaster — the pumper task detects this and exits
+    if let Some((_, broadcaster)) = state.broadcasters.remove(&channel_id) {
+        // Cancel the pumper task if it's still running
+        if let Some(handle) = broadcaster.pumper_handle.write().await.take() {
+            handle.abort();
+        }
+        tracing::info!("Stopped channel broadcaster: {}", channel_id);
+    }
+
+    StatusCode::NO_CONTENT
+}
+
+/// DELETE /proxy/ts/stop/:channel_id/:client_id
+///
+/// Disconnects a single client from a channel without stopping the broadcaster.
+/// The client's byte stream will terminate on the next read cycle via the
+/// active_streams check in the unfold closure.
+pub async fn handle_stop_client(
+    Path((channel_id, client_id)): Path<(String, String)>,
+    State(state): State<Arc<AppState>>,
+) -> StatusCode {
+    let mut active = state.active_streams.write().await;
+    if let Some(stats) = active.get_mut(&channel_id) {
+        let before = stats.clients.len();
+        stats.clients.retain(|c| c.client_id != client_id);
+        let removed = before - stats.clients.len();
+
+        if removed > 0 {
+            // Decrement broadcaster subscriber count so the shutdown timer can kick in
+            if let Some(b) = state.broadcasters.get(&channel_id) {
+                b.subscriber_count.fetch_sub(1, Ordering::SeqCst);
+            }
+            tracing::info!("Stopped client {} on channel {}", client_id, channel_id);
+
+            // If no clients remain, clean up the tracking entry
+            if stats.clients.is_empty() {
+                active.remove(&channel_id);
+            }
+        }
+    }
+
+    StatusCode::NO_CONTENT
 }
 
 #[cfg(test)]

@@ -3,7 +3,7 @@
 	import { onMount } from 'svelte';
 	import { connectWS } from '$lib/ws.svelte';
 	import { loadUiSettings } from '$lib/settings.svelte';
-	import { Home, Tv, Library, Settings, Activity, Search, Sun, Moon, Palette, HardDrive, Link, Puzzle, TicketCheck, CalendarDays, Film } from 'lucide-svelte';
+	import { Home, Tv, Library, Settings, Activity, Search, Sun, Moon, Palette, HardDrive, Link, Puzzle, TicketCheck, CalendarDays, Film, Radio } from 'lucide-svelte';
 	import ToastContainer from '$lib/components/ui/ToastContainer.svelte';
 	import FloatingPlayer from '$lib/components/ui/FloatingPlayer.svelte';
 	import { playerStore } from '$lib/player.svelte';
@@ -101,6 +101,9 @@
 			</div>
 			
 			<div class="theme-controls">
+				<a href="/#connections" class="theme-btn connections-shortcut" title="Active Connections">
+					<Radio size={16} />
+				</a>
 				<button class="theme-btn" onclick={toggleTheme} title="Toggle Light/Dark Mode">
 					{#if theme === 'dark'}
 						<Sun size={16} />
@@ -312,6 +315,15 @@
 		&:hover {
 			color: var(--text-bright);
 			border-color: var(--text-dim);
+		}
+
+		&.connections-shortcut {
+			color: #4ade80;
+			text-decoration: none;
+			&:hover {
+				background: rgba(74, 222, 128, 0.1);
+				border-color: #4ade80;
+			}
 		}
 	}
 
