@@ -119,7 +119,8 @@
 		loadingGroups = true;
 		try {
 			const groupsRes = await api.getChannelGroups();
-			channelGroups = Array.isArray(groupsRes) ? groupsRes : groupsRes.results || [];
+			const rawGroups = Array.isArray(groupsRes) ? groupsRes : groupsRes.results || [];
+			channelGroups = rawGroups.filter((g: any) => g.is_custom === true);
 			channelGroups.push({ id: -1, name: 'Ungrouped' });
 		} catch (err) {
 			console.error('Failed to load channel groups', err);
