@@ -5,6 +5,8 @@
 	import { loadUiSettings } from '$lib/settings.svelte';
 	import { Home, Tv, Library, Settings, Activity, Search, Sun, Moon, Palette, HardDrive, Link, Puzzle, TicketCheck, CalendarDays, Film } from 'lucide-svelte';
 	import ToastContainer from '$lib/components/ui/ToastContainer.svelte';
+	import FloatingPlayer from '$lib/components/ui/FloatingPlayer.svelte';
+	import { playerStore } from '$lib/player.svelte';
 
 	let { children } = $props();
 
@@ -119,6 +121,9 @@
 		</div>
 	</main>
 </div>
+
+<!-- Global floating video player — persists across all page navigations -->
+<FloatingPlayer stream={playerStore.stream} onclose={() => playerStore.close()} />
 
 <ToastContainer />
 

@@ -161,7 +161,7 @@
 				} catch (e) {
 					suggestions = [];
 				}
-			}, 500);
+			}, 300); // 300ms debounce — fast enough to feel responsive
 		} else {
 			suggestions = [];
 		}
@@ -501,7 +501,13 @@
 							{:else if dbSearchResults.length > 0}
 								<div class="db-results">
 									{#each dbSearchResults as m}
-										<button type="button" class="db-result-item" class:active={selectedMatch?.station_id === m.station_id} onclick={() => selectedMatch = m}>
+										<button
+											type="button"
+											class="db-result-item"
+											class:active={selectedMatch?.station_id === m.station_id}
+											title={`Name: ${m.name}\nCall Sign: ${m.call_sign || 'N/A'}\nStation ID: ${m.station_id || 'N/A'}\nLogo: ${m.logo_uri ? 'Available' : 'None'}`}
+											onclick={() => selectedMatch = m}
+										>
 											<div class="db-result-logo">
 												{#if m.logo_uri}
 													<img src={m.logo_uri} alt="" onerror={(e) => m.logo_uri = null}>
@@ -1158,7 +1164,7 @@
 		background: var(--surface);
 		display: flex;
 		flex-direction: column;
-		height: 200px;
+		height: 300px; /* Enlarged from 200px for better usability */
 	}
 
 	.epg-controls {

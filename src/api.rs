@@ -1657,6 +1657,11 @@ pub async fn get_streams(
             if let Some(updated) = props.get("stream_stats_updated_at") {
                 js["stream_stats_updated_at"] = updated.clone();
             }
+            // Surface the M3U category (group_title) so the frontend can group
+            // streams by provider category rather than the channel group FK.
+            if let Some(gt) = props.get("group_title").and_then(|v| v.as_str()) {
+                js["group_title"] = json!(gt);
+            }
         }
         if let Some(p_id) = s.stream_profile_id {
             js["stream_profile"] = json!(p_id);

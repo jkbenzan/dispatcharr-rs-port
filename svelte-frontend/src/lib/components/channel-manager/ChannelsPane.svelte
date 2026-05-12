@@ -328,7 +328,7 @@
 									{#if channel.streams.length === 0}
 										<div class="sub-empty">No streams assigned. Drag streams here.</div>
 									{:else}
-										{#each channel.streams as stream (stream.id)}
+										{#each channel.streams as stream, idx (stream.id)}
 											<div
 												class="sub-stream-row"
 												class:drag-over={dragOverStreamId === stream.id}
@@ -339,11 +339,17 @@
 												ondragleave={() => dragOverStreamId = null}
 												ondrop={(e) => handleStreamDrop(e, channel, stream.id)}
 											>
+												<!-- Position number (1-based) -->
+												<span class="sub-stream-pos">{idx + 1}.</span>
 												<GripVertical size={13} class="grip-icon" />
 												<span class="sub-stream-name">{stream.name}</span>
 												{#if stream.m3u_account_name}
 													<span class="sub-provider">{stream.m3u_account_name}</span>
 												{/if}
+												<!-- Play individual stream -->
+												<button class="sub-play-btn" title="Play this stream" onclick={() => { if (onPlayStream) onPlayStream({ url: stream.url || '', title: stream.name, uuid: '' }); }}>
+													<Play size={11} fill="currentColor" />
+												</button>
 												<button class="remove-btn" title="Remove from channel" onclick={() => removeStream(channel, stream.id)}>✕</button>
 											</div>
 										{/each}
@@ -395,7 +401,7 @@
 
 .channel-row {
 	display: flex; align-items: center; gap: 6px;
-	padding: 6px 12px 6px 32px; cursor: default;
+	padding: 6px 12px 6px 16px; cursor: default;
 	transition: background 0.15s, outline 0.15s;
 	&:hover { background: rgba(255,255,255,0.03); .ch-actions { opacity: 1; } }
 	&.drop-target { background: rgba(237,28,36,0.12); outline: 1px dashed var(--accent); }
@@ -425,17 +431,19 @@
 	&.confirm { font-weight: 700; }
 }
 
-/* Stream sub-list */
-.streams-sublist { padding: 2px 12px 8px 52px; border-left: 2px solid rgba(255,255,255,0.05); margin: 0 12px 0 44px; }
+/* Stream sub-list — compact indentation to save horizontal space */
+.streams-sublist { padding: 2px 8px 8px 28px; border-left: 2px solid rgba(255,255,255,0.05); margin: 0 8px 0 24px; }
 .sub-empty { font-size: 12px; color: var(--text-dim); font-style: italic; padding: 6px 0; }
 .sub-stream-row {
-	display: flex; align-items: center; gap: 6px; padding: 5px 6px; border-radius: 5px;
+	display: flex; align-items: center; gap: 5px; padding: 4px 6px; border-radius: 5px;
 	cursor: grab; transition: background 0.15s;
-	&:hover { background: rgba(255,255,255,0.04); .remove-btn { opacity: 1; } }
+	&:hover { background: rgba(255,255,255,0.04); .remove-btn, .sub-play-btn { opacity: 1; } }
 	&.drag-over { background: rgba(237,28,36,0.1); outline: 1px dashed var(--accent); }
 }
+.sub-stream-pos { font-size: 11px; color: var(--text-dim); min-width: 18px; text-align: right; flex-shrink: 0; font-variant-numeric: tabular-nums; }
 :global(.grip-icon) { color: var(--text-dim); flex-shrink: 0; }
 .sub-stream-name { flex: 1; font-size: 12px; color: var(--text-bright); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sub-provider { font-size: 10px; color: var(--text-dim); background: var(--surface-bright); padding: 1px 5px; border-radius: 4px; flex-shrink: 0; }
+.sub-play-btn { background: transparent; border: none; color: var(--text-dim); cursor: pointer; opacity: 0; padding: 2px 3px; border-radius: 3px; transition: opacity 0.15s; display: flex; align-items: center; &:hover { color: #4ade80; background: rgba(74,222,128,0.1); } }
 .remove-btn { background: transparent; border: none; color: #f87171; font-size: 12px; cursor: pointer; opacity: 0; padding: 2px 4px; border-radius: 3px; transition: opacity 0.15s; &:hover { background: rgba(239,68,68,0.15); } }
 </style>

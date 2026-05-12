@@ -2,7 +2,7 @@
 	import ChannelsPane from '$lib/components/channel-manager/ChannelsPane.svelte';
 	import StreamsPane from '$lib/components/channel-manager/StreamsPane.svelte';
 	import CreateChannelModal from '$lib/components/channel-manager/CreateChannelModal.svelte';
-	import FloatingPlayer from '$lib/components/ui/FloatingPlayer.svelte';
+	import { playerStore } from '$lib/player.svelte';
 	import { Plus, ListFilter } from 'lucide-svelte';
 
 	// --- Split-pane resize ---
@@ -35,19 +35,14 @@
 	}
 
 	// --- Floating player ---
-	interface PlayerStream { url: string; title: string; uuid?: string; provider?: string; }
-	let activeStream = $state<PlayerStream | null>(null);
-
+	// Player state now lives in the global playerStore ($lib/player.svelte.ts)
+	// so it persists across page navigations. We just forward open calls to it.
 	function openPlayer(info: { url: string; title: string; uuid?: string; provider?: string }) {
-		activeStream = info;
+		playerStore.open(info);
 	}
-	function closePlayer() { activeStream = null; }
 </script>
 
 <svelte:window onmousemove={handleMouseMove} onmouseup={stopResizing} />
-
-<!-- Floating video player overlay -->
-<FloatingPlayer stream={activeStream} onclose={closePlayer} />
 
 <div class="page-header">
 	<div class="title-section">
