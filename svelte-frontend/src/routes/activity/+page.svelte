@@ -125,7 +125,16 @@
 		const labels: Record<string, string> = {
 			m3u_refresh: 'M3U refresh',
 			provider_sync: 'Provider sync',
-			epg_refresh: 'EPG refresh'
+			epg_refresh: 'EPG refresh',
+			stream_check_completed: 'Stream Check',
+			bulk_check_started: 'Bulk Check',
+			bulk_check_completed: 'Bulk Check',
+			bulk_check_cancelled: 'Bulk Check',
+			sorting_rule_created: 'Sorting Rule',
+			sorting_rule_updated: 'Sorting Rule',
+			sorting_rule_deleted: 'Sorting Rule',
+			settings_updated: 'Settings',
+			settings_created: 'Settings'
 		};
 		const normalized = (type || '').toLowerCase();
 		if (labels[normalized]) return labels[normalized];
@@ -151,6 +160,49 @@
 		}
 
 		if (details && typeof details === 'object') {
+			// === Structured messages for known event types ===
+
+			// Stream checker: single stream check result
+			if (eventType === 'stream_check_completed') {
+				const name = details.stream_name || `Stream #${details.stream_id}`;
+				const passed = details.reachable === true;
+				const suffix = details.is_single ? '' : ' (bulk)';
+				return `Stream '${name}' check — ${passed ? 'Passed ✓' : 'Failed ✗'}${suffix}`;
+			}
+
+			// Bulk check lifecycle
+			if (eventType === 'bulk_check_started') {
+				return `Bulk check started: ${details.total_streams} streams across ${details.providers} provider(s)`;
+			}
+			if (eventType === 'bulk_check_completed') {
+				const cancelled = details.cancelled ? ' (cancelled early)' : '';
+				return `Bulk check complete: ${details.successful}/${details.total} passed, ${details.failed} failed${cancelled}`;
+			}
+			if (eventType === 'bulk_check_cancelled') {
+				return 'Bulk stream check was cancelled by user';
+			}
+
+			// Sorting rule CRUD
+			if (eventType === 'sorting_rule_created') {
+				return `Sorting rule '${details.rule_name}' created (${details.property} ${details.operator})`;
+			}
+			if (eventType === 'sorting_rule_updated') {
+				return `Sorting rule '${details.rule_name}' updated`;
+			}
+			if (eventType === 'sorting_rule_deleted') {
+				return `Sorting rule deleted (ID: ${details.rule_id})`;
+			}
+
+			// Settings changes
+			if (eventType === 'settings_updated') {
+				return `Settings '${details.setting_name}' updated`;
+			}
+			if (eventType === 'settings_created') {
+				return `Setting '${details.setting_name}' created`;
+			}
+
+			// === Generic fallbacks ===
+
 			// Prefer explicit message/event fields from backend system events before deriving a fallback.
 			if (typeof details.message === 'string' && details.message.trim()) {
 				return details.message;

@@ -75,12 +75,12 @@ Items queued for future implementation and audit phases.
 
 - [x] **Channel CRUD Events**
   Add `record_event()` calls to `create_channel`, `update_channel`, `delete_channel`, `create_channel_group`, and `bulk_update_channels` so Channel Manager operations appear in the Activity page.
-- [ ] **Stream Checker Event Logging**
-  Emit `stream_check_completed` and `bulk_check_completed` events from the stream checker's `test_stream()` and `start_bulk_check()` handlers.
-- [ ] **Sorting Rule Change Events**
-  Log `sorting_rule_created`, `sorting_rule_updated`, `sorting_rule_deleted` when stream sorting rules are modified.
-- [ ] **Settings Change Events**
-  Emit `settings_updated` events when `core_settings` are modified via the Settings page.
+- [x] **Stream Checker Event Logging**
+  Emits `stream_check_completed` (with `is_single` flag for filtering), `bulk_check_started`, `bulk_check_completed`, and `bulk_check_cancelled` events.
+- [x] **Sorting Rule Change Events**
+  Emits `sorting_rule_created`, `sorting_rule_updated`, `sorting_rule_deleted` on success paths.
+- [x] **Settings Change Events**
+  Emits `settings_updated` and `settings_created` events. Values omitted from payload for security.
 - [x] **Stats / Active Connections Page**
   Implemented as a Dashboard tab ("Active Connections") with connection cards, live polling (configurable interval), stop channel/client controls, and a sidebar shortcut icon. Phase 2 (bitrate graphs, EPG overlay, VOD cards) deferred.
 - [ ] **Stream Checker ↔ Channel Manager Integration**

@@ -90,6 +90,19 @@ pub async fn create_setting(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    // Log setting creation for the Activity page
+    let _ = crate::events::record_event(
+        &state.db,
+        "settings_created",
+        None,
+        serde_json::json!({
+            "status": "info",
+            "event": "Setting Created",
+            "setting_key": inserted.key,
+            "setting_name": inserted.name
+        }),
+    ).await;
+
     Ok(Json(json!({
         "id": inserted.id,
         "key": inserted.key,
@@ -167,6 +180,19 @@ pub async fn update_setting(
             tracing::error!("❌ DB SAVE FAILED: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
+
+    // Log settings update for the Activity page (values omitted for security)
+    let _ = crate::events::record_event(
+        &state.db,
+        "settings_updated",
+        None,
+        serde_json::json!({
+            "status": "info",
+            "event": "Settings Updated",
+            "setting_key": updated.key,
+            "setting_name": updated.name
+        }),
+    ).await;
 
     Ok(Json(json!({
         "id": updated.id,

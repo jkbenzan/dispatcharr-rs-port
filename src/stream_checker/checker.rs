@@ -539,6 +539,15 @@ pub async fn test_stream(
         None
     };
 
+    // Fetch stream name for the activity event
+    let stream_name = stream::Entity::find_by_id(stream_id)
+        .one(&state.db)
+        .await
+        .ok()
+        .flatten()
+        .map(|s| s.name.clone())
+        .unwrap_or_else(|| format!("Stream #{}", stream_id));
+
     match check_single_stream(&state, stream_id, duration).await {
         Ok(stream_data) => {
             let _ = update_stream_health(
@@ -548,6 +557,22 @@ pub async fn test_stream(
                 settings.auto_prune_failed_count,
             )
             .await;
+
+            // Log single stream check success to Activity (Option C: is_single flag)
+            let _ = crate::events::record_event(
+                &state.db,
+                "stream_check_completed",
+                Some(stream_name.clone()),
+                json!({
+                    "status": "success",
+                    "event": "Stream Check",
+                    "stream_id": stream_id,
+                    "stream_name": stream_name,
+                    "reachable": true,
+                    "is_single": true
+                }),
+            ).await;
+
             (
                 StatusCode::OK,
                 Json(json!({ "success": true, "stream": stream_data })),
@@ -561,6 +586,23 @@ pub async fn test_stream(
                 settings.auto_prune_failed_count,
             )
             .await;
+
+            // Log single stream check failure to Activity
+            let _ = crate::events::record_event(
+                &state.db,
+                "stream_check_completed",
+                Some(stream_name.clone()),
+                json!({
+                    "status": "error",
+                    "event": "Stream Check",
+                    "stream_id": stream_id,
+                    "stream_name": stream_name,
+                    "reachable": false,
+                    "is_single": true,
+                    "message": message
+                }),
+            ).await;
+
             (
                 status,
                 Json(json!({ "success": false, "message": message })),
@@ -663,6 +705,19 @@ pub async fn start_bulk_check(
         last_results: Vec::new(),
     };
     drop(status);
+
+    // Log bulk check started event for the Activity page
+    let _ = crate::events::record_event(
+        &state.db,
+        "bulk_check_started",
+        None,
+        json!({
+            "status": "info",
+            "event": "Bulk Stream Check Started",
+            "total_streams": total_streams,
+            "providers": m3u_groups.len()
+        }),
+    ).await;
 
     let state_clone = state.clone();
 
@@ -767,8 +822,29 @@ pub async fn start_bulk_check(
             })
             .await;
 
+        // Capture final stats before marking as done
         let mut st = state_clone.bulk_check_status.write().await;
+        let was_cancelled = state_clone.bulk_check_cancelled.load(std::sync::atomic::Ordering::SeqCst);
+        let final_total = st.total;
+        let final_successful = st.successful;
+        let final_failed = st.failed;
         st.is_running = false;
+        drop(st);
+
+        // Log bulk check completed event for the Activity page
+        let _ = crate::events::record_event(
+            &state_clone.db,
+            "bulk_check_completed",
+            None,
+            json!({
+                "status": if final_failed == 0 && !was_cancelled { "success" } else { "warning" },
+                "event": "Bulk Stream Check Completed",
+                "total": final_total,
+                "successful": final_successful,
+                "failed": final_failed,
+                "cancelled": was_cancelled
+            }),
+        ).await;
     });
 
     (
@@ -799,6 +875,14 @@ pub async fn cancel_bulk_check(State(state): State<Arc<AppState>>) -> impl IntoR
     // Set the cancellation flag — workers will see this before testing the next stream
     state.bulk_check_cancelled.store(true, std::sync::atomic::Ordering::SeqCst);
     info!("🛑 Bulk check cancellation requested");
+
+    // Log cancellation event for the Activity page
+    let _ = crate::events::record_event(
+        &state.db,
+        "bulk_check_cancelled",
+        None,
+        json!({ "status": "warning", "event": "Bulk Stream Check Cancelled" }),
+    ).await;
 
     (
         StatusCode::OK,
@@ -843,10 +927,26 @@ pub async fn create_sorting_rule(
     };
 
     match rule.insert(&state.db).await {
-        Ok(inserted) => (
-            StatusCode::CREATED,
-            Json(json!({"success": true, "rule": inserted})),
-        ),
+        Ok(inserted) => {
+            // Log sorting rule creation for the Activity page
+            let _ = crate::events::record_event(
+                &state.db,
+                "sorting_rule_created",
+                None,
+                json!({
+                    "status": "success",
+                    "event": "Sorting Rule Created",
+                    "rule_id": inserted.id,
+                    "rule_name": inserted.name,
+                    "property": inserted.property,
+                    "operator": inserted.operator
+                }),
+            ).await;
+            (
+                StatusCode::CREATED,
+                Json(json!({"success": true, "rule": inserted})),
+            )
+        }
         Err(e) => {
             error!("Failed to create rule: {}", e);
             (
@@ -884,10 +984,24 @@ pub async fn update_sorting_rule(
     rule.score_modifier = ActiveValue::Set(payload.score_modifier);
 
     match rule.update(&state.db).await {
-        Ok(updated) => (
-            StatusCode::OK,
-            Json(json!({"success": true, "rule": updated})),
-        ),
+        Ok(updated) => {
+            // Log sorting rule update for the Activity page
+            let _ = crate::events::record_event(
+                &state.db,
+                "sorting_rule_updated",
+                None,
+                json!({
+                    "status": "success",
+                    "event": "Sorting Rule Updated",
+                    "rule_id": id,
+                    "rule_name": updated.name
+                }),
+            ).await;
+            (
+                StatusCode::OK,
+                Json(json!({"success": true, "rule": updated})),
+            )
+        }
         Err(e) => {
             error!("Failed to update rule: {}", e);
             (
@@ -906,7 +1020,20 @@ pub async fn delete_sorting_rule(
         .exec(&state.db)
         .await
     {
-        Ok(_) => (StatusCode::OK, Json(json!({"success": true}))),
+        Ok(_) => {
+            // Log sorting rule deletion for the Activity page
+            let _ = crate::events::record_event(
+                &state.db,
+                "sorting_rule_deleted",
+                None,
+                json!({
+                    "status": "warning",
+                    "event": "Sorting Rule Deleted",
+                    "rule_id": id
+                }),
+            ).await;
+            (StatusCode::OK, Json(json!({"success": true})))
+        }
         Err(e) => {
             error!("Failed to delete rule: {}", e);
             (
