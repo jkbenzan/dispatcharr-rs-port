@@ -3,6 +3,13 @@
 	import { toast } from '$lib/toast.svelte';
 	import Modal from '$lib/components/ui/Modal.svelte';
 	import { Save, AlertCircle, Search, Server, Tv, Film, Clapperboard, RefreshCw } from 'lucide-svelte';
+	import {
+		detectCategory,
+		countryFlag,
+		normalizeForDetection,
+		buildFilterOptions,
+		type CategoryClassification
+	} from '$lib/utils/categoryDetection';
 
 	let {
 		show = $bindable(false),
@@ -31,62 +38,16 @@
 		stream_count?: number;
 	};
 
-	type CountryOption = {
-		code: string;
-		name: string;
-		aliases: string[];
-	};
+	// CountryOption is now a type alias for CategoryClassification so existing
+	// template references (country.code, country.name, country.aliases) continue
+	// to work without further template changes.
+	type CountryOption = CategoryClassification;
 
 	type CategoryItem = {
 		id: number;
 		name: string;
 		m3u_accounts?: ProviderAccountSummary[];
 	};
-
-	const COUNTRY_OPTIONS: CountryOption[] = [
-		{ code: 'US', name: 'United States', aliases: ['usa', 'u.s.a', 'united states', 'us channels', 'america'] },
-		{ code: 'GB', name: 'United Kingdom', aliases: ['uk', 'u.k', 'united kingdom', 'great britain', 'england', 'britain'] },
-		{ code: 'CA', name: 'Canada', aliases: ['canada', 'canadian'] },
-		{ code: 'MX', name: 'Mexico', aliases: ['mexico', 'mexican'] },
-		{ code: 'BR', name: 'Brazil', aliases: ['brazil', 'brasil'] },
-		{ code: 'AR', name: 'Argentina', aliases: ['argentina'] },
-		{ code: 'CO', name: 'Colombia', aliases: ['colombia'] },
-		{ code: 'CL', name: 'Chile', aliases: ['chile'] },
-		{ code: 'PE', name: 'Peru', aliases: ['peru'] },
-		{ code: 'AU', name: 'Australia', aliases: ['australia', 'aussie'] },
-		{ code: 'NZ', name: 'New Zealand', aliases: ['new zealand'] },
-		{ code: 'FR', name: 'France', aliases: ['france', 'french'] },
-		{ code: 'DE', name: 'Germany', aliases: ['germany', 'deutschland', 'german'] },
-		{ code: 'ES', name: 'Spain', aliases: ['spain', 'espana', 'spanish'] },
-		{ code: 'IT', name: 'Italy', aliases: ['italy', 'italia', 'italian'] },
-		{ code: 'PT', name: 'Portugal', aliases: ['portugal', 'portuguese'] },
-		{ code: 'NL', name: 'Netherlands', aliases: ['netherlands', 'holland', 'dutch'] },
-		{ code: 'BE', name: 'Belgium', aliases: ['belgium'] },
-		{ code: 'CH', name: 'Switzerland', aliases: ['switzerland', 'swiss'] },
-		{ code: 'AT', name: 'Austria', aliases: ['austria'] },
-		{ code: 'IE', name: 'Ireland', aliases: ['ireland', 'irish'] },
-		{ code: 'SE', name: 'Sweden', aliases: ['sweden', 'swedish'] },
-		{ code: 'NO', name: 'Norway', aliases: ['norway', 'norwegian'] },
-		{ code: 'DK', name: 'Denmark', aliases: ['denmark', 'danish'] },
-		{ code: 'FI', name: 'Finland', aliases: ['finland', 'finnish'] },
-		{ code: 'PL', name: 'Poland', aliases: ['poland', 'polish'] },
-		{ code: 'GR', name: 'Greece', aliases: ['greece', 'greek'] },
-		{ code: 'TR', name: 'Turkey', aliases: ['turkey', 'turkish'] },
-		{ code: 'IN', name: 'India', aliases: ['india', 'indian'] },
-		{ code: 'PK', name: 'Pakistan', aliases: ['pakistan'] },
-		{ code: 'PH', name: 'Philippines', aliases: ['philippines', 'filipino'] },
-		{ code: 'ID', name: 'Indonesia', aliases: ['indonesia'] },
-		{ code: 'MY', name: 'Malaysia', aliases: ['malaysia'] },
-		{ code: 'SG', name: 'Singapore', aliases: ['singapore'] },
-		{ code: 'TH', name: 'Thailand', aliases: ['thailand', 'thai'] },
-		{ code: 'VN', name: 'Vietnam', aliases: ['vietnam'] },
-		{ code: 'CN', name: 'China', aliases: ['china', 'chinese'] },
-		{ code: 'JP', name: 'Japan', aliases: ['japan', 'japanese'] },
-		{ code: 'KR', name: 'South Korea', aliases: ['south korea', 'korea', 'korean'] },
-		{ code: 'RO', name: 'Romania', aliases: ['romania'] },
-		{ code: 'BG', name: 'Bulgaria', aliases: ['bulgaria'] },
-		{ code: 'AL', name: 'Albania', aliases: ['albania'] }
-	];
 
 	// Form state
 	let name = $state('');
@@ -117,28 +78,11 @@
 		return normalizeAccountType(value) === 'm3u';
 	}
 
-	function countryFlag(code?: string) {
-		if (!code || code.length !== 2) return '';
-		return code
-			.toUpperCase()
-			.split('')
-			.map((char) => String.fromCodePoint(127397 + char.charCodeAt(0)))
-			.join('');
-	}
-
-	function normalizeForDetection(value?: string) {
-		return ` ${(value || '')
-			.toLowerCase()
-			.normalize('NFD')
-			.replace(/[\u0300-\u036f]/g, '')
-			.replace(/[^a-z0-9]+/g, ' ')} `;
-	}
-
+	// detectCountry is a thin wrapper over the new utility so the template
+	// ({@const country = detectCountry(group.name)}) continues to work unchanged.
 	function detectCountry(name?: string): CountryOption | null {
-		const normalized = normalizeForDetection(name);
-		return COUNTRY_OPTIONS.find((country) =>
-			country.aliases.some((alias) => normalized.includes(normalizeForDetection(alias)))
-		) || null;
+		const result = detectCategory(name);
+		return result.kind === 'unknown' ? null : result;
 	}
 
 	function getAccountSummary(item: CategoryItem) {
