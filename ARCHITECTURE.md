@@ -102,6 +102,7 @@ Dispatcharr is a high-performance M3U/XC/EPG proxy and management system built w
 - **Custom Provider Health**: The built-in custom provider is excluded from failed M3U provider counts because it is a manual stream container, not a refreshable provider.
 - **Frontend Error Propagation**: The Svelte frontend strictly bubbles up `errorData.error` from JSON API responses to ensure any backend failures (such as database constraint violations) are correctly exposed rather than being masked as generic 500 errors.
 - **Activity Log Rendering**: The Svelte activity page renders existing system event detail shapes (`message`, `event`, `status`, and `error`) into readable summaries while preserving the expandable raw JSON details for diagnostics.
+- **Channel Manager Events**: All channel lifecycle mutations emit `record_event()` calls: `channel_created` (with channel name, number), `channel_updated` (metadata changes), `streams_assigned` (stream assignment/reorder with count), `channel_deleted` (with channel name as warning), `channel_group_created` (with group name), and `channels_bulk_updated`. Events fire only on success paths using fire-and-forget (`let _ =`) to avoid blocking the HTTP response.
 - **Diagnostic Logging**: Backend sync tasks log discovered category and stream counts to stdout/stderr for operational monitoring and system integrity verification.
 
 ## Verification Status

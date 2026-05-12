@@ -1525,7 +1525,19 @@ pub async fn create_channel_group(
         tracing::error!("Failed to create channel group: {}", e);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
-    
+
+    // Log channel group creation for the Activity page
+    let _ = crate::events::record_event(
+        &state.db,
+        "channel_group_created",
+        Some(name.to_string()),
+        serde_json::json!({
+            "status": "info",
+            "event": "Channel Group Created",
+            "group_id": inserted.id
+        }),
+    ).await;
+
     Ok(Json(json!(inserted)))
 }
 
@@ -4324,6 +4336,19 @@ pub async fn create_channel(
 
     let inserted = active.insert(&state.db).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
+    // Log the channel creation event for the Activity page
+    let _ = crate::events::record_event(
+        &state.db,
+        "channel_created",
+        Some(inserted.name.clone()),
+        serde_json::json!({
+            "status": "success",
+            "event": "Channel Created",
+            "channel_id": inserted.id,
+            "channel_number": inserted.channel_number
+        }),
+    ).await;
+
     Ok(Json(get_channel_json(&state.db, inserted).await))
 }
 
@@ -4399,6 +4424,18 @@ pub async fn update_channel(
 
     if updated {
         let _ = active.update(&state.db).await;
+
+        // Log channel metadata update for the Activity page
+        let _ = crate::events::record_event(
+            &state.db,
+            "channel_updated",
+            None,
+            serde_json::json!({
+                "status": "info",
+                "event": "Channel Updated",
+                "channel_id": id
+            }),
+        ).await;
     }
 
     if let Some(streams) = payload.get("streams").and_then(|v| v.as_array()) {
@@ -4425,6 +4462,19 @@ pub async fn update_channel(
                 .exec(&state.db)
                 .await;
         }
+
+        // Log stream assignment changes for the Activity page
+        let _ = crate::events::record_event(
+            &state.db,
+            "streams_assigned",
+            None,
+            serde_json::json!({
+                "status": "info",
+                "event": "Channel Streams Updated",
+                "channel_id": id,
+                "stream_count": streams.len()
+            }),
+        ).await;
     }
 
     // Return full channel with flattened streams so the frontend store updates correctly
@@ -4492,6 +4542,20 @@ pub async fn delete_channel(
         })?;
 
     tracing::info!("Channel id={} deleted successfully", id);
+
+    // Log channel deletion for the Activity page.
+    // Extract the channel name before it was deleted for a meaningful log entry.
+    let _ = crate::events::record_event(
+        &state.db,
+        "channel_deleted",
+        channel.as_ref().map(|c| c.name.clone()),
+        serde_json::json!({
+            "status": "warning",
+            "event": "Channel Deleted",
+            "channel_id": id
+        }),
+    ).await;
+
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -4575,6 +4639,19 @@ pub async fn bulk_update_channels(
             }
         }
     }
+    // Log bulk channel update for the Activity page.
+    // Uses the original payload length since we can't track partial failures
+    // inside the loop without changing its error semantics.
+    let _ = crate::events::record_event(
+        &state.db,
+        "channels_bulk_updated",
+        None,
+        serde_json::json!({
+            "status": "info",
+            "event": "Bulk Channel Update"
+        }),
+    ).await;
+
     Ok(Json(
         serde_json::json!({"message": "Channels Updated Successfully"}),
     ))

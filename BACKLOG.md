@@ -71,6 +71,23 @@ Items queued for future implementation and audit phases.
 
 ---
 
+## Phase 5: Observability & Event Coverage
+
+- [x] **Channel CRUD Events**
+  Add `record_event()` calls to `create_channel`, `update_channel`, `delete_channel`, `create_channel_group`, and `bulk_update_channels` so Channel Manager operations appear in the Activity page.
+- [ ] **Stream Checker Event Logging**
+  Emit `stream_check_completed` and `bulk_check_completed` events from the stream checker's `test_stream()` and `start_bulk_check()` handlers.
+- [ ] **Sorting Rule Change Events**
+  Log `sorting_rule_created`, `sorting_rule_updated`, `sorting_rule_deleted` when stream sorting rules are modified.
+- [ ] **Settings Change Events**
+  Emit `settings_updated` events when `core_settings` are modified via the Settings page.
+- [ ] **Stats / Active Connections Page**
+  Implement a dedicated `/stats` route with active connection cards, live bitrate monitoring, client management, and stream switching. Reference: `Dispatcharr/frontend/src/pages/Stats.jsx` (438 lines), `StreamConnectionCard.jsx` (828 lines).
+- [ ] **Stream Checker ↔ Channel Manager Integration**
+  Expose per-channel "Check Streams" and "Sort by Health" buttons in the ChannelsPane. Add a Sorting Rules management UI to `/stream-checker`. Show stream health badges in channel sub-lists.
+
+---
+
 ## Testing & QA
 
 - [ ] **Automated Settings Validation**
@@ -93,3 +110,4 @@ Items queued for future implementation and audit phases.
 
 - [ ] **Trakt.tv Integration**
   Explore and implement integration with Trakt.tv for scrobbling live TV/VOD playback, syncing watch history, and importing user lists/collections into the VOD dashboard.
+
