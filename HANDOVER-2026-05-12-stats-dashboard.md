@@ -53,6 +53,23 @@ Implement the Active Connections (Stats) dashboard as a tab on the Dashboard pag
 ## Pending Backlog Items (Priority Order)
 
 1. Stream Checker ↔ Channel Manager Integration
-2. Stream Checker Event Logging
-3. Settings Change Events
-4. Sorting Rule Change Events
+2. ~~Stream Checker Event Logging~~ ✅ Completed (commit `ff9a43b`)
+3. ~~Settings Change Events~~ ✅ Completed (commit `ff9a43b`)
+4. ~~Sorting Rule Change Events~~ ✅ Completed (commit `ff9a43b`)
+
+## Advanced Logging (commit `ff9a43b`)
+
+Added 9 `record_event()` calls across 2 backend files:
+
+**Stream Checker** (`checker.rs`):
+- `stream_check_completed` (single check, `is_single: true` for Activity page filtering)
+- `bulk_check_started` / `bulk_check_completed` / `bulk_check_cancelled`
+
+**Sorting Rules** (`checker.rs`):
+- `sorting_rule_created` / `sorting_rule_updated` / `sorting_rule_deleted`
+
+**Settings** (`settings.rs`):
+- `settings_created` / `settings_updated` (values omitted from payload for security)
+
+**Frontend** (`activity/+page.svelte`):
+- All 9 event types render with structured human-readable summaries
