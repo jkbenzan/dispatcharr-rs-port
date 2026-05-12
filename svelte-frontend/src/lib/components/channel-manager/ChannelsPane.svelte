@@ -41,13 +41,19 @@
 	async function loadData() {
 		loading = true;
 		try {
+			// Snapshot expanded state before reload so we can restore it
+			const expandedGroups = new Set(groupViews.filter(g => g.expanded).map(g => g.id));
+			const expandedChannels = new Set(
+				groupViews.flatMap(g => g.channels.filter(ch => ch.expanded).map(ch => ch.id))
+			);
+
 			const [groups, channelsRes] = await Promise.all([
 				api.getChannelGroups(),
 				api.getChannels({ page_size: 5000 })
 			]);
 			const channelList = Array.isArray(channelsRes) ? channelsRes : channelsRes.results || [];
 			const groupList   = Array.isArray(groups)     ? groups     : groups.results     || [];
-			buildGroupViews(groupList, channelList);
+			buildGroupViews(groupList, channelList, expandedGroups, expandedChannels);
 		} catch (e) {
 			console.error('Failed to load channels:', e);
 		} finally {
@@ -55,7 +61,12 @@
 		}
 	}
 
-	function buildGroupViews(groups: any[], channels: any[]) {
+	function buildGroupViews(
+		groups: any[],
+		channels: any[],
+		expandedGroups: Set<number> = new Set(),
+		expandedChannels: Set<number> = new Set()
+	) {
 		const byGroup = new Map<number, any[]>();
 		const ungrouped: any[] = [];
 		channels.forEach(ch => {
@@ -65,15 +76,15 @@
 		});
 		const views: GroupView[] = groups
 			.map(g => ({
-				id: g.id, name: g.name, expanded: false,
+				id: g.id, name: g.name, expanded: expandedGroups.has(g.id),
 				channels: (byGroup.get(g.id) || [])
 					.sort((a: any, b: any) => (a.channel_number || 0) - (b.channel_number || 0))
-					.map((ch: any) => ({ ...ch, expanded: false, streams: ch.streams || [] }))
+					.map((ch: any) => ({ ...ch, expanded: expandedChannels.has(ch.id), streams: ch.streams || [] }))
 			}))
 			.filter(g => g.channels.length > 0);
 		if (ungrouped.length > 0) views.push({
-			id: -1, name: 'Ungrouped', expanded: false,
-			channels: ungrouped.map(ch => ({ ...ch, expanded: false, streams: ch.streams || [] }))
+			id: -1, name: 'Ungrouped', expanded: expandedGroups.has(-1),
+			channels: ungrouped.map(ch => ({ ...ch, expanded: expandedChannels.has(ch.id), streams: ch.streams || [] }))
 		});
 		groupViews = views;
 	}
@@ -91,15 +102,28 @@
 	);
 
 	// --- Play ---
+	// Play the first assigned stream for the channel.
+	// If no streams are assigned, do nothing.
 	function playChannel(channel: ChannelView) {
-		if (onPlayStream) {
-			onPlayStream({ url: `/api/streams/${channel.uuid}`, title: channel.name, uuid: channel.uuid });
-		}
+		if (!onPlayStream || channel.streams.length === 0) return;
+		// Use the first stream's direct URL rather than the proxy endpoint,
+		// since the proxy may not be available or configured for all channels.
+		const stream = channel.streams[0];
+		onPlayStream({
+			url: stream.url || '',
+			title: `${channel.name}`,
+			uuid: channel.uuid
+		});
 	}
 
 	// --- Delete ---
 	async function deleteChannel(channel: ChannelView) {
-		if (deleteConfirmId !== channel.id) { deleteConfirmId = channel.id; return; }
+		if (deleteConfirmId !== channel.id) {
+			// First click: enter confirmation state, keep the menu open
+			deleteConfirmId = channel.id;
+			return;
+		}
+		// Second click: actually delete
 		deletingId = channel.id;
 		deleteConfirmId = null;
 		openMenuId = null;
@@ -185,6 +209,10 @@
 			crossPaneDropTargetId = channel.id;
 		}
 	}
+
+	// Track when a deleteConfirmId was just set, so the window click handler
+	// doesn't immediately clear it on the same event.
+	let deleteConfirmSetAt = 0;
 
 	// Close menus when clicking outside
 	function handleWindowClick(e: MouseEvent) {
@@ -275,16 +303,16 @@
 										</button>
 
 										{#if openMenuId === channel.id}
-											<div class="dropdown-menu" role="menu">
+											<div class="dropdown-menu" role="menu" onclick={(e) => e.stopPropagation()}>
 												<button class="menu-item" onclick={() => openEdit(channel)}>
 													<Pencil size={13} /> Edit
 												</button>
 												{#if deleteConfirmId === channel.id}
-													<button class="menu-item danger confirm" onclick={() => deleteChannel(channel)}>
+													<button class="menu-item danger confirm" onclick={(e) => { e.stopPropagation(); deleteChannel(channel); }}>
 														<Trash2 size={13} /> Confirm Delete
 													</button>
 												{:else}
-													<button class="menu-item danger" onclick={() => deleteChannel(channel)}>
+													<button class="menu-item danger" onclick={(e) => { e.stopPropagation(); deleteChannel(channel); }}>
 														<Trash2 size={13} /> Delete
 													</button>
 												{/if}
