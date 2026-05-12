@@ -1064,6 +1064,9 @@ fn evaluate_rule(rule: &stream_sorting_rule::Model, stream_stats: &Value) -> boo
                 if let Some(i) = v.as_i64() {
                     return i.to_string() == *target;
                 }
+                if let Some(b) = v.as_bool() {
+                    return b.to_string() == *target;
+                }
             }
             false
         }
@@ -1074,6 +1077,9 @@ fn evaluate_rule(rule: &stream_sorting_rule::Model, stream_stats: &Value) -> boo
                 }
                 if let Some(i) = v.as_i64() {
                     return i.to_string() != *target;
+                }
+                if let Some(b) = v.as_bool() {
+                    return b.to_string() != *target;
                 }
             }
             true
@@ -1325,4 +1331,86 @@ pub async fn run_automated_maintenance(state: Arc<AppState>) -> Result<(), Box<d
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_evaluate_rule_numeric() {
+        let rule = stream_sorting_rule::Model {
+            id: 1,
+            name: "Test rule".to_string(),
+            priority: 1,
+            property: "resolution_height".to_string(),
+            operator: "==".to_string(),
+            value: "1080".to_string(),
+            score_modifier: 10,
+        };
+
+        let stats_match = json!({"resolution_height": 1080});
+        let stats_mismatch = json!({"resolution_height": 720});
+
+        assert!(evaluate_rule(&rule, &stats_match));
+        assert!(!evaluate_rule(&rule, &stats_mismatch));
+    }
+
+    #[test]
+    fn test_evaluate_rule_operator_greater_than() {
+        let rule = stream_sorting_rule::Model {
+            id: 1,
+            name: "Test rule".to_string(),
+            priority: 1,
+            property: "bitrate".to_string(),
+            operator: ">=".to_string(),
+            value: "5000".to_string(),
+            score_modifier: 10,
+        };
+
+        let stats_match = json!({"bitrate": 5500});
+        let stats_mismatch = json!({"bitrate": 4000});
+
+        assert!(evaluate_rule(&rule, &stats_match));
+        assert!(!evaluate_rule(&rule, &stats_mismatch));
+    }
+
+    #[test]
+    fn test_evaluate_rule_boolean() {
+        let rule = stream_sorting_rule::Model {
+            id: 1,
+            name: "Test rule".to_string(),
+            priority: 1,
+            property: "is_live".to_string(),
+            operator: "==".to_string(),
+            value: "true".to_string(),
+            score_modifier: 10,
+        };
+
+        let stats_match = json!({"is_live": true});
+        let stats_mismatch = json!({"is_live": false});
+
+        assert!(evaluate_rule(&rule, &stats_match));
+        assert!(!evaluate_rule(&rule, &stats_mismatch));
+    }
+
+    #[test]
+    fn test_evaluate_rule_string_contains() {
+        let rule = stream_sorting_rule::Model {
+            id: 1,
+            name: "Test rule".to_string(),
+            priority: 1,
+            property: "codec".to_string(),
+            operator: "contains".to_string(),
+            value: "h264".to_string(),
+            score_modifier: 10,
+        };
+
+        let stats_match = json!({"codec": "video/h264"});
+        let stats_mismatch = json!({"codec": "hevc"});
+
+        assert!(evaluate_rule(&rule, &stats_match));
+        assert!(!evaluate_rule(&rule, &stats_mismatch));
+    }
 }

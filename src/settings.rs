@@ -319,17 +319,36 @@ pub async fn initialize_core_settings(db: &sea_orm::DatabaseConnection) {
             .unwrap_or_default();
 
         if let Some(setting) = existing {
-            if key == "stream_settings" && setting.value.get("provider_refresh_concurrency").is_none() {
+            if key == "stream_settings" {
                 let mut value = setting.value.clone();
+                let mut changed = false;
                 if let Some(obj) = value.as_object_mut() {
-                    obj.insert(
-                        "provider_refresh_concurrency".to_string(),
-                        serde_json::json!(DEFAULT_PROVIDER_REFRESH_CONCURRENCY),
-                    );
+                    for (field, default_value) in [
+                        ("buffer_size", serde_json::json!(1024)),
+                        ("retry_count", serde_json::json!(3)),
+                        ("stream_checker_parallel_providers", serde_json::json!(1)),
+                        ("provider_refresh_concurrency", serde_json::json!(DEFAULT_PROVIDER_REFRESH_CONCURRENCY)),
+                        ("default_user_agent", serde_json::json!("TiviMate/5.0.4 (Linux;Android 11) iPTV-Client")),
+                    ] {
+                        if obj.get(field).is_none() {
+                            obj.insert(field.to_string(), default_value);
+                            changed = true;
+                        }
+                    }
+                    
+                    // Fix any accidental numeric conversions for user agent
+                    if let Some(ua) = obj.get("default_user_agent") {
+                        if ua.is_number() {
+                            obj.insert("default_user_agent".to_string(), serde_json::json!("TiviMate/5.0.4 (Linux;Android 11) iPTV-Client"));
+                            changed = true;
+                        }
+                    }
+                }
+                if changed {
                     let mut active: crate::entities::core_settings::ActiveModel = setting.into();
                     active.value = sea_orm::Set(value);
                     if active.update(db).await.is_ok() {
-                        tracing::info!("âœ¨ Added default stream setting: provider_refresh_concurrency");
+                        tracing::info!("✨ Added missing default stream settings");
                     }
                 }
             } else if key == "maintenance_settings" {
