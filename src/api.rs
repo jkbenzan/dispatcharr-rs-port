@@ -4434,6 +4434,62 @@ pub async fn update_channel(
     }
 }
 
+/// DELETE /api/channels/channels/:id/
+///
+/// Deletes a channel and all of its stream assignments.
+/// The stream rows themselves are NOT deleted — only the channel→stream join
+/// rows in `dispatcharr_channels_channelstream` are removed so that the
+/// underlying provider streams remain available for re-assignment.
+///
+/// Returns 204 No Content on success, 404 if the channel does not exist.
+pub async fn delete_channel(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
+) -> Result<StatusCode, StatusCode> {
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+
+    // Verify the channel exists before attempting deletion
+    let channel = crate::entities::channel::Entity::find_by_id(id)
+        .one(&state.db)
+        .await
+        .map_err(|e| {
+            tracing::error!("DB error looking up channel {} for delete: {}", id, e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    if channel.is_none() {
+        tracing::warn!("Attempted to delete non-existent channel id={}", id);
+        return Err(StatusCode::NOT_FOUND);
+    }
+
+    // Step 1: Remove all channel→stream assignments (join table cleanup).
+    // We must do this before deleting the channel to avoid FK constraint violations.
+    crate::entities::channel_stream::Entity::delete_many()
+        .filter(crate::entities::channel_stream::Column::ChannelId.eq(id))
+        .exec(&state.db)
+        .await
+        .map_err(|e| {
+            tracing::error!(
+                "Failed to delete channel_stream rows for channel id={}: {}",
+                id,
+                e
+            );
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    // Step 2: Delete the channel record itself
+    crate::entities::channel::Entity::delete_by_id(id)
+        .exec(&state.db)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to delete channel id={}: {}", id, e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    tracing::info!("Channel id={} deleted successfully", id);
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub async fn bulk_update_channels(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<Vec<serde_json::Value>>,

@@ -402,8 +402,9 @@ async fn main() {
         .route("/api/channels/channels/summary", get(api::get_channels_summary))
         .route("/api/channels/channels/by-uuids/", post(api::get_channels_by_uuids))
         .route("/api/channels/channels/by-uuids", post(api::get_channels_by_uuids))
-        .route("/api/channels/channels/:id/", patch(api::update_channel).put(api::update_channel).post(api::update_channel))
-        .route("/api/channels/channels/:id", patch(api::update_channel).put(api::update_channel).post(api::update_channel))
+        // PATCH / PUT / POST update the channel; DELETE removes it and its stream assignments
+        .route("/api/channels/channels/:id/", patch(api::update_channel).put(api::update_channel).post(api::update_channel).delete(api::delete_channel))
+        .route("/api/channels/channels/:id", patch(api::update_channel).put(api::update_channel).post(api::update_channel).delete(api::delete_channel))
         .route("/api/channels/channels/:id/set-epg/", post(api::set_channel_epg))
         .route("/api/channels/channels/:id/set-epg", post(api::set_channel_epg))
         .route(

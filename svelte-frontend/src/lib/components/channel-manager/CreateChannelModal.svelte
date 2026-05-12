@@ -4,7 +4,17 @@
 	import Modal from '../ui/Modal.svelte';
 	import { Pencil, Folder, Database, Tv, Image, Upload, ChevronDown, ChevronUp, PlusCircle, Search, TriangleAlert, List } from 'lucide-svelte';
 
-	let { show = $bindable(false), onCreated } = $props();
+	/**
+	 * Props:
+	 *   show        — controls modal visibility (bindable)
+	 *   onCreated   — callback after create OR edit save
+	 *   channelId   — when set, modal operates in EDIT mode
+	 *   initialData — pre-populated form when editing an existing channel
+	 */
+	let { show = $bindable(false), onCreated, channelId = null as number | null, initialData = null as any } = $props();
+
+	// true when editing an existing channel, false when creating a new one
+	let isEditMode = $derived(channelId !== null);
 
 	// --- Form State ---
 	let form = $state({
@@ -107,6 +117,21 @@
 		if (show) {
 			loadData();
 			resetForm();
+			// In edit mode, overlay the provided channel data on top of the cleared form
+			if (initialData) {
+				form = {
+					name:                initialData.name ?? '',
+					channel_number:      initialData.channel_number ?? null,
+					channel_group_id:    initialData.channel_group_id ?? initialData.channel_group ?? null,
+					stream_profile_id:   initialData.stream_profile_id ?? initialData.stream_profile ?? null,
+					user_level:          initialData.user_level ?? 3,
+					logo_id:             initialData.logo_id ?? initialData.logo ?? null,
+					is_adult:            initialData.is_adult ?? false,
+					tvg_id:              initialData.tvg_id ?? '',
+					tvc_guide_stationid: initialData.tvc_guide_stationid ?? '',
+					epg_data_id:         initialData.epg_data_id ?? initialData.epg_data ?? null
+				};
+			}
 		}
 	});
 
@@ -342,25 +367,29 @@
 		}
 	}
 
-	// Submit
+	// Submit — routes to createChannel (POST) or updateChannel (PATCH) based on mode
 	async function submit(e: Event) {
 		e.preventDefault();
 		if (!form.name || form.channel_group_id === null) return;
-		
+
 		submitting = true;
 		try {
-			await api.createChannel(form);
+			if (isEditMode && channelId !== null) {
+				await api.updateChannel(channelId, form);
+			} else {
+				await api.createChannel(form);
+			}
 			show = false;
 			if (onCreated) onCreated();
-		} catch (e) {
-			console.error("Failed to create channel", e);
+		} catch (err) {
+			console.error(isEditMode ? 'Failed to update channel' : 'Failed to create channel', err);
 		} finally {
 			submitting = false;
 		}
 	}
 </script>
 
-<Modal bind:show title="Create New Channel" width="900px" height="85vh">
+<Modal bind:show title={isEditMode ? 'Edit Channel' : 'Create New Channel'} width="900px" height="85vh">
 	<div class="split-layout">
 		<!-- LEFT PANEL: Form -->
 		<div class="form-panel">
@@ -627,7 +656,11 @@
 				<div class="form-actions">
 					<button type="button" class="btn-cancel" onclick={() => show = false}>Cancel</button>
 					<button type="submit" class="btn-submit" disabled={!form.name || form.channel_group_id === null || submitting}>
-						{submitting ? 'Creating...' : '+ Create Channel'}
+						{#if submitting}
+							{isEditMode ? 'Saving...' : 'Creating...'}
+						{:else}
+							{isEditMode ? '✓ Save Changes' : '+ Create Channel'}
+						{/if}
 					</button>
 				</div>
 			</form>

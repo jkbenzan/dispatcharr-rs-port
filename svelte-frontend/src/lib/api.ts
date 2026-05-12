@@ -1,14 +1,19 @@
 const BASE_URL = '/api';
 
+/**
+ * Core fetch wrapper.
+ * - Throws on non-2xx responses, surfacing the backend error message.
+ * - Returns {} for 204 No Content (e.g. delete operations).
+ */
 async function fetchApi(path: string, options: RequestInit = {}) {
   const response = await fetch(path, options);
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
     throw new Error(errorData.error || errorData.message || `API Error: ${response.status} ${response.statusText}`);
   }
-  
+
   if (response.status === 204) return {};
-  
+
   const text = await response.text();
   return text ? JSON.parse(text) : {};
 }
@@ -35,6 +40,10 @@ export const api = {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
+  }),
+  /** DELETE /api/channels/channels/:id/ — removes channel and its stream assignments */
+  deleteChannel: (id: number) => fetchApi(`/api/channels/channels/${id}/`, {
+    method: 'DELETE'
   }),
   createChannel: (data: any) => fetchApi('/api/channels/channels/', {
     method: 'POST',
@@ -152,7 +161,7 @@ export const api = {
   }),
 
   // =================== ACTIVITY / LOGS ===================
-  getSystemEvents: (limit: number = 100, offset: number = 0) => 
+  getSystemEvents: (limit: number = 100, offset: number = 0) =>
     fetchApi(`/api/core/system-events/?limit=${limit}&offset=${offset}`),
   clearSystemEvents: () => fetchApi('/api/core/system-events/clear/', { method: 'DELETE' }),
 
@@ -161,7 +170,7 @@ export const api = {
   getPlugins: () => fetchApi('/api/plugins/plugins/'),
 
   // =================== TV GUIDE / EPG ===================
-  getEpgGrid: (start: string, end: string, channel_uuids: string[]) => 
+  getEpgGrid: (start: string, end: string, channel_uuids: string[]) =>
     fetchApi(`/api/epg/grid/?start=${start}&end=${end}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

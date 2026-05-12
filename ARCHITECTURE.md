@@ -77,6 +77,18 @@ Dispatcharr is a high-performance M3U/XC/EPG proxy and management system built w
     - The frontend includes explicit Node typings via `@types/node` for the SvelteKit generated TypeScript configuration.
 - **Playback**:
     - The TV Guide player requests `/api/streams/:id?format=hls`. The backend serves a lightweight HLS manifest that points clients at the existing MPEG-TS proxy stream while preserving token or username/password query authentication.
+- **Channel Manager** (`/channels`):
+    - Two-pane resizable layout: **ChannelsPane** (left) shows a Group → Channel → Stream hierarchy; **StreamsPane** (right) shows M3U Account → Category → Stream hierarchy for assignment.
+    - **Drag-and-drop assignment**: Streams are dragged from StreamsPane and dropped onto a channel row. StreamsPane encodes one or more stream IDs as `application/json` in `dataTransfer`; ChannelsPane merges them into the channel's existing stream list via `PATCH /api/channels/channels/:id/` with a full `streams: [id, …]` replacement array.
+    - **Multi-select drag**: StreamsPane checkboxes (click/Space) accumulate selected IDs. Dragging any selected stream drags all selected IDs as a batch. A per-group "Select all/none" header button is provided.
+    - **Stream sub-list**: Expanding a channel row reveals its assigned streams with drag handles for in-channel reorder (`reorderChannelStreams`) and ✕ remove buttons (calls `updateChannel` with filtered ID array).
+    - **Stream count badge**: Each channel row shows a badge with the number of assigned streams.
+    - **Kebab menu**: Each channel exposes Edit (opens `CreateChannelModal` in edit mode) and Delete (first click → confirm state, second click → `DELETE /api/channels/channels/:id/`).
+    - **Reactive reloads**: After any mutation (create, edit, delete, assign, remove, reorder), both panes are refreshed via exported `reload()` functions. `window.location.reload()` is never used.
+    - **Unassigned-only filter**: StreamsPane header toggle hides already-assigned streams so operators see only candidates for assignment.
+    - **Create/Edit modal unification**: `CreateChannelModal.svelte` accepts `channelId` and `initialData` props. When `channelId` is non-null the modal is in edit mode: form is pre-filled from `initialData`, the submit button reads "Save Changes", and the API call routes to `PATCH` instead of `POST`.
+    - **In-app floating video player**: `FloatingPlayer.svelte` wraps `VideoPlayer.svelte` in a fixed-position, draggable overlay. Both ChannelsPane (Play button per channel → uses the Dispatcharr stream proxy URL `/api/streams/:uuid`) and StreamsPane (Play button per stream → uses the raw stream URL) open the player by calling `onPlayStream` prop. The player supports minimize, Escape to close, and displays a live-dot indicator with stream title and provider name.
+    - **DELETE endpoint**: `DELETE /api/channels/channels/:id/` removes channel-stream join rows first (FK cleanup), then deletes the channel row. Returns `204 No Content`. Both trailing-slash and non-trailing-slash routes are registered.
 
 ## Telemetry & Logging
 - **System Events**: Stored in `core_systemevent`. M3U Provider creations, deletions, and manual refreshes explicitly log their status (success, info, or error) to this table.
