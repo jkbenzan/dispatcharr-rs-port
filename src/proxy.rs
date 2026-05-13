@@ -547,6 +547,12 @@ pub async fn broadcaster_pumper(
 
                     match chunk_result {
                         Ok(Some(Ok(bytes))) => {
+                            if bytes.is_empty() {
+                                // Skip empty chunks to prevent Axum from interpreting them as EOF
+                                // for chunked transfer encoding, which freezes the video player.
+                                continue;
+                            }
+                            
                             broadcaster.total_bytes.fetch_add(bytes.len() as u64, Ordering::Relaxed);
                             
                             {

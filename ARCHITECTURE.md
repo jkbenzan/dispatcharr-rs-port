@@ -137,3 +137,7 @@ Dispatcharr is a high-performance M3U/XC/EPG proxy and management system built w
 - `npm run check` passes with zero warnings.
 - `npm run build` passes when the process can write the repository-root `dist` directory.
 - `npm install` currently reports low-severity audit findings; do not run `npm audit fix --force` without checking for breaking package changes.
+
+## Proxy Stream Stabilization
+- **Chunked Transfer EOF Prevention**: The roadcaster_pumper filters out empty  -length byte chunks from the upstream M3U provider. This prevents the Axum HTTP response from interpreting empty chunks as chunked transfer encoding EOF signals, which previously caused mpegts.js to silently freeze on the last decoded frame without throwing an error.
+- **Diagnostic Pipeline**: The fprobe and fmpeg stream checkers use explicitly injected HTTP headers (-headers "User-Agent: VLC/3.0.0\r\n") instead of the unreliable -user_agent flag. This ensures universal compatibility across all demuxers (HTTP and HLS) and prevents upstream providers from blocking the diagnostic requests.
