@@ -8,7 +8,7 @@
     src = '', 
     title = 'Live Stream', 
     autoplay = true,
-    muted = $bindable(false)
+    muted = $bindable(true)
   } = $props();
 
   let videoElement: HTMLVideoElement;
@@ -17,7 +17,7 @@
   
   let loading = $state(true);
   let error = $state<string | null>(null);
-  let playing = $state(false);
+  let paused = $state(true);
   let volume = $state(1);
   let showControls = $state(true);
   let controlsTimeout: any;
@@ -156,7 +156,7 @@
     showControls = true;
     clearTimeout(controlsTimeout);
     controlsTimeout = setTimeout(() => {
-      if (playing) showControls = false;
+      if (!paused) showControls = false;
     }, 3000);
   }
 
@@ -179,7 +179,7 @@
   <!-- svelte-ignore a11y_media_has_caption -->
   <video
     bind:this={videoElement}
-    bind:paused={playing}
+    bind:paused={paused}
     bind:muted={muted}
     bind:volume={volume}
     playsinline
@@ -208,7 +208,7 @@
   {/if}
 
   <!-- Custom Controls Overlay -->
-  <div class="controls-overlay" class:visible={showControls || !playing || error}>
+  <div class="controls-overlay" class:visible={showControls || paused || error}>
     <div class="controls-top">
       <span class="stream-title">{title}</span>
     </div>
@@ -216,7 +216,7 @@
     <div class="controls-bottom">
       <div class="controls-left">
         <button class="control-btn" onclick={togglePlay}>
-          {#if playing}
+          {#if !paused}
             <Pause size={20} fill="currentColor" />
           {:else}
             <Play size={20} fill="currentColor" />
