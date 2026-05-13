@@ -353,7 +353,7 @@
 										</button>
 
 										{#if openMenuId === channel.id}
-											<div class="dropdown-menu" role="menu" onclick={(e) => e.stopPropagation()}>
+											<div class="dropdown-menu" role="menu" tabindex="-1" onclick={(e) => e.stopPropagation()} onkeydown={(e) => { if (e.key === 'Escape') openMenuId = null; }}>
 												<button class="menu-item" onclick={() => openEdit(channel)}>
 													<Pencil size={13} /> Edit
 												</button>
