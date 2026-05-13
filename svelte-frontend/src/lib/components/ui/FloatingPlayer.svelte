@@ -47,9 +47,10 @@
   let muted = $state(false);
 
   // --- Computed stream URL ---
-  // Prefer the Dispatcharr proxy URL when we have a UUID (always better for load balancing)
+  // Prefer the Dispatcharr proxy URL for MPEG-TS streams to ensure telemetry and failover.
+  // Fallback to direct URL for HLS (.m3u8) as the proxy currently only supports raw byte pumping.
   let effectiveUrl = $derived(
-    stream?.uuid
+    stream?.uuid && !(stream?.url?.includes('.m3u8') || stream?.url?.includes('format=hls'))
       ? `/proxy/ts/${stream.uuid}`
       : (stream?.url ?? '')
   );
