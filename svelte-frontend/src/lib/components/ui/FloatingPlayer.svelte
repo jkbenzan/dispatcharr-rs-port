@@ -21,7 +21,7 @@
     /** Optional provider name (M3U account) */
     provider?: string;
     /** Channel UUID — used to build the Dispatcharr stream proxy URL */
-    channelUuid?: string;
+    uuid?: string;
   }
 
   let {
@@ -51,7 +51,7 @@
   // Fallback to direct URL for HLS (.m3u8) as the proxy currently only supports raw byte pumping.
   let effectiveUrl = $derived(
     stream?.uuid && !(stream?.url?.includes('.m3u8') || stream?.url?.includes('format=hls'))
-      ? `/proxy/ts/${stream.uuid}`
+      ? `/proxy/ts/stream/${stream.uuid}`
       : (stream?.url ?? '')
   );
 

@@ -496,16 +496,19 @@ pub async fn check_single_stream(
         "resolution": format!("{}x{}", width.unwrap_or(0), height.unwrap_or(0)),
         "width": width,
         "height": height,
-        "source_fps": fps,
+        "fps": fps,
         "audio_codec": audio_codec,
         "audio_channels": channels,
-        "video_bitrate": bitrate,
+        "bitrate": bitrate,
         "status": status,
         "issues": {
             "frozen": is_frozen,
             "black_screen": is_black
         }
     });
+
+    info!("✅ Stream Test Result for {}: status={}, resolution={}, fps={}, bitrate={:?}", 
+        stream_obj.name, status, stats["resolution"], stats["fps"], bitrate);
 
     let mut active_stream: stream::ActiveModel = stream_obj.clone().into();
     let mut props = active_stream

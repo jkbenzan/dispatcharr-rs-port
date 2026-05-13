@@ -188,32 +188,34 @@ async fn get_stream_fallback(
         }
     }
 
-    // 2. Try UUID as string match on Channel
-    tracing::debug!("Searching for channel with UUID string match: {}", identifier);
-    let channel_opt = channel::Entity::find()
-        .filter(channel::Column::Uuid.eq(identifier))
-        .one(db)
-        .await
-        .map_err(|e| {
-            tracing::error!("get_stream_fallback DB Error: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-
-    if let Some(_channel) = channel_opt {
-        tracing::debug!("Found channel by UUID string: {}", _channel.name);
-        let streams = channel_stream::Entity::find()
-            .filter(channel_stream::Column::ChannelId.eq(_channel.id))
-            .order_by_asc(channel_stream::Column::Order)
-            .find_also_related(stream::Entity)
-            .all(db)
+    // 2. Try UUID match on Channel
+    if let Ok(parsed_uuid) = Uuid::parse_str(identifier) {
+        tracing::debug!("Searching for channel with UUID: {}", parsed_uuid);
+        let channel_opt = channel::Entity::find()
+            .filter(channel::Column::Uuid.eq(parsed_uuid))
+            .one(db)
             .await
             .map_err(|e| {
                 tracing::error!("get_stream_fallback DB Error: {}", e);
                 StatusCode::INTERNAL_SERVER_ERROR
             })?;
-        
-        if !streams.is_empty() {
-            return Ok(streams);
+
+        if let Some(_channel) = channel_opt {
+            tracing::debug!("Found channel by UUID: {}", _channel.name);
+            let streams = channel_stream::Entity::find()
+                .filter(channel_stream::Column::ChannelId.eq(_channel.id))
+                .order_by_asc(channel_stream::Column::Order)
+                .find_also_related(stream::Entity)
+                .all(db)
+                .await
+                .map_err(|e| {
+                    tracing::error!("get_stream_fallback DB Error: {}", e);
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?;
+            
+            if !streams.is_empty() {
+                return Ok(streams);
+            }
         }
     }
 
@@ -536,9 +538,32 @@ pub async fn broadcaster_pumper(
         ).await;
 
         match connect_result {
-            Ok(Ok(resp)) if resp.status().is_success() => {
+            Ok(Ok(response)) => {
+                let status = response.status();
+                let mut content_type_is_html = false;
+
+                if let Some(content_type) = response.headers().get("Content-Type").and_then(|h| h.to_str().ok()) {
+                    if content_type.contains("text/html") {
+                        tracing::warn!("Provider returned HTML instead of video for channel {}. Content-Type: {}", channel_id, content_type);
+                        content_type_is_html = true;
+                    } else {
+                        tracing::debug!("Provider Content-Type: {} for channel {}", content_type, channel_id);
+                    }
+                }
+
+                if !status.is_success() {
+                    tracing::warn!("Provider returned error status {} for channel {}", status, channel_id);
+                    break; // Failover to next stream
+                }
+                
+                if content_type_is_html {
+                    tracing::warn!("Skipping stream due to HTML response for channel {}", channel_id);
+                    break; // Failover to next stream
+                }
+
                 *broadcaster.status.write().await = BroadcasterStatus::Streaming;
-                let mut bytes_stream = resp.bytes_stream();
+                
+                let mut bytes_stream = response.bytes_stream();
                 let mut no_subscribers_since: Option<tokio::time::Instant> = None;
                 let pumper_start_time = tokio::time::Instant::now();
 
@@ -932,6 +957,8 @@ pub async fn handle_proxy(
     Ok(Response::builder()
         .status(StatusCode::OK)
         .header("Content-Type", "video/mp2t")
+        .header("Cache-Control", "no-store")
+        .header("X-Stream-ID", &channel_streams[0].0.stream_id.to_string())
         .body(Body::from_stream(stream))
         .unwrap())
 }
