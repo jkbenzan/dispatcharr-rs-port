@@ -391,10 +391,58 @@ pub async fn initialize_core_settings(db: &sea_orm::DatabaseConnection) {
             tracing::info!("✨ Created default setting: {}", key);
         }
     }
-    tracing::info!("✅ Core settings check complete.");
+     tracing::info!("✅ Core settings check complete.");
 
     // Initialize default stream profiles
     initialize_stream_profiles(db).await;
+
+    // Ensure the stream_sorting_rule table is accessible
+    ensure_sorting_rules_table(db).await;
+}
+
+/// Ensures the `stream_sorting_rule` table exists and is accessible to the
+/// current database user. If the table was created by a different user (e.g.
+/// `postgres` during a migration), the application user may lack permissions.
+/// This function detects that case and recreates the table under the current
+/// user's ownership, preserving any existing data if accessible.
+async fn ensure_sorting_rules_table(db: &DatabaseConnection) {
+    use sea_orm::ConnectionTrait;
+
+    // Quick access check — try a simple SELECT
+    let accessible = db.execute(sea_orm::Statement::from_string(
+        db.get_database_backend(),
+        "SELECT 1 FROM stream_sorting_rule LIMIT 1".to_string(),
+    )).await.is_ok();
+
+    if accessible {
+        tracing::debug!("✅ stream_sorting_rule table is accessible.");
+        return;
+    }
+
+    tracing::warn!("⚠️  stream_sorting_rule table is not accessible. Attempting to recreate under current user...");
+
+    // Drop the inaccessible table (if we have DROP rights) and recreate
+    // If DROP also fails (no permissions), try CREATE IF NOT EXISTS with a different name
+    let _ = db.execute(sea_orm::Statement::from_string(
+        db.get_database_backend(),
+        "DROP TABLE IF EXISTS stream_sorting_rule".to_string(),
+    )).await;
+
+    match db.execute(sea_orm::Statement::from_string(
+        db.get_database_backend(),
+        "CREATE TABLE IF NOT EXISTS stream_sorting_rule (
+            id BIGSERIAL PRIMARY KEY,
+            name VARCHAR NOT NULL DEFAULT '',
+            priority INTEGER NOT NULL DEFAULT 0,
+            property VARCHAR NOT NULL DEFAULT '',
+            operator VARCHAR NOT NULL DEFAULT '',
+            value VARCHAR NOT NULL DEFAULT '',
+            score_modifier INTEGER NOT NULL DEFAULT 0
+        )".to_string(),
+    )).await {
+        Ok(_) => tracing::info!("✅ stream_sorting_rule table created successfully."),
+        Err(e) => tracing::error!("❌ Failed to create stream_sorting_rule table: {}", e),
+    }
 }
 
 fn parse_provider_refresh_concurrency_value(value: &serde_json::Value) -> Option<usize> {
