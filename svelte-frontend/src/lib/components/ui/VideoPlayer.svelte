@@ -31,7 +31,7 @@
     error = null;
 
     const isHls = src.includes('.m3u8') || src.includes('format=hls');
-    const isTs = src.includes('.ts') || src.includes('/stream/') || src.includes('format=ts');
+    const isTs = src.includes('.ts') || src.includes('/stream/') || src.includes('/proxy/ts/') || src.includes('/api/streams/') || src.includes('format=ts');
 
     if (isHls) {
       if (Hls.isSupported()) {

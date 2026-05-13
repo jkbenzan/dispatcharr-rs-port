@@ -281,7 +281,7 @@ pub async fn initialize_core_settings(db: &sea_orm::DatabaseConnection) {
                 "buffering_timeout": 15,
                 "buffering_speed": 1.0,
                 "redis_chunk_ttl": 60,
-                "channel_shutdown_delay": 0,
+                "channel_shutdown_delay": 30,
                 "channel_init_grace_period": 5,
                 "new_client_behind_seconds": 5,
                 "http_proxy_enabled": false,
@@ -518,9 +518,9 @@ pub struct ProxySettings {
 impl Default for ProxySettings {
     fn default() -> Self {
         Self {
-            buffering_timeout: 10,
+            buffering_timeout: 15,
             buffering_speed: 1.0,
-            channel_shutdown_delay: 60,
+            channel_shutdown_delay: 30,
             max_retries: 3,
             chunk_size: 1024 * 1024, // 1MB
         }

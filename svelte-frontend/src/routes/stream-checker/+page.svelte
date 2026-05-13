@@ -24,6 +24,7 @@
 	// Status State
 	let status: any = $state(null);
 	let pollingInterval: any = null;
+	let sortingStatus: any = $state(null);
 
 	// Settings State
 	let streamSettingsId: number | null = $state(null);
@@ -136,6 +137,39 @@
 			}
 		} catch (err) {
 			console.error(err);
+		}
+	}
+
+	async function sortSelectedChannels() {
+		if (selectedStreamIds.size === 0) return;
+		try {
+			// Find the channels that the selected streams belong to
+			const selectedChannels = new Set<number>();
+			for (const groupChannels of Object.values(channelsByGroup)) {
+				for (const channel of groupChannels) {
+					if (channel.streams) {
+						for (const stream of channel.streams) {
+							if (selectedStreamIds.has(stream.id)) {
+								selectedChannels.add(channel.id);
+							}
+						}
+					}
+				}
+			}
+			
+			if (selectedChannels.size === 0) {
+				toast.error('No channels identified for the selected streams');
+				return;
+			}
+			
+			sortingStatus = { is_running: true };
+			const res = await api.bulkSortStreams(Array.from(selectedChannels));
+			toast.success(res.message || 'Channels sorted successfully');
+		} catch (err) {
+			console.error(err);
+			toast.error('Failed to sort channels');
+		} finally {
+			sortingStatus = null;
 		}
 	}
 

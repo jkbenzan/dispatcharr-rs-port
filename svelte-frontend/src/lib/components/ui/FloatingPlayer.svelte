@@ -49,8 +49,8 @@
   // --- Computed stream URL ---
   // Prefer the Dispatcharr proxy URL when we have a UUID (always better for load balancing)
   let effectiveUrl = $derived(
-    stream?.channelUuid
-      ? `/api/streams/${stream.channelUuid}`
+    stream?.uuid
+      ? `/proxy/ts/${stream.uuid}`
       : (stream?.url ?? '')
   );
 

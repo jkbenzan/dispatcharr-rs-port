@@ -263,6 +263,8 @@ pub async fn check_single_stream(
         "-headers", "User-Agent: VLC/3.0.0\r\n",
         "-print_format", "json",
         "-show_streams",
+        "-analyzeduration", "10000000",
+        "-probesize", "10000000",
         "-i", &stream_url,
     ];
     let mut ffprobe_cmd = Command::new(&ffprobe_bin);
@@ -468,10 +470,10 @@ pub async fn check_single_stream(
             }
             if line.contains("bitrate=") {
                 if let Some(idx) = line.find("bitrate=") {
-                    let parts: Vec<&str> = line[idx..].split_whitespace().collect();
-                    if parts.len() >= 2 {
-                        let bit_str = parts[0].replace("bitrate=", "");
-                        if let Ok(b) = bit_str.replace("kbits/s", "").trim().parse::<f64>() {
+                    let bitrate_part = &line[idx + 8..].trim();
+                    let parts: Vec<&str> = bitrate_part.split_whitespace().collect();
+                    if let Some(val_str) = parts.get(0) {
+                        if let Ok(b) = val_str.replace("kbits/s", "").trim().parse::<f64>() {
                             bitrate = Some(b);
                         }
                     }
@@ -1078,10 +1080,21 @@ fn evaluate_rule(rule: &stream_sorting_rule::Model, stream_stats: &Value) -> boo
         "==" => {
             if let Some(v) = val {
                 if let Some(s) = v.as_str() {
+                    if let (Ok(f1), Ok(f2)) = (s.parse::<f64>(), target.parse::<f64>()) {
+                        return (f1 - f2).abs() < 0.01;
+                    }
                     return s == target;
                 }
                 if let Some(i) = v.as_i64() {
+                    if let Ok(t) = target.parse::<i64>() {
+                        return i == t;
+                    }
                     return i.to_string() == *target;
+                }
+                if let Some(f) = v.as_f64() {
+                    if let Ok(t) = target.parse::<f64>() {
+                        return (f - t).abs() < 0.01;
+                    }
                 }
                 if let Some(b) = v.as_bool() {
                     return b.to_string() == *target;
@@ -1092,10 +1105,21 @@ fn evaluate_rule(rule: &stream_sorting_rule::Model, stream_stats: &Value) -> boo
         "!=" => {
             if let Some(v) = val {
                 if let Some(s) = v.as_str() {
+                    if let (Ok(f1), Ok(f2)) = (s.parse::<f64>(), target.parse::<f64>()) {
+                        return (f1 - f2).abs() >= 0.01;
+                    }
                     return s != target;
                 }
                 if let Some(i) = v.as_i64() {
+                    if let Ok(t) = target.parse::<i64>() {
+                        return i != t;
+                    }
                     return i.to_string() != *target;
+                }
+                if let Some(f) = v.as_f64() {
+                    if let Ok(t) = target.parse::<f64>() {
+                        return (f - t).abs() >= 0.01;
+                    }
                 }
                 if let Some(b) = v.as_bool() {
                     return b.to_string() != *target;
@@ -1105,16 +1129,22 @@ fn evaluate_rule(rule: &stream_sorting_rule::Model, stream_stats: &Value) -> boo
         }
         ">=" => {
             if let Some(v) = val {
-                if let (Some(i), Ok(t)) = (v.as_i64(), target.parse::<i64>()) {
-                    return i >= t;
+                let current_val = v.as_f64()
+                    .or_else(|| v.as_i64().map(|i| i as f64))
+                    .or_else(|| v.as_str().and_then(|s| s.parse::<f64>().ok()));
+                if let (Some(f), Ok(t)) = (current_val, target.parse::<f64>()) {
+                    return f >= t;
                 }
             }
             false
         }
         "<=" => {
             if let Some(v) = val {
-                if let (Some(i), Ok(t)) = (v.as_i64(), target.parse::<i64>()) {
-                    return i <= t;
+                let current_val = v.as_f64()
+                    .or_else(|| v.as_i64().map(|i| i as f64))
+                    .or_else(|| v.as_str().and_then(|s| s.parse::<f64>().ok()));
+                if let (Some(f), Ok(t)) = (current_val, target.parse::<f64>()) {
+                    return f <= t;
                 }
             }
             false
@@ -1122,7 +1152,7 @@ fn evaluate_rule(rule: &stream_sorting_rule::Model, stream_stats: &Value) -> boo
         "contains" => {
             if let Some(v) = val {
                 if let Some(s) = v.as_str() {
-                    return s.contains(target);
+                    return s.to_lowercase().contains(&target.to_lowercase());
                 }
             }
             false

@@ -29,6 +29,19 @@ pub enum BroadcasterStatus {
     Stopping,
 }
 
+impl std::fmt::Display for BroadcasterStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BroadcasterStatus::Connecting => write!(f, "Connecting"),
+            BroadcasterStatus::Streaming => write!(f, "Streaming"),
+            BroadcasterStatus::Buffering => write!(f, "Buffering"),
+            BroadcasterStatus::Failover => write!(f, "Failover"),
+            BroadcasterStatus::Offline => write!(f, "Offline"),
+            BroadcasterStatus::Stopping => write!(f, "Stopping"),
+        }
+    }
+}
+
 pub struct Broadcaster {
     pub channel_id: String,
     pub tx: broadcast::Sender<bytes::Bytes>,
@@ -274,6 +287,11 @@ pub async fn handle_ts_status(State(state): State<Arc<AppState>>) -> axum::Json<
 
     let mut channels = Vec::new();
     for (_, stat) in active.iter() {
+        let status = if let Some(broadcaster) = state.broadcasters.get(&stat.channel_id) {
+            broadcaster.status.read().await.to_string()
+        } else {
+            "Unknown".to_string()
+        };
         let mut clients = Vec::new();
         for client in &stat.clients {
             let duration = now.saturating_sub(client.connected_at) as f64;
@@ -305,6 +323,7 @@ pub async fn handle_ts_status(State(state): State<Arc<AppState>>) -> axum::Json<
             "uptime": now.saturating_sub(stat.start_time),
             "total_bytes": stat.total_bytes.load(Ordering::Relaxed),
             "clients": clients,
+            "status": status,
             "m3u_profile": stat.m3u_profile,
         }));
     }
@@ -521,6 +540,7 @@ pub async fn broadcaster_pumper(
                 *broadcaster.status.write().await = BroadcasterStatus::Streaming;
                 let mut bytes_stream = resp.bytes_stream();
                 let mut no_subscribers_since: Option<tokio::time::Instant> = None;
+                let pumper_start_time = tokio::time::Instant::now();
 
                 loop {
                     let subs = broadcaster.subscriber_count.load(Ordering::Relaxed);
@@ -528,7 +548,8 @@ pub async fn broadcaster_pumper(
                         if no_subscribers_since.is_none() {
                             no_subscribers_since = Some(tokio::time::Instant::now());
                             *broadcaster.status.write().await = BroadcasterStatus::Stopping;
-                        } else if no_subscribers_since.unwrap().elapsed().as_secs() > settings.channel_shutdown_delay {
+                        } else if no_subscribers_since.unwrap().elapsed().as_secs() > settings.channel_shutdown_delay 
+                            && pumper_start_time.elapsed().as_secs() > 10 {
                             tracing::info!("Channel {} shutdown delay reached, terminating broadcaster", channel_id);
                             state.broadcasters.remove(&channel_id);
                             return;

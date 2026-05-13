@@ -23,25 +23,12 @@ export interface StreamInfo {
 	provider?: string;
 }
 
-// Module-level reactive state — singleton across the entire app lifetime.
-let _stream = $state<StreamInfo | null>(null);
-
-export const playerStore = {
-	/** The currently active stream (null = player closed) */
-	get stream(): StreamInfo | null {
-		return _stream;
-	},
-
-	/**
-	 * Open the floating player with the given stream info.
-	 * If a stream is already playing, it is replaced immediately.
-	 */
+export const playerStore = $state({
+	stream: null as StreamInfo | null,
 	open(info: StreamInfo) {
-		_stream = info;
+		this.stream = info;
 	},
-
-	/** Close the floating player and release the stream. */
 	close() {
-		_stream = null;
+		this.stream = null;
 	}
-};
+});

@@ -85,7 +85,7 @@
 	let filteredM3Us = $derived(
 		m3uViews
 			// Provider filter: if a provider is selected, only show that provider
-			.filter(m => selectedProviderId === '' || m.id === selectedProviderId)
+			.filter(m => selectedProviderId === '' || m.id.toString() === selectedProviderId.toString())
 			.map(m => {
 				if (!searchQuery.trim() && !showUnassignedOnly) return m;
 				const q = searchQuery.toLowerCase();
