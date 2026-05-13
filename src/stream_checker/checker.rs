@@ -199,6 +199,7 @@ fn resolve_ffmpeg() -> String {
 pub struct WorkerStatus {
     pub m3u_account_id: i64,
     pub m3u_account_name: String,
+    pub current_stream_id: Option<i64>,
     pub current_stream_name: String,
     pub completed: usize,
     pub total: usize,
@@ -741,6 +742,7 @@ pub async fn start_bulk_check(
                         st.workers.push(WorkerStatus {
                             m3u_account_id: account_id,
                             m3u_account_name: acc_name.clone(),
+                            current_stream_id: None,
                             current_stream_name: String::new(),
                             completed: 0,
                             total: total_in_group,
@@ -761,6 +763,7 @@ pub async fn start_bulk_check(
                                 .iter_mut()
                                 .find(|w| w.m3u_account_id == account_id)
                             {
+                                w.current_stream_id = Some(stream_obj.id);
                                 w.current_stream_name = stream_obj.name.clone();
                                 w.completed = idx;
                             }
@@ -815,6 +818,7 @@ pub async fn start_bulk_check(
                             .find(|w| w.m3u_account_id == account_id)
                         {
                             w.completed = total_in_group;
+                            w.current_stream_id = None;
                             w.current_stream_name = "Finished".to_string();
                         }
                     }

@@ -104,6 +104,30 @@
 			const res = await api.getBulkCheckStatus();
 			status = res;
 
+			if (status?.last_results?.length > 0) {
+				let mutated = false;
+				for (const groupChannels of Object.values(channelsByGroup)) {
+					for (const channel of groupChannels) {
+						if (channel.streams) {
+							for (const stream of channel.streams) {
+								const result = status.last_results.find((r: any) => r.id === stream.id);
+								if (result && result.stream_stats) {
+									// only mutate if different
+									if (JSON.stringify(stream.stream_stats) !== JSON.stringify(result.stream_stats)) {
+										stream.stream_stats = result.stream_stats;
+										stream.stream_stats_updated_at = new Date().toISOString();
+										mutated = true;
+									}
+								}
+							}
+						}
+					}
+				}
+				if (mutated) {
+					channelsByGroup = { ...channelsByGroup };
+				}
+			}
+
 			if (status.is_running && !pollingInterval) {
 				pollingInterval = setInterval(checkStatus, 2000);
 			} else if (!status.is_running && pollingInterval) {
@@ -471,6 +495,7 @@
 															{:else}
 																{#each channel.streams as stream}
 																	{@const isSelected = isStreamSelected(stream.id)}
+																	{@const isTesting = status?.workers?.some((w: any) => w.current_stream_id === stream.id)}
 																	<div class="tree-row stream-row" class:selected={isSelected} onclick={(e) => !status?.is_running && toggleStreamSelection(stream.id, e)}>
 																		<div class="stream-drag-spacer"></div>
 																		<div class="checkbox-wrapper">
@@ -482,7 +507,9 @@
 																				<span class="stream-provider">{stream.m3u_account_name || 'Custom'}</span>
 																			</div>
 																			<div class="stream-stats">
-																				{#if stream.stream_stats?.status === 'online'}
+																				{#if isTesting}
+																					<span class="badge testing"><RefreshCw class="spin" size={10} style="margin-right:4px;" />Testing...</span>
+																				{:else if stream.stream_stats?.status === 'online'}
 																					<span class="badge success">Online</span>
 																				{:else if stream.stream_stats?.status}
 																					<span class="badge error">{stream.stream_stats.status}</span>
