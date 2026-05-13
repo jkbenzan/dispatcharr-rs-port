@@ -43,7 +43,7 @@ Items queued for future implementation and audit phases.
   Audit group management logic and bulk stream assignments to channels.
 - [ ] **Logo & Metadata Resolution**
   Audit the fuzzy matching logic and logo URL resolution from the `channel_data.db` sidecar.
-- [ ] **Stream Checker Diagnostics**
+- [x] **Stream Checker Diagnostics**
   Ensure real-time `ffprobe` and `ffmpeg` results are correctly visualized in the diagnostic dashboard.
 
 ---

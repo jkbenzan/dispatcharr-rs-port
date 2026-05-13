@@ -115,8 +115,9 @@ Dispatcharr is a high-performance M3U/XC/EPG proxy and management system built w
 - **Diagnostic Logging**: Backend sync tasks log discovered category and stream counts to stdout/stderr for operational monitoring and system integrity verification.
 
 ## Active Connections (Stats Dashboard)
-- **Dashboard Integration**: Active connection monitoring lives as a tab on the Dashboard page (`/` → "Active Connections" tab), not a separate route. This avoids sidebar clutter while keeping the stats easily accessible.
+- **Dashboard Integration**: Active connection monitoring lives as a tab on the Dashboard page (`/` -> "Active Connections" tab), not a separate route. This avoids sidebar clutter while keeping the stats easily accessible.
 - **Sidebar Shortcut**: A persistent green Radio icon in the sidebar footer (next to theme controls) links directly to `/#connections`, allowing quick access from any page.
+- **Connection Lifecycle**: Connection lifetimes are meticulously tracked via a `ClientDropGuard` that is bound into the inner HTTP stream fold to guarantee metrics align strictly with client connection drops or aborts, avoiding premature or orphaned connections in the telemetry logic.
 - **Enriched Status Endpoint**: `GET /proxy/ts/status` batch-fetches channel metadata (name, number, logo URL) for all active channel UUIDs in a single DB query, eliminating the need for separate frontend lookups on each poll cycle.
 - **Stop Controls**: Two DELETE endpoints provide connection management:
   - `DELETE /proxy/ts/stop/:channel_id` — Stops all streaming for a channel (removes clients, aborts broadcaster pumper task).

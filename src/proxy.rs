@@ -873,8 +873,8 @@ pub async fn handle_proxy(
     let client_id_for_stream = client_id.clone();
     
     let stream = futures_util::stream::unfold(
-        (ring_data.into_iter(), rx, state_for_stream, channel_id_for_stream, client_id_for_stream),
-        move |(mut ring_iter, mut rx, st, ch, cl)| async move {
+        (ring_data.into_iter(), rx, state_for_stream, channel_id_for_stream, client_id_for_stream, guard),
+        move |(mut ring_iter, mut rx, st, ch, cl, _guard)| async move {
             // Check if client is still active
             {
                 let active = st.active_streams.read().await;
@@ -889,12 +889,12 @@ pub async fn handle_proxy(
             }
 
             if let Some(bytes) = ring_iter.next() {
-                return Some((Ok::<_, std::io::Error>(bytes), (ring_iter, rx, st, ch, cl)));
+                return Some((Ok::<_, std::io::Error>(bytes), (ring_iter, rx, st, ch, cl, _guard)));
             }
             
             loop {
                 match rx.recv().await {
-                    Ok(bytes) => return Some((Ok(bytes), (ring_iter, rx, st, ch, cl))),
+                    Ok(bytes) => return Some((Ok(bytes), (ring_iter, rx, st, ch, cl, _guard))),
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => return None,
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
                 }
@@ -902,14 +902,9 @@ pub async fn handle_proxy(
         }
     );
 
-    let final_stream = stream.map(move |res| {
-        let _g = &guard;
-        res
-    });
-
     Ok(Response::builder()
         .status(StatusCode::OK)
         .header("Content-Type", "video/mp2t")
-        .body(Body::from_stream(final_stream))
+        .body(Body::from_stream(stream))
         .unwrap())
 }

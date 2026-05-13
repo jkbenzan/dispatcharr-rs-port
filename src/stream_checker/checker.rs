@@ -355,16 +355,31 @@ pub async fn check_single_stream(
                 height = s.get("height").and_then(|h| h.as_i64());
 
                 // Parse FPS fraction (e.g. "60/1" or "30000/1001")
-                if let Some(f_str) = s.get("avg_frame_rate").and_then(|f| f.as_str()) {
+                let mut frame_rates_to_try = vec![];
+                if let Some(f) = s.get("avg_frame_rate").and_then(|f| f.as_str()) {
+                    frame_rates_to_try.push(f);
+                }
+                if let Some(f) = s.get("r_frame_rate").and_then(|f| f.as_str()) {
+                    frame_rates_to_try.push(f);
+                }
+
+                for f_str in frame_rates_to_try {
+                    if f_str == "0/0" {
+                        continue;
+                    }
                     let parts: Vec<&str> = f_str.split('/').collect();
                     if parts.len() == 2 {
                         let num: f64 = parts[0].parse().unwrap_or(0.0);
                         let den: f64 = parts[1].parse().unwrap_or(1.0);
-                        if den > 0.0 {
-                            fps = Some(format!("{}", num / den));
+                        if den > 0.0 && num > 0.0 {
+                            fps = Some(format!("{:.2}", num / den));
+                            break;
                         }
-                    } else {
-                        fps = Some(f_str.to_string());
+                    } else if let Ok(val) = f_str.parse::<f64>() {
+                        if val > 0.0 {
+                            fps = Some(format!("{:.2}", val));
+                            break;
+                        }
                     }
                 }
             } else if codec_type == "audio" && audio_codec.is_none() {
