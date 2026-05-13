@@ -604,7 +604,7 @@ pub async fn get_or_create_broadcaster(
         return b.clone();
     }
 
-    let (tx, _) = tokio::sync::broadcast::channel(1024);
+    let (tx, _) = tokio::sync::broadcast::channel(16384);
     let broadcaster = Arc::new(Broadcaster {
         channel_id: channel_id.clone(),
         tx,

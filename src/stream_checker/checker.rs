@@ -257,10 +257,12 @@ pub async fn check_single_stream(
         stream_obj.name, stream_url, duration
     );
 
+    let user_agent = "VLC/3.0.0";
+
     // 1. Run ffprobe
     let ffprobe_bin = resolve_ffprobe();
     let args = [
-        "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.3",
+        "-user_agent", user_agent,
         "-print_format", "json",
         "-show_streams",
         "-i", &stream_url,
@@ -422,7 +424,7 @@ pub async fn check_single_stream(
     let mut ffmpeg_cmd = Command::new(&ffmpeg_bin);
     ffmpeg_cmd.args(&[
         "-t", &duration_str,
-        "-user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.3",
+        "-user_agent", user_agent,
         "-i", &stream_url,
         "-vf", "freezedetect=n=0.003:d=2,blackdetect=d=2:pix_th=0.1",
         "-f", "null",
