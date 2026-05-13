@@ -297,6 +297,49 @@
 		}
 	}
 
+	async function sortSelectedChannels() {
+		if (selectedStreamIds.size === 0) return;
+		
+		// Find which channels have any of the selected streams
+		const channelIdsToSort = new Set<number>();
+		for (const groupChannels of Object.values(channelsByGroup)) {
+			for (const channel of groupChannels) {
+				if (channel.streams) {
+					for (const stream of channel.streams) {
+						if (selectedStreamIds.has(stream.id)) {
+							channelIdsToSort.add(channel.id);
+							break;
+						}
+					}
+				}
+			}
+		}
+
+		if (channelIdsToSort.size === 0) return;
+
+		try {
+			toast.info(`Sorting streams in ${channelIdsToSort.size} channels...`);
+			await api.bulkSortStreams(Array.from(channelIdsToSort));
+			
+			// Refresh those groups so the UI reflects the new sort order
+			const affectedGroups = new Set<number>();
+			for (const groupChannels of Object.values(channelsByGroup)) {
+				for (const channel of groupChannels) {
+					if (channelIdsToSort.has(channel.id)) {
+						const groupId = channel.channel_group || -1;
+						affectedGroups.add(groupId);
+					}
+				}
+			}
+			for (const groupId of affectedGroups) {
+				await loadChannelsForGroup(groupId, 1);
+			}
+			toast.success('Sorting complete!');
+		} catch (err: any) {
+			toast.error(err.message || 'Failed to sort channels');
+		}
+	}
+
 	function getProgressPercentage() {
 		if (!status || status.total === 0) return 0;
 		return Math.round((status.completed / status.total) * 100);
@@ -522,6 +565,12 @@
 																				{#if stream.stream_stats?.video_codec}
 																					<span class="stat-text">{stream.stream_stats.video_codec}</span>
 																				{/if}
+																				{#if stream.stream_stats?.source_fps}
+																					<span class="stat-text">{Number(stream.stream_stats.source_fps).toFixed(0)} FPS</span>
+																				{/if}
+																				{#if stream.stream_stats?.video_bitrate}
+																					<span class="stat-text">{Math.round(stream.stream_stats.video_bitrate)} kbps</span>
+																				{/if}
 																			</div>
 																		</div>
 																	</div>
@@ -553,14 +602,24 @@
 				<div class="selection-info">
 					{selectedStreamIds.size} streams selected
 				</div>
-				<button 
-					class="btn-primary" 
-					disabled={selectedStreamIds.size === 0 || status?.is_running}
-					onclick={startBulkCheck}
-				>
-					<Play size={16} />
-					<span>Start Test</span>
-				</button>
+				<div style="display: flex; gap: 8px;">
+					<button 
+						class="btn-secondary" 
+						disabled={selectedStreamIds.size === 0 || status?.is_running}
+						onclick={sortSelectedChannels}
+					>
+						<ListOrdered size={16} />
+						<span>Sort Checked</span>
+					</button>
+					<button 
+						class="btn-primary" 
+						disabled={selectedStreamIds.size === 0 || status?.is_running}
+						onclick={startBulkCheck}
+					>
+						<Play size={16} />
+						<span>Start Test</span>
+					</button>
+				</div>
 			</div>
 		</div>
 
