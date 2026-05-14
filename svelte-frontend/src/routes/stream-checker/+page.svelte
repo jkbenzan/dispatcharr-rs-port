@@ -566,11 +566,13 @@
 															{#if !channel.streams || channel.streams.length === 0}
 																<div class="empty-row">No streams assigned.</div>
 															{:else}
-																{#each channel.streams as stream}
+																{#each channel.streams as stream, idx (stream.id)}
 																	{@const isSelected = isStreamSelected(stream.id)}
 																	{@const isTesting = status?.workers?.some((w: any) => w.current_stream_id === stream.id)}
+																	<!-- Match Channel Manager by showing the channel stream order before each assigned stream. -->
+																	{@const streamOrder = Number.isFinite(Number(stream.order)) ? Number(stream.order) + 1 : idx + 1}
 																	<div class="tree-row stream-row" class:selected={isSelected} onclick={(e) => !status?.is_running && toggleStreamSelection(stream.id, e)}>
-																		<div class="stream-drag-spacer"></div>
+																		<span class="stream-order">{streamOrder}.</span>
 																		<div class="checkbox-wrapper">
 																			<input type="checkbox" checked={isSelected} onchange={(e) => toggleStreamSelection(stream.id, e)} disabled={status?.is_running} />
 																		</div>
@@ -1531,6 +1533,15 @@
 		&.selected {
 			background: rgba(255,255,255,0.05);
 		}
+	}
+	.stream-order {
+		/* Stream orders are stored zero-based, but users read the tree as a one-based list. */
+		min-width: 24px;
+		text-align: right;
+		color: var(--text-dim);
+		font-size: 11px;
+		font-variant-numeric: tabular-nums;
+		flex-shrink: 0;
 	}
 	.expand-btn {
 		background: none;
