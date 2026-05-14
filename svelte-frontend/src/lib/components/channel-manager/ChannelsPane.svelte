@@ -3,6 +3,7 @@
 	import { ChevronDown, ChevronRight, ChevronUp, MoreVertical, Play, Pencil, Trash2, Tv, GripVertical, ArrowUpDown } from 'lucide-svelte';
 	import { toast } from '$lib/toast.svelte';
 	import CreateChannelModal from './CreateChannelModal.svelte';
+	import EditGroupModal from './EditGroupModal.svelte';
 
 	// --- Types ---
 	// StreamView now includes stream_stats for health display in the sub-list
@@ -48,6 +49,10 @@
 	let showEditModal = $state(false);
 	let editChannelId = $state<number | null>(null);
 	let editInitialData = $state<any>(null);
+
+	// Edit group modal
+	let showEditGroupModal = $state(false);
+	let editGroupTarget = $state<GroupView | null>(null);
 
 	// Drag-to-reorder within channel streams
 	let draggingStreamId = $state<number | null>(null);
@@ -172,6 +177,24 @@
 		editInitialData = channel;
 		showEditModal = true;
 		openMenuId = null;
+	}
+
+	function handleEditGroupClick(group: GroupView) {
+		editGroupTarget = group;
+		showEditGroupModal = true;
+		openGroupMenuId = null;
+	}
+
+	async function handleEditGroupSave(newName: string) {
+		if (!editGroupTarget) return;
+		try {
+			await api.updateChannelGroup(editGroupTarget.id, { name: newName });
+			await loadData();
+			toast.success("Group renamed");
+		} catch (err) {
+			console.error("Failed to rename group", err);
+			toast.error("Failed to rename group");
+		}
 	}
 
 	// --- Sort by Health ---
@@ -332,21 +355,6 @@
 		}
 	}
 
-	async function editGroup(group: GroupView) {
-		const newName = window.prompt("Enter new group name:", group.name);
-		if (newName && newName.trim() !== "" && newName !== group.name) {
-			try {
-				await api.updateChannelGroup(group.id, { name: newName.trim() });
-				await loadData();
-				toast.success("Group renamed");
-			} catch (err) {
-				console.error("Failed to rename group", err);
-				toast.error("Failed to rename group");
-			}
-		}
-		openGroupMenuId = null;
-	}
-
 	async function deleteGroup(group: GroupView) {
 		groupDeletingId = group.id;
 		try {
@@ -405,7 +413,7 @@
 
 							{#if openGroupMenuId === group.id}
 								<div class="dropdown-menu" role="menu" tabindex="-1" onclick={(e) => e.stopPropagation()} onkeydown={(e) => { if (e.key === 'Escape') openGroupMenuId = null; }}>
-									<button class="menu-item" onclick={() => editGroup(group)}>
+									<button class="menu-item" onclick={() => handleEditGroupClick(group)}>
 										<Pencil size={13} /> Edit Group
 									</button>
 									{#if groupDeleteConfirmId === group.id}
@@ -599,6 +607,12 @@
 	channelId={editChannelId}
 	initialData={editInitialData}
 	onCreated={() => loadData()}
+/>
+
+<EditGroupModal
+	bind:show={showEditGroupModal}
+	groupName={editGroupTarget?.name || ''}
+	onSave={handleEditGroupSave}
 />
 
 <style lang="less">
