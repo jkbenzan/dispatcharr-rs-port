@@ -109,7 +109,8 @@
 				channels: (byGroup.get(g.id) || [])
 					.sort((a: any, b: any) => (a.channel_number || 0) - (b.channel_number || 0))
 					.map((ch: any) => ({ ...ch, expanded: expandedChannels.has(ch.id), streams: ch.streams || [] }))
-			}));
+			}))
+			.filter(g => g.channels.length > 0);
 		if (ungrouped.length > 0) views.push({
 			id: -1, name: 'Ungrouped', expanded: expandedGroups.has(-1),
 			channels: ungrouped.map(ch => ({ ...ch, expanded: expandedChannels.has(ch.id), streams: ch.streams || [] }))
