@@ -1,7 +1,10 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { api } from '$lib/api';
-  import { Search, Film, Tv, Star, Info } from 'lucide-svelte';
+  import { Search, Film, Tv, Star, Info, Play } from 'lucide-svelte';
+  import VodDetailModal from '$lib/components/VodDetailModal.svelte';
+  import VideoPlayer from '$lib/components/ui/VideoPlayer.svelte';
+  import Modal from '$lib/components/ui/Modal.svelte';
 
   // State
   let activeTab: 'movies' | 'series' = $state('movies');
@@ -15,6 +18,15 @@
   let loading = $state(true);
   let loadingMore = $state(false);
   let searchQuery = $state('');
+  
+  let selectedVod = $state<any>(null);
+  let showVodModal = $state(false);
+  
+  // Video Player state
+  let showPlayer = $state(false);
+  let playerUrl = $state('');
+  let playerTitle = $state('');
+  let playerItem = $state<any>(null);
   
   let observer: IntersectionObserver;
   let sentinel = $state<HTMLElement>();
@@ -132,6 +144,24 @@
 
     return null; // Fallback to placeholder
   }
+
+  function openVodDetails(item: any) {
+      selectedVod = item;
+      selectedVod.poster_url = getImageUrl(item);
+      showVodModal = true;
+  }
+
+  function handlePlay(event: any) {
+      const { type, id, stream_id, m3u_account_id } = event.detail;
+      
+      // Construct VOD proxy URL
+      playerUrl = `/proxy/vod/${type}/${id}?stream_id=${encodeURIComponent(stream_id || '')}&m3u_account_id=${m3u_account_id || ''}`;
+      playerTitle = selectedVod?.name || 'VOD Stream';
+      playerItem = selectedVod;
+      
+      showVodModal = false;
+      showPlayer = true;
+  }
 </script>
 
 <div class="page-container">
@@ -195,7 +225,7 @@
       {:else}
         <div class="poster-grid">
           {#each items as item}
-            <div class="poster-card">
+            <div class="poster-card" onclick={() => openVodDetails(item)}>
               <div class="poster-image-container">
                 {#if getImageUrl(item)}
                   <img src={getImageUrl(item)} alt={item.name} class="poster-img" onerror={(e) => (e.currentTarget as HTMLImageElement).style.display='none'} />
@@ -241,6 +271,26 @@
 		</div>
 	</main>
 </div>
+
+<VodDetailModal 
+  show={showVodModal} 
+  vod={selectedVod} 
+  type={activeTab === 'movies' ? 'movie' : 'series'}
+  on:close={() => showVodModal = false}
+  on:play={handlePlay}
+/>
+
+<Modal bind:show={showPlayer} title={playerTitle} width="900px">
+  <div class="player-container">
+    {#if showPlayer && playerUrl}
+      <VideoPlayer 
+        src={playerUrl} 
+        title={playerTitle}
+        autoplay={true}
+      />
+    {/if}
+  </div>
+</Modal>
 
 <style lang="less">
 	.page-container {

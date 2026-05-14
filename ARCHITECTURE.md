@@ -143,3 +143,9 @@ Dispatcharr is a high-performance M3U/XC/EPG proxy and management system built w
 ## Proxy Stream Stabilization
 - **Chunked Transfer EOF Prevention**: The roadcaster_pumper filters out empty  -length byte chunks from the upstream M3U provider. This prevents the Axum HTTP response from interpreting empty chunks as chunked transfer encoding EOF signals, which previously caused mpegts.js to silently freeze on the last decoded frame without throwing an error.
 - **Diagnostic Pipeline**: The fprobe and fmpeg stream checkers use explicitly injected HTTP headers (-headers "User-Agent: VLC/3.0.0\r\n") instead of the unreliable -user_agent flag. This ensures universal compatibility across all demuxers (HTTP and HLS) and prevents upstream providers from blocking the diagnostic requests.
+
+- **VOD Stream Proxy**:
+    - The backend provides a dedicated /proxy/vod/:content_type/:content_id endpoint for streaming VOD Movies and Series.
+    - Implements automated failover by checking HTTP response codes; if the primary M3U provider link returns non-200 or fails to connect, the proxy automatically attempts alternative matching streams.
+    - Preserves explicit stream_id and m3u_account_id queries from the frontend for direct provider selection from the UI modal.
+    - Connects directly to the frontend VideoPlayer.svelte via a responsive Modal component, ensuring uniform adaptive playback handling across Live and VOD streams.

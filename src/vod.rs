@@ -8,8 +8,9 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use std::sync::Arc;
 
-use crate::entities::{vod_category, vod_movie, vod_series, vod_m3umovierelation, vod_m3useriesrelation};
+use crate::entities::{vod_category, vod_movie, vod_series, vod_m3umovierelation, vod_m3useriesrelation, vod_episode, vod_m3uepisoderelation};
 use crate::AppState;
+use axum::extract::Path;
 
 #[derive(Deserialize)]
 pub struct Pagination {
@@ -208,19 +209,68 @@ pub async fn get_vod_movies(
 
     let count = q.clone().count(&state.db).await.unwrap_or(0);
 
-    let movies = q
+    let mut q_paged = q
         .order_by_asc(vod_movie::Column::Id)
         .limit(limit)
-        .offset(offset)
+        .offset(offset);
+
+    q_paged = q_paged.group_by(vod_movie::Column::Name).group_by(vod_movie::Column::Year);
+
+    let movies = q_paged
         .all(&state.db)
         .await
         .unwrap_or_default();
 
+    // Fetch providers for these movies
+    // Fetch M3U relations for all movies to provide multiple stream options
+    
+    // We need all relations for these movie names and years to group providers.
+    // Or simpler: just fetch relations for these specific movie IDs for now.
+    // Wait, if we group by name, we only get ONE movie ID per group.
+    // To get all providers for a movie name/year, we need to find all movie IDs with those names/years.
+    let mut names = Vec::new();
+    for m in &movies {
+        names.push(m.name.clone());
+    }
+
+    let all_matching_movies = vod_movie::Entity::find()
+        .filter(vod_movie::Column::Name.is_in(names))
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+
+    let all_matching_movie_ids: Vec<i64> = all_matching_movies.iter().map(|m| m.id).collect();
+
+    let relations = vod_m3umovierelation::Entity::find()
+        .filter(vod_m3umovierelation::Column::MovieId.is_in(all_matching_movie_ids))
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+
+    // Group relations by Name + Year
+    let mut providers_by_name_year: std::collections::HashMap<(String, Option<i32>), Vec<serde_json::Value>> = std::collections::HashMap::new();
+
+    let id_to_movie: std::collections::HashMap<i64, &crate::entities::vod_movie::Model> = all_matching_movies.iter().map(|m| (m.id, m)).collect();
+
+    for r in relations {
+        if let Some(m) = id_to_movie.get(&r.movie_id) {
+            let key = (m.name.clone(), m.year);
+            let entry = providers_by_name_year.entry(key).or_default();
+            entry.push(json!({
+                "stream_id": r.stream_id,
+                "m3u_account_id": r.m3u_account_id,
+                "container_extension": r.container_extension,
+                "movie_id": r.movie_id
+            }));
+        }
+    }
+
     let mut results = Vec::new();
     for m in movies {
-        if let Ok(val) = serde_json::to_value(&m) {
-            results.push(val);
-        }
+        let mut val = serde_json::to_value(&m).unwrap_or(json!({}));
+        let key = (m.name.clone(), m.year);
+        val["providers"] = json!(providers_by_name_year.get(&key).unwrap_or(&Vec::new()));
+        results.push(val);
     }
 
     Ok(Json(json!({
@@ -266,17 +316,55 @@ pub async fn get_vod_series(
 
     let count = query.clone().count(&state.db).await.unwrap_or(0);
 
-    let series = query
+    let mut query_paged = query
         .order_by_asc(vod_series::Column::Id)
         .limit(limit)
-        .offset(offset)
+        .offset(offset);
+
+    query_paged = query_paged.group_by(vod_series::Column::Name).group_by(vod_series::Column::Year);
+
+    let series = query_paged
         .all(&state.db)
         .await
         .unwrap_or_default();
 
+    let mut names = Vec::new();
+    for s in &series {
+        names.push(s.name.clone());
+    }
+
+    let all_matching_series = vod_series::Entity::find()
+        .filter(vod_series::Column::Name.is_in(names))
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+
+    let all_matching_series_ids: Vec<i64> = all_matching_series.iter().map(|s| s.id).collect();
+
+    let relations = vod_m3useriesrelation::Entity::find()
+        .filter(vod_m3useriesrelation::Column::SeriesId.is_in(all_matching_series_ids))
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+
+    let mut providers_by_name_year: std::collections::HashMap<(String, Option<i32>), Vec<serde_json::Value>> = std::collections::HashMap::new();
+
+    let id_to_series: std::collections::HashMap<i64, &crate::entities::vod_series::Model> = all_matching_series.iter().map(|s| (s.id, s)).collect();
+
+    for r in relations {
+        if let Some(s) = id_to_series.get(&r.series_id) {
+            let key = (s.name.clone(), s.year);
+            let entry = providers_by_name_year.entry(key).or_default();
+            entry.push(json!({
+                "m3u_account_id": r.m3u_account_id,
+                "series_id": r.series_id
+            }));
+        }
+    }
+
     let mut results = Vec::new();
     for s in series {
-        results.push(json!({
+        let mut val = json!({
             "id": s.id,
             "uuid": s.uuid,
             "name": s.name,
@@ -290,13 +378,108 @@ pub async fn get_vod_series(
             "created_at": s.created_at,
             "updated_at": s.updated_at,
             "logo_id": s.logo_id,
-        }));
+        });
+        
+        let key = (s.name.clone(), s.year);
+        val["providers"] = json!(providers_by_name_year.get(&key).unwrap_or(&Vec::new()));
+        
+        results.push(val);
     }
 
     Ok(Json(json!({
         "count": count,
         "next": if (offset + limit) < count { Some(page + 1) } else { None },
         "previous": if page > 1 { Some(page - 1) } else { None },
+        "results": results
+    })))
+}
+
+pub async fn get_vod_episodes(
+    State(state): State<Arc<AppState>>,
+    Path(series_id): Path<i64>,
+) -> Result<Json<Value>, StatusCode> {
+    let series = vod_series::Entity::find_by_id(series_id)
+        .one(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    let mut query = vod_series::Entity::find()
+        .filter(vod_series::Column::Name.eq(series.name.clone()));
+    
+    if let Some(y) = series.year {
+        query = query.filter(vod_series::Column::Year.eq(y));
+    } else {
+        query = query.filter(vod_series::Column::Year.is_null());
+    }
+
+    let all_matching_series = query
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+
+    let series_ids: Vec<i64> = all_matching_series.iter().map(|s| s.id).collect();
+
+    let episodes = vod_episode::Entity::find()
+        .filter(vod_episode::Column::SeriesId.is_in(series_ids))
+        .order_by_asc(vod_episode::Column::SeasonNumber)
+        .order_by_asc(vod_episode::Column::EpisodeNumber)
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+
+    let episode_ids: Vec<i64> = episodes.iter().map(|e| e.id).collect();
+    let relations = vod_m3uepisoderelation::Entity::find()
+        .filter(vod_m3uepisoderelation::Column::EpisodeId.is_in(episode_ids))
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+
+    let mut providers_by_episode: std::collections::HashMap<i64, Vec<serde_json::Value>> = std::collections::HashMap::new();
+    for r in relations {
+        let entry = providers_by_episode.entry(r.episode_id).or_default();
+        entry.push(json!({
+            "stream_id": r.stream_id,
+            "m3u_account_id": r.m3u_account_id,
+            "container_extension": r.container_extension,
+            "episode_id": r.episode_id
+        }));
+    }
+
+    let mut grouped_episodes: std::collections::HashMap<(Option<i32>, Option<i32>), Value> = std::collections::HashMap::new();
+
+    for e in episodes {
+        let key = (e.season_number, e.episode_number);
+        
+        let mut ep_json = serde_json::to_value(&e).unwrap_or(json!({}));
+        let mut current_providers = providers_by_episode.remove(&e.id).unwrap_or_default();
+        
+        if let std::collections::hash_map::Entry::Occupied(mut entry) = grouped_episodes.entry(key) {
+            let existing = entry.get_mut();
+            if let Some(existing_providers) = existing.get_mut("providers").and_then(|v| v.as_array_mut()) {
+                existing_providers.append(&mut current_providers);
+            }
+        } else {
+            ep_json["providers"] = json!(current_providers);
+            grouped_episodes.insert(key, ep_json);
+        }
+    }
+
+    let mut results: Vec<Value> = grouped_episodes.into_values().collect();
+    results.sort_by(|a, b| {
+        let s_a = a.get("season_number").and_then(|v| v.as_i64()).unwrap_or(0);
+        let s_b = b.get("season_number").and_then(|v| v.as_i64()).unwrap_or(0);
+        if s_a == s_b {
+            let e_a = a.get("episode_number").and_then(|v| v.as_i64()).unwrap_or(0);
+            let e_b = b.get("episode_number").and_then(|v| v.as_i64()).unwrap_or(0);
+            e_a.cmp(&e_b)
+        } else {
+            s_a.cmp(&s_b)
+        }
+    });
+
+    Ok(Json(json!({
+        "count": results.len(),
         "results": results
     })))
 }

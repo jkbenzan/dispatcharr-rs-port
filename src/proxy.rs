@@ -121,6 +121,8 @@ pub struct ProxyQuery {
     pub p: Option<String>,
     pub token: Option<String>,
     pub format: Option<String>,
+    pub stream_id: Option<String>,
+    pub m3u_account_id: Option<i64>,
 }
 
 fn encode_query_component(value: &str) -> String {
@@ -678,6 +680,152 @@ pub async fn get_or_create_broadcaster(
     *broadcaster.pumper_handle.write().await = Some(handle);
 
     broadcaster
+}
+
+pub async fn handle_vod_proxy(
+    Path((content_type, content_id)): Path<(String, String)>,
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<ProxyQuery>,
+    headers: axum::http::HeaderMap,
+) -> Result<Response<Body>, StatusCode> {
+    use crate::entities::{vod_m3umovierelation, vod_m3uepisoderelation, m3u_account};
+    use sea_orm::{EntityTrait, QueryFilter, ColumnTrait};
+    
+    let is_movie = content_type == "movie";
+    
+    // Support parsing content_id as i64 (some clients may pass ID) or String
+    let id_i64 = content_id.parse::<i64>().ok();
+
+    // 1. Fetch relations for this content (movies vs episodes)
+    let mut available_streams: Vec<(m3u_account::Model, String, String)> = Vec::new();
+    
+    let db = &state.db;
+    
+    if is_movie {
+        let relations = if let Some(id) = id_i64 {
+            vod_m3umovierelation::Entity::find()
+                .filter(vod_m3umovierelation::Column::MovieId.eq(id))
+                .all(db).await.unwrap_or_default()
+        } else {
+            vec![]
+        };
+        
+        for rel in relations {
+            if let Ok(Some(account)) = m3u_account::Entity::find_by_id(rel.m3u_account_id).one(db).await {
+                if account.is_active {
+                    available_streams.push((account, rel.stream_id.to_string(), rel.container_extension.unwrap_or_else(|| "mp4".to_string())));
+                }
+            }
+        }
+    } else if content_type == "episode" {
+        let relations = if let Some(id) = id_i64 {
+            vod_m3uepisoderelation::Entity::find()
+                .filter(vod_m3uepisoderelation::Column::EpisodeId.eq(id))
+                .all(db).await.unwrap_or_default()
+        } else {
+            vec![]
+        };
+        
+        for rel in relations {
+            if let Ok(Some(account)) = m3u_account::Entity::find_by_id(rel.m3u_account_id).one(db).await {
+                if account.is_active {
+                    available_streams.push((account, rel.stream_id.to_string(), rel.container_extension.unwrap_or_else(|| "mp4".to_string())));
+                }
+            }
+        }
+    } else {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    
+    if available_streams.is_empty() {
+        tracing::error!("No VOD stream available for {} ID: {}", content_type, content_id);
+        return Err(StatusCode::NOT_FOUND);
+    }
+    
+    // If a specific stream_id and m3u_account_id were requested, move that one to the front of the list
+    if let (Some(pref_stream_id), Some(pref_m3u_acc_id)) = (&query.stream_id, query.m3u_account_id) {
+        if let Some(pos) = available_streams.iter().position(|s| &s.1 == pref_stream_id && s.0.id == pref_m3u_acc_id) {
+            let pref = available_streams.remove(pos);
+            available_streams.insert(0, pref);
+        }
+    }
+    
+    // Create HTTP Client
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::limited(5))
+        .danger_accept_invalid_certs(true)
+        .build()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let mut headers_to_forward = reqwest::header::HeaderMap::new();
+    if let Some(range) = headers.get(reqwest::header::RANGE) {
+        headers_to_forward.insert(reqwest::header::RANGE, range.clone());
+    }
+    
+    // Attempt connecting to the providers in order (Fallback support)
+    for (account, stream_id, container_ext) in available_streams {
+        let base_url_opt = account.server_url.unwrap_or_default();
+        let base_url = base_url_opt.trim_end_matches('/');
+        // Normalize XTREAM Codes URL
+        let normalized_url = if base_url.ends_with("/get.php") {
+            base_url.replace("/get.php", "")
+        } else {
+            base_url.to_string()
+        };
+        
+        let path_type = if is_movie { "movie" } else { "series" };
+        let final_url = format!("{}/{}/{}/{}/{}.{}", normalized_url, path_type, account.username.unwrap_or_default(), account.password.unwrap_or_default(), stream_id, container_ext);
+        
+        tracing::info!("Attempting VOD stream from provider '{}': {}", account.name, final_url);
+        
+        match client.get(&final_url).headers(headers_to_forward.clone()).send().await {
+            Ok(response) => {
+                let status = response.status();
+                if status.is_success() || status == reqwest::StatusCode::PARTIAL_CONTENT {
+                    // Extract headers from response
+                    let content_length = response.headers().get(reqwest::header::CONTENT_LENGTH).cloned();
+                    let content_type = response.headers().get(reqwest::header::CONTENT_TYPE).cloned();
+                    let content_range = response.headers().get(reqwest::header::CONTENT_RANGE).cloned();
+                    let accept_ranges = response.headers().get(reqwest::header::ACCEPT_RANGES).cloned();
+                    
+                    let mut resp_builder = Response::builder()
+                        .status(status.as_u16());
+                        
+                    if let Some(cl) = content_length {
+                        resp_builder = resp_builder.header(axum::http::header::CONTENT_LENGTH, cl);
+                    }
+                    if let Some(ct) = content_type {
+                        resp_builder = resp_builder.header(axum::http::header::CONTENT_TYPE, ct);
+                    } else {
+                        resp_builder = resp_builder.header(axum::http::header::CONTENT_TYPE, "video/mp4");
+                    }
+                    if let Some(cr) = content_range {
+                        resp_builder = resp_builder.header(axum::http::header::CONTENT_RANGE, cr);
+                    }
+                    if let Some(ar) = accept_ranges {
+                        resp_builder = resp_builder.header(axum::http::header::ACCEPT_RANGES, ar);
+                    } else {
+                        resp_builder = resp_builder.header(axum::http::header::ACCEPT_RANGES, "bytes");
+                    }
+                    
+                    let stream = response.bytes_stream();
+                    let body = Body::from_stream(stream);
+                    
+                    tracing::info!("VOD Streaming successful from provider '{}'", account.name);
+                    return Ok(resp_builder.body(body).unwrap());
+                } else {
+                    tracing::warn!("Provider '{}' returned HTTP {}", account.name, status);
+                }
+            },
+            Err(e) => {
+                tracing::warn!("Provider '{}' VOD connection error: {}", account.name, e);
+            }
+        }
+    }
+    
+    // If we get here, all providers failed
+    tracing::error!("All providers failed to stream VOD content {} ID {}", content_type, content_id);
+    Err(StatusCode::SERVICE_UNAVAILABLE)
 }
 
 pub async fn handle_proxy(

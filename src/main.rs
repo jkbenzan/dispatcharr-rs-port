@@ -336,7 +336,9 @@ async fn main() {
         .route("/all/", get(vod::get_vod_all))
         .route("/categories/", get(vod::get_vod_categories))
         .route("/movies/", get(vod::get_vod_movies))
-        .route("/series/", get(vod::get_vod_series));
+        .route("/series/", get(vod::get_vod_series))
+        .route("/series/:series_id/episodes", get(vod::get_vod_episodes))
+        .route("/series/:series_id/episodes/", get(vod::get_vod_episodes));
 
     let app = Router::new()
         // --- AUTH ---
@@ -620,6 +622,8 @@ async fn main() {
         .route("/ws/", get(ws_handler))
         .route("/stream/:channel_id/", get(proxy::handle_proxy))
         .route("/stream/:channel_id", get(proxy::handle_proxy))
+        .route("/proxy/vod/:content_type/:content_id", get(proxy::handle_vod_proxy))
+        .route("/proxy/vod/:content_type/:content_id/", get(proxy::handle_vod_proxy))
         .route("/proxy/ts/stream/:channel_id/", get(proxy::handle_proxy))
         .route("/proxy/ts/stream/:channel_id", get(proxy::handle_proxy))
         .route("/proxy/ts/status", get(proxy::handle_ts_status))
