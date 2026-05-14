@@ -54,6 +54,15 @@
 	let dragOverStreamId = $state<number | null>(null);
 	let dragSourceChannelId = $state<number | null>(null);
 
+	// Group drag-and-drop
+	let draggingChannelId = $state<number | null>(null);
+	let dragOverGroupId = $state<number | null>(null);
+
+	// Group kebab menu
+	let openGroupMenuId = $state<number | null>(null);
+	let groupDeleteConfirmId = $state<number | null>(null);
+	let groupDeletingId = $state<number | null>(null);
+
 	// --- Expose reload() to parent via binding ---
 	export function reload() { loadData(); }
 
@@ -100,8 +109,7 @@
 				channels: (byGroup.get(g.id) || [])
 					.sort((a: any, b: any) => (a.channel_number || 0) - (b.channel_number || 0))
 					.map((ch: any) => ({ ...ch, expanded: expandedChannels.has(ch.id), streams: ch.streams || [] }))
-			}))
-			.filter(g => g.channels.length > 0);
+			}));
 		if (ungrouped.length > 0) views.push({
 			id: -1, name: 'Ungrouped', expanded: expandedGroups.has(-1),
 			channels: ungrouped.map(ch => ({ ...ch, expanded: expandedChannels.has(ch.id), streams: ch.streams || [] }))
@@ -264,11 +272,93 @@
 	// doesn't immediately clear it on the same event.
 	let deleteConfirmSetAt = 0;
 
+	let groupDeleteConfirmSetAt = 0;
+
 	// Close menus when clicking outside
 	function handleWindowClick(e: MouseEvent) {
 		if (!(e.target as HTMLElement).closest('.kebab-wrapper')) {
 			openMenuId = null;
 			deleteConfirmId = null;
+			openGroupMenuId = null;
+			if (Date.now() - groupDeleteConfirmSetAt > 50) {
+				groupDeleteConfirmId = null;
+			}
+		}
+	}
+
+	// --- Group Handlers ---
+	function handleChannelDragStart(e: DragEvent, channel: ChannelView) {
+		draggingChannelId = channel.id;
+		if (e.dataTransfer) {
+			e.dataTransfer.effectAllowed = 'move';
+			e.dataTransfer.setData('application/x-dispatcharr-channel', channel.id.toString());
+		}
+	}
+
+	function handleChannelDragEnd() {
+		draggingChannelId = null;
+		dragOverGroupId = null;
+	}
+
+	function handleGroupDragOver(e: DragEvent, group: GroupView) {
+		if (e.dataTransfer?.types.includes('application/x-dispatcharr-channel')) {
+			e.preventDefault();
+			if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+			dragOverGroupId = group.id;
+		}
+	}
+
+	function handleGroupDragLeave(e: DragEvent, group: GroupView) {
+		if (dragOverGroupId === group.id) dragOverGroupId = null;
+	}
+
+	async function handleGroupDrop(e: DragEvent, group: GroupView) {
+		e.preventDefault();
+		dragOverGroupId = null;
+		if (e.dataTransfer?.types.includes('application/x-dispatcharr-channel')) {
+			const channelIdStr = e.dataTransfer.getData('application/x-dispatcharr-channel');
+			if (channelIdStr) {
+				const channelId = parseInt(channelIdStr, 10);
+				try {
+					await api.updateChannel(channelId, { channel_group_id: group.id === -1 ? null : group.id });
+					await loadData();
+					toast.success(`Moved to ${group.name}`);
+				} catch (err) {
+					console.error("Failed to move channel", err);
+					toast.error("Failed to move channel.");
+				}
+			}
+		}
+	}
+
+	async function editGroup(group: GroupView) {
+		const newName = window.prompt("Enter new group name:", group.name);
+		if (newName && newName.trim() !== "" && newName !== group.name) {
+			try {
+				await api.updateChannelGroup(group.id, { name: newName.trim() });
+				await loadData();
+				toast.success("Group renamed");
+			} catch (err) {
+				console.error("Failed to rename group", err);
+				toast.error("Failed to rename group");
+			}
+		}
+		openGroupMenuId = null;
+	}
+
+	async function deleteGroup(group: GroupView) {
+		groupDeletingId = group.id;
+		try {
+			await api.deleteChannelGroup(group.id);
+			await loadData();
+			toast.success("Group deleted");
+		} catch (err) {
+			console.error("Failed to delete group", err);
+			toast.error("Failed to delete group");
+		} finally {
+			groupDeletingId = null;
+			openGroupMenuId = null;
+			groupDeleteConfirmId = null;
 		}
 	}
 
@@ -291,12 +381,45 @@
 		{:else}
 			{#each filteredGroups as group (group.id)}
 				<!-- GROUP ROW -->
-				<div class="group-row">
+				<div class="group-row"
+					class:drop-target={dragOverGroupId === group.id}
+					class:deleting={groupDeletingId === group.id}
+					role="region"
+					aria-label="Channel Group"
+					ondragover={(e) => handleGroupDragOver(e, group)}
+					ondragleave={(e) => handleGroupDragLeave(e, group)}
+					ondrop={(e) => handleGroupDrop(e, group)}
+				>
 					<button class="expand-btn" onclick={() => group.expanded = !group.expanded}>
 						{#if group.expanded}<ChevronDown size={15} />{:else}<ChevronRight size={15} />{/if}
 						<span class="group-name">{group.name}</span>
 						<span class="badge">{group.channels.length}</span>
 					</button>
+
+					{#if group.id !== -1}
+						<div class="kebab-wrapper group-kebab">
+							<button class="icon-btn" title="Group actions" onclick={(e) => { e.stopPropagation(); openGroupMenuId = openGroupMenuId === group.id ? null : group.id; }}>
+								<MoreVertical size={14} />
+							</button>
+
+							{#if openGroupMenuId === group.id}
+								<div class="dropdown-menu" role="menu" tabindex="-1" onclick={(e) => e.stopPropagation()} onkeydown={(e) => { if (e.key === 'Escape') openGroupMenuId = null; }}>
+									<button class="menu-item" onclick={() => editGroup(group)}>
+										<Pencil size={13} /> Edit Group
+									</button>
+									{#if groupDeleteConfirmId === group.id}
+										<button class="menu-item danger confirm" onclick={(e) => { e.stopPropagation(); deleteGroup(group); }}>
+											<Trash2 size={13} /> Confirm Delete
+										</button>
+									{:else}
+										<button class="menu-item danger" onclick={(e) => { e.stopPropagation(); groupDeleteConfirmId = group.id; groupDeleteConfirmSetAt = Date.now(); }}>
+											<Trash2 size={13} /> Delete Group
+										</button>
+									{/if}
+								</div>
+							{/if}
+						</div>
+					{/if}
 				</div>
 
 				{#if group.expanded}
@@ -308,6 +431,9 @@
 								class:drop-target={crossPaneDropTargetId === channel.id}
 								class:deleting={deletingId === channel.id}
 								role="listitem"
+								draggable="true"
+								ondragstart={(e) => handleChannelDragStart(e, channel)}
+								ondragend={handleChannelDragEnd}
 								ondragover={(e) => handleChannelDragOver(e, channel)}
 								ondragleave={() => crossPaneDropTargetId = null}
 								ondrop={(e) => handleChannelDrop(e, channel)}

@@ -1541,6 +1541,110 @@ pub async fn create_channel_group(
     Ok(Json(json!(inserted)))
 }
 
+pub async fn update_channel_group(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Path(id): axum::extract::Path<i64>,
+    Json(payload): Json<Value>,
+) -> Result<Json<Value>, StatusCode> {
+    let group = channel_group::Entity::find_by_id(id)
+        .one(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    let mut active: channel_group::ActiveModel = group.into();
+    let mut updated = false;
+
+    if let Some(name) = payload.get("name").and_then(|v| v.as_str()) {
+        active.name = Set(name.to_string());
+        updated = true;
+    }
+
+    if updated {
+        let saved = active.update(&state.db).await.map_err(|e| {
+            tracing::error!("Failed to update channel group: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+        let _ = crate::events::record_event(
+            &state.db,
+            "channel_group_updated",
+            Some(saved.name.clone()),
+            serde_json::json!({
+                "status": "info",
+                "event": "Channel Group Updated",
+                "group_id": saved.id
+            }),
+        ).await;
+
+        Ok(Json(json!(saved)))
+    } else {
+        let group = channel_group::Entity::find_by_id(id).one(&state.db).await.unwrap().unwrap();
+        Ok(Json(json!(group)))
+    }
+}
+
+pub async fn delete_channel_group(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Path(id): axum::extract::Path<i64>,
+) -> Result<StatusCode, StatusCode> {
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+
+    let group = channel_group::Entity::find_by_id(id)
+        .one(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    // 1. Unlink any channels in this group
+    let channels = crate::entities::channel::Entity::find()
+        .filter(crate::entities::channel::Column::ChannelGroupId.eq(id))
+        .all(&state.db)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to fetch channels for group {}: {}", id, e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    for ch in channels {
+        let mut active: crate::entities::channel::ActiveModel = ch.into();
+        active.channel_group_id = sea_orm::Set(None);
+        let _ = active.update(&state.db).await;
+    }
+
+    // 2. Remove group M3U mappings
+    let _ = crate::entities::channel_group_m3u_account::Entity::delete_many()
+        .filter(crate::entities::channel_group_m3u_account::Column::ChannelGroupId.eq(id))
+        .exec(&state.db)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to delete channel group mappings {}: {}", id, e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    // 3. Delete the group
+    crate::entities::channel_group::Entity::delete_by_id(id)
+        .exec(&state.db)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to delete channel group {}: {}", id, e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    let _ = crate::events::record_event(
+        &state.db,
+        "channel_group_deleted",
+        Some(group.name),
+        serde_json::json!({
+            "status": "warning",
+            "event": "Channel Group Deleted",
+            "group_id": id
+        }),
+    ).await;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
 pub async fn get_channel_profiles(State(state): State<Arc<AppState>>) -> Json<Value> {
     let profiles = channel_profile::Entity::find()
         .all(&state.db)

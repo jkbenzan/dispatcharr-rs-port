@@ -440,6 +440,8 @@ async fn main() {
             post(api::set_channel_logos_from_epg),
         )
         .route("/api/channels/groups/", get(api::get_channel_groups).post(api::create_channel_group))
+        .route("/api/channels/groups/:id/", put(api::update_channel_group).patch(api::update_channel_group).delete(api::delete_channel_group))
+        .route("/api/channels/groups/:id", put(api::update_channel_group).patch(api::update_channel_group).delete(api::delete_channel_group))
         .route("/api/channels/profiles/", get(api::get_channel_profiles))
         .route("/api/channels/channels/ids/", get(api::get_channel_ids))
         .route(

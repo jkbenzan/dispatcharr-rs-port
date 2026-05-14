@@ -41,11 +41,11 @@ Items queued for future implementation and audit phases.
   Integrate FFmpeg/FFprobe filters to detect frozen images or black screens to identify non-functional but "active" streams.
 - [x] **Stream Checker: Auto-Pruning**
   Implement logic to automatically delete or disable streams that consistently fail health checks or are flagged as fake.
-- [ ] **Channel Manager UX Refinement**
+- [x] **Channel Manager UX Refinement**
   Verify drag-and-drop assignments between the Stream Pane and Channel Pane. Ensure smooth performance with large lists.
-- [ ] **Fix Channel Category/Group Modal Search Persistence**
+- [x] **Fix Channel Category/Group Modal Search Persistence**
   Search strings in the Channel Manager modals (Create Channel and M3U Provider) are persisting after closing and reopening. Reset all search and filter state on modal open/close.
-- [ ] **Group & Bulk Operations**
+- [x] **Group & Bulk Operations**
   Audit group management logic and bulk stream assignments to channels.
 - [ ] **Logo & Metadata Resolution**
   Audit the fuzzy matching logic and logo URL resolution from the `channel_data.db` sidecar.

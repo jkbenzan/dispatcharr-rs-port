@@ -51,6 +51,19 @@ export const api = {
     body: JSON.stringify(data)
   }),
   getChannelsSummary: () => fetchApi('/api/channels/channels/summary/'),
+  bulkUpdateChannels: (data: any[]) => fetchApi('/api/channels/channels/edit/bulk/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  }),
+  updateChannelGroup: (id: number, data: { name: string }) => fetchApi(`/api/channels/groups/${id}/`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  }),
+  deleteChannelGroup: (id: number) => fetchApi(`/api/channels/groups/${id}/`, {
+    method: 'DELETE'
+  }),
 
   // =================== EPG ===================
   getEpgData: () => fetchApi('/api/epg/epgdata/'),
