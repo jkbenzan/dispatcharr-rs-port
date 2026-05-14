@@ -617,13 +617,22 @@
 .pane-content { flex: 1; overflow-y: auto; padding: 8px 0; }
 .state-msg { padding: 32px; text-align: center; color: var(--text-dim); font-style: italic; font-size: 13px; }
 
+.group-row {
+	display: flex; align-items: center;
+	transition: background 0.15s, outline 0.15s;
+	&.drop-target { background: rgba(237,28,36,0.12); outline: 1px dashed var(--accent); }
+	&.deleting { opacity: 0.4; pointer-events: none; }
+}
 .group-row .expand-btn {
-	width: 100%; display: flex; align-items: center; gap: 8px;
+	flex: 1; display: flex; align-items: center; gap: 8px;
 	padding: 8px 16px; background: transparent; border: none;
 	color: var(--text-bright); cursor: pointer; font-size: 13px; font-weight: 600; text-align: left;
 	&:hover { background: rgba(255,255,255,0.05); }
 	.group-name { flex: 1; }
 	.badge { font-size: 11px; background: var(--surface-bright); padding: 2px 6px; border-radius: 10px; color: var(--text-dim); }
+}
+.group-kebab {
+	padding-right: 16px;
 }
 
 .channels-list { padding: 2px 0 8px; }
