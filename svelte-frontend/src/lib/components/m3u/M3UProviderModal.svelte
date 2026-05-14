@@ -117,9 +117,9 @@
 	}
 
 	function countryFilterPlaceholder() {
-		if (countryDetectionCoverage < 0.35) return 'No strong country pattern detected';
-		if (detectedCountryOptions.length === 0) return 'No detected countries match search';
-		return 'All detected countries';
+		if (countryDetectionCoverage < 0.35) return 'No strong classification pattern detected';
+		if (detectedCountryOptions.length === 0) return 'No detected categories match search';
+		return 'All detected categories';
 	}
 
 	function isGroupEnabled(groupId: number) {
@@ -560,15 +560,15 @@
 								{#if shouldShowCountryFilter}
 									<div class="category-filter-panel">
 										<div class="filter-field">
-											<label for="countrySearch">Country search</label>
-											<input id="countrySearch" type="search" placeholder="Type to narrow countries..." bind:value={countrySearch} />
+											<label for="countrySearch">Category search</label>
+											<input id="countrySearch" type="search" placeholder="Type to narrow categories..." bind:value={countrySearch} />
 										</div>
 										<div class="filter-field">
-											<label for="countryFilter">Detected country</label>
-											<select id="countryFilter" bind:value={countryFilter} aria-label="Filter categories by detected country">
+											<label for="countryFilter">Detected category</label>
+											<select id="countryFilter" bind:value={countryFilter} aria-label="Filter categories by detected classification">
 												<option value="">{countryFilterPlaceholder()}</option>
 												{#each filteredCountryOptions as country}
-													<option value={country.code}>{countryFlag(country.code)} {country.name}</option>
+													<option value={country.code}>{country.flag} {country.name}</option>
 												{/each}
 											</select>
 										</div>
@@ -598,7 +598,7 @@
 									<div class="setting-info">
 										<span class="setting-name">
 											{#if country}
-												<span class="flag" title={country.name}>{countryFlag(country.code)}</span>
+												<span class="flag" title={country.name}>{country.flag}</span>
 											{/if}
 											{group.name}
 										</span>
