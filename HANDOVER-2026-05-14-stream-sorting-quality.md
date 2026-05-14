@@ -16,6 +16,7 @@ Video streaming had been stabilized, and the active troubleshooting focus moved 
 - Follow-up fix: sorting-rule reads now degrade gracefully if `stream_sorting_rule` is unreadable. The rules endpoint returns an empty list and bulk sort continues with built-in quality/reliability scoring instead of returning HTTP 500.
 - Follow-up fix: Stream Checker now builds its group/channel/stream tree from the same `getChannels({ page_size: 5000 })` response as Channel Manager, preserving assigned streams under each expanded channel and reflecting post-sort order immediately.
 - Follow-up fix: Stream Checker stream rows now show the same one-based order numbers as Channel Manager. The UI uses the persisted zero-based stream `order` when present and falls back to rendered position for older payloads.
+- Follow-up fix: Sorting Rule saves now validate and normalize payloads server-side, return HTTP 400 for unsupported properties/operators or invalid numeric targets, and assign ids explicitly to avoid PostgreSQL sequence permission regressions. The Svelte rule form again uses property-specific value pickers for status, reachability, resolution/height/width, FPS, codecs, audio channels, and failure count.
 
 ## Scoring Behavior
 
@@ -35,6 +36,8 @@ Untested streams sort behind confirmed-good streams but ahead of known-dead stre
 - `cargo check` passed after the permission fallback patch.
 - Run `npm run check` after the Stream Checker tree alignment; remaining diagnostics were existing accessibility and unused CSS warnings in `stream-checker/+page.svelte`.
 - Re-run `npm run check` and `npm run build` after adding visible Stream Checker stream order numbers.
+- `cargo test stream_checker::checker::tests` passed with 10 tests after hardening Sorting Rule save validation.
+- Re-run `npm run check` after restoring Sorting Rule value pickers; remaining diagnostics were the existing Stream Checker accessibility and unused CSS warnings.
 - The `.env` database URL currently connects as `gemini`; a direct privilege probe showed SELECT/INSERT/UPDATE/DELETE privileges on `stream_sorting_rule`, and the table was readable but empty at the time of follow-up.
 
 ## Follow-Up

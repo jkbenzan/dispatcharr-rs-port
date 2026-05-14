@@ -42,30 +42,99 @@
 		score_modifier: number;
 	}
 
-	// Known stream stat properties saved by the backend stream checker.
-	// Keep the legacy resolution aliases available so older rules remain easy to edit.
-	const RULE_PROPERTIES = [
-		'status',
-		'reachable',
-		'height',
-		'width',
-		'resolution',
-		'resolution_height',
-		'resolution_width',
-		'fps',
-		'bitrate',
-		'video_codec',
-		'audio_codec',
-		'audio_channels',
-		'consecutive_failures'
+	type RulePropertyDefinition = {
+		key: string;
+		label: string;
+		operators: string[];
+		values?: { label: string; value: string }[];
+		placeholder?: string;
+		inputType?: 'text' | 'number';
+	};
+
+	const NUMERIC_OPERATORS = ['==', '!=', '>=', '<='];
+	const EQUALITY_OPERATORS = ['==', '!='];
+	const TEXT_OPERATORS = ['==', '!=', 'contains'];
+
+	// Known stream stat properties saved by the backend stream checker. Most
+	// properties use curated values so rule creation stays aligned with the
+	// actual health payload instead of relying on brittle free-text guesses.
+	const RULE_PROPERTY_DEFINITIONS: RulePropertyDefinition[] = [
+		{ key: 'status', label: 'Status', operators: EQUALITY_OPERATORS, values: [
+			{ label: 'Online', value: 'online' },
+			{ label: 'Offline', value: 'offline' },
+			{ label: 'Frozen', value: 'frozen' },
+			{ label: 'Black screen', value: 'black_screen' }
+		] },
+		{ key: 'reachable', label: 'Reachable', operators: EQUALITY_OPERATORS, values: [
+			{ label: 'Yes', value: 'true' },
+			{ label: 'No', value: 'false' }
+		] },
+		{ key: 'height', label: 'Height', operators: NUMERIC_OPERATORS, inputType: 'number', values: [
+			{ label: '4K / 2160p', value: '2160' },
+			{ label: '1080p', value: '1080' },
+			{ label: '720p', value: '720' },
+			{ label: '480p', value: '480' }
+		] },
+		{ key: 'width', label: 'Width', operators: NUMERIC_OPERATORS, inputType: 'number', values: [
+			{ label: '3840', value: '3840' },
+			{ label: '1920', value: '1920' },
+			{ label: '1280', value: '1280' },
+			{ label: '720', value: '720' }
+		] },
+		{ key: 'resolution', label: 'Resolution', operators: TEXT_OPERATORS, values: [
+			{ label: '3840x2160', value: '3840x2160' },
+			{ label: '1920x1080', value: '1920x1080' },
+			{ label: '1280x720', value: '1280x720' },
+			{ label: '720x480', value: '720x480' }
+		] },
+		{ key: 'resolution_height', label: 'Legacy height alias', operators: NUMERIC_OPERATORS, inputType: 'number', values: [
+			{ label: '4K / 2160p', value: '2160' },
+			{ label: '1080p', value: '1080' },
+			{ label: '720p', value: '720' },
+			{ label: '480p', value: '480' }
+		] },
+		{ key: 'resolution_width', label: 'Legacy width alias', operators: NUMERIC_OPERATORS, inputType: 'number', values: [
+			{ label: '3840', value: '3840' },
+			{ label: '1920', value: '1920' },
+			{ label: '1280', value: '1280' },
+			{ label: '720', value: '720' }
+		] },
+		{ key: 'fps', label: 'FPS', operators: NUMERIC_OPERATORS, inputType: 'number', values: [
+			{ label: '60', value: '60' },
+			{ label: '50', value: '50' },
+			{ label: '30', value: '30' },
+			{ label: '25', value: '25' },
+			{ label: '24', value: '24' }
+		] },
+		{ key: 'bitrate', label: 'Bitrate', operators: NUMERIC_OPERATORS, inputType: 'number', placeholder: 'e.g. 5000' },
+		{ key: 'video_codec', label: 'Video codec', operators: TEXT_OPERATORS, values: [
+			{ label: 'H.264 / AVC', value: 'h264' },
+			{ label: 'H.265 / HEVC', value: 'hevc' },
+			{ label: 'MPEG-2 Video', value: 'mpeg2video' }
+		] },
+		{ key: 'audio_codec', label: 'Audio codec', operators: TEXT_OPERATORS, values: [
+			{ label: 'AAC', value: 'aac' },
+			{ label: 'AC-3', value: 'ac3' },
+			{ label: 'E-AC-3', value: 'eac3' },
+			{ label: 'MP2', value: 'mp2' }
+		] },
+		{ key: 'audio_channels', label: 'Audio channels', operators: NUMERIC_OPERATORS, inputType: 'number', values: [
+			{ label: 'Stereo / 2', value: '2' },
+			{ label: '5.1 / 6', value: '6' }
+		] },
+		{ key: 'consecutive_failures', label: 'Consecutive failures', operators: NUMERIC_OPERATORS, inputType: 'number', values: [
+			{ label: '0', value: '0' },
+			{ label: '1', value: '1' },
+			{ label: '2', value: '2' },
+			{ label: '3', value: '3' }
+		] }
 	];
-	const RULE_OPERATORS = ['==', '!=', '>=', '<=', 'contains'];
 
 	let rules: SortingRule[] = $state([]);
 	let loadingRules = $state(false);
 	let editingRuleId: number | null = $state(null);
 	// Form state for adding/editing a rule
-	let ruleForm: SortingRule = $state({ name: '', priority: 0, property: 'resolution', operator: '==', value: '', score_modifier: 10 });
+	let ruleForm: SortingRule = $state({ name: '', priority: 0, property: 'status', operator: '==', value: 'online', score_modifier: 10 });
 	let showAddRow = $state(false);
 	let savingRule = $state(false);
 	let deletingRuleId: number | null = $state(null);
@@ -377,6 +446,50 @@
 
 	// =================== SORTING RULES CRUD ===================
 
+	function getRuleDefinition(property: string) {
+		return RULE_PROPERTY_DEFINITIONS.find((definition) => definition.key === property) || RULE_PROPERTY_DEFINITIONS[0];
+	}
+
+	function getRuleOperators(property: string) {
+		return getRuleDefinition(property).operators;
+	}
+
+	function getRuleValueOptions(property: string) {
+		return getRuleDefinition(property).values || [];
+	}
+
+	function setRuleDefaultsForProperty(property: string, preserveValue = false) {
+		const definition = getRuleDefinition(property);
+		ruleForm.property = definition.key;
+
+		if (!definition.operators.includes(ruleForm.operator)) {
+			ruleForm.operator = definition.operators[0];
+		}
+
+		if (!preserveValue && definition.values?.length) {
+			ruleForm.value = definition.values[0].value;
+		} else if (!preserveValue) {
+			ruleForm.value = '';
+		}
+	}
+
+	function onRulePropertyChange(event: Event) {
+		const property = (event.currentTarget as HTMLSelectElement).value;
+		setRuleDefaultsForProperty(property);
+	}
+
+	function normalizedRulePayload() {
+		return {
+			...ruleForm,
+			name: ruleForm.name.trim(),
+			property: ruleForm.property.trim(),
+			operator: ruleForm.operator.trim(),
+			value: String(ruleForm.value).trim(),
+			priority: Number(ruleForm.priority) || 0,
+			score_modifier: Number(ruleForm.score_modifier) || 0
+		};
+	}
+
 	/** Load all sorting rules from the backend */
 	async function loadRules() {
 		loadingRules = true;
@@ -394,7 +507,7 @@
 
 	/** Reset the form to default empty state */
 	function resetRuleForm() {
-		ruleForm = { name: '', priority: 0, property: 'resolution', operator: '==', value: '', score_modifier: 10 };
+		ruleForm = { name: '', priority: 0, property: 'status', operator: '==', value: 'online', score_modifier: 10 };
 		showAddRow = false;
 		editingRuleId = null;
 	}
@@ -403,6 +516,7 @@
 	function startEditRule(rule: SortingRule) {
 		editingRuleId = rule.id!;
 		ruleForm = { ...rule };
+		setRuleDefaultsForProperty(ruleForm.property, true);
 		showAddRow = false;
 	}
 
@@ -414,11 +528,12 @@
 		}
 		savingRule = true;
 		try {
+			const payload = normalizedRulePayload();
 			if (editingRuleId) {
-				await api.updateSortingRule(editingRuleId, ruleForm);
+				await api.updateSortingRule(editingRuleId, payload);
 				toast.success('Rule updated');
 			} else {
-				await api.createSortingRule(ruleForm);
+				await api.createSortingRule(payload);
 				toast.success('Rule created');
 			}
 			resetRuleForm();
@@ -798,20 +913,30 @@
 											<td><input type="number" bind:value={ruleForm.priority} min="0" class="input-sm" /></td>
 											<td><input type="text" bind:value={ruleForm.name} class="input-sm" placeholder="Rule name" /></td>
 											<td>
-												<select bind:value={ruleForm.property} class="input-sm">
-													{#each RULE_PROPERTIES as prop}
-														<option value={prop}>{prop}</option>
+												<select value={ruleForm.property} onchange={onRulePropertyChange} class="input-sm">
+													{#each RULE_PROPERTY_DEFINITIONS as prop}
+														<option value={prop.key}>{prop.label}</option>
 													{/each}
 												</select>
 											</td>
 											<td>
 												<select bind:value={ruleForm.operator} class="input-sm">
-													{#each RULE_OPERATORS as op}
+													{#each getRuleOperators(ruleForm.property) as op}
 														<option value={op}>{op}</option>
 													{/each}
 												</select>
 											</td>
-											<td><input type="text" bind:value={ruleForm.value} class="input-sm" placeholder="e.g. 1080p" /></td>
+											<td>
+												{#if getRuleValueOptions(ruleForm.property).length > 0}
+													<select bind:value={ruleForm.value} class="input-sm">
+														{#each getRuleValueOptions(ruleForm.property) as option}
+															<option value={option.value}>{option.label}</option>
+														{/each}
+													</select>
+												{:else}
+													<input type={getRuleDefinition(ruleForm.property).inputType || 'text'} bind:value={ruleForm.value} class="input-sm" placeholder={getRuleDefinition(ruleForm.property).placeholder || 'Value'} />
+												{/if}
+											</td>
 											<td><input type="number" bind:value={ruleForm.score_modifier} class="input-sm" /></td>
 											<td class="actions-cell">
 												<button class="btn-icon btn-save" onclick={saveRule} disabled={savingRule} title="Save">
@@ -856,20 +981,30 @@
 										<td><input type="number" bind:value={ruleForm.priority} min="0" class="input-sm" /></td>
 										<td><input type="text" bind:value={ruleForm.name} class="input-sm" placeholder="Rule name" /></td>
 										<td>
-											<select bind:value={ruleForm.property} class="input-sm">
-												{#each RULE_PROPERTIES as prop}
-													<option value={prop}>{prop}</option>
+											<select value={ruleForm.property} onchange={onRulePropertyChange} class="input-sm">
+												{#each RULE_PROPERTY_DEFINITIONS as prop}
+													<option value={prop.key}>{prop.label}</option>
 												{/each}
 											</select>
 										</td>
 										<td>
 											<select bind:value={ruleForm.operator} class="input-sm">
-												{#each RULE_OPERATORS as op}
+												{#each getRuleOperators(ruleForm.property) as op}
 													<option value={op}>{op}</option>
 												{/each}
 											</select>
 										</td>
-										<td><input type="text" bind:value={ruleForm.value} class="input-sm" placeholder="e.g. 1080p" /></td>
+										<td>
+											{#if getRuleValueOptions(ruleForm.property).length > 0}
+												<select bind:value={ruleForm.value} class="input-sm">
+													{#each getRuleValueOptions(ruleForm.property) as option}
+														<option value={option.value}>{option.label}</option>
+													{/each}
+												</select>
+											{:else}
+												<input type={getRuleDefinition(ruleForm.property).inputType || 'text'} bind:value={ruleForm.value} class="input-sm" placeholder={getRuleDefinition(ruleForm.property).placeholder || 'Value'} />
+											{/if}
+										</td>
 										<td><input type="number" bind:value={ruleForm.score_modifier} class="input-sm" /></td>
 										<td class="actions-cell">
 											<button class="btn-icon btn-save" onclick={saveRule} disabled={savingRule} title="Create Rule">

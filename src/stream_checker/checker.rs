@@ -939,11 +939,114 @@ pub struct CreateRulePayload {
     pub score_modifier: i32,
 }
 
+const SORTING_RULE_PROPERTIES: &[&str] = &[
+    "status",
+    "reachable",
+    "height",
+    "width",
+    "resolution",
+    "resolution_height",
+    "resolution_width",
+    "fps",
+    "bitrate",
+    "video_codec",
+    "audio_codec",
+    "audio_channels",
+    "consecutive_failures",
+];
+
+const SORTING_RULE_OPERATORS: &[&str] = &["==", "!=", ">=", "<=", "contains"];
+
+struct NormalizedRulePayload {
+    name: String,
+    priority: i32,
+    property: String,
+    operator: String,
+    value: String,
+    score_modifier: i32,
+}
+
+fn normalize_sorting_rule_payload(
+    payload: CreateRulePayload,
+) -> Result<NormalizedRulePayload, String> {
+    let name = payload.name.trim().to_string();
+    if name.is_empty() {
+        return Err("Rule name is required".to_string());
+    }
+
+    let property = payload.property.trim().to_string();
+    if !SORTING_RULE_PROPERTIES.contains(&property.as_str()) {
+        return Err(format!("Unsupported sorting rule property: {}", property));
+    }
+
+    let operator = payload.operator.trim().to_string();
+    if !SORTING_RULE_OPERATORS.contains(&operator.as_str()) {
+        return Err(format!("Unsupported sorting rule operator: {}", operator));
+    }
+
+    let value = payload.value.trim().to_string();
+    if value.is_empty() {
+        return Err("Rule value is required".to_string());
+    }
+
+    // Numeric comparisons only make sense when the target value is numeric.
+    // Catching this at save time keeps bad rules from silently never matching.
+    if matches!(operator.as_str(), ">=" | "<=") && value.parse::<f64>().is_err() {
+        return Err("Numeric operators require a numeric value".to_string());
+    }
+
+    Ok(NormalizedRulePayload {
+        name,
+        priority: payload.priority.max(0),
+        property,
+        operator,
+        value,
+        score_modifier: payload.score_modifier,
+    })
+}
+
+async fn next_sorting_rule_id(db: &DatabaseConnection) -> Result<i64, sea_orm::DbErr> {
+    // Assign ids explicitly so inserts do not depend on sequence permissions.
+    // Some deployments granted table access after creation but missed USAGE on
+    // stream_sorting_rule_id_seq, which made POST fail even though SELECT worked.
+    let latest = stream_sorting_rule::Entity::find()
+        .order_by_desc(stream_sorting_rule::Column::Id)
+        .one(db)
+        .await?;
+
+    Ok(latest.map(|rule| rule.id + 1).unwrap_or(1))
+}
+
 pub async fn create_sorting_rule(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<CreateRulePayload>,
 ) -> impl IntoResponse {
+    let payload = match normalize_sorting_rule_payload(payload) {
+        Ok(payload) => payload,
+        Err(message) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"success": false, "message": message})),
+            )
+        }
+    };
+
+    let next_id = match next_sorting_rule_id(&state.db).await {
+        Ok(next_id) => next_id,
+        Err(e) => {
+            error!("Failed to allocate sorting rule id: {}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "success": false,
+                    "message": "Failed to allocate sorting rule id"
+                })),
+            );
+        }
+    };
+
     let rule = stream_sorting_rule::ActiveModel {
+        id: ActiveValue::Set(next_id),
         name: ActiveValue::Set(payload.name),
         priority: ActiveValue::Set(payload.priority),
         property: ActiveValue::Set(payload.property),
@@ -989,6 +1092,16 @@ pub async fn update_sorting_rule(
     Path(id): Path<i64>,
     Json(payload): Json<CreateRulePayload>,
 ) -> impl IntoResponse {
+    let payload = match normalize_sorting_rule_payload(payload) {
+        Ok(payload) => payload,
+        Err(message) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"success": false, "message": message})),
+            )
+        }
+    };
+
     let mut rule: stream_sorting_rule::ActiveModel =
         match stream_sorting_rule::Entity::find_by_id(id)
             .one(&state.db)
@@ -1672,5 +1785,45 @@ mod tests {
 
         assert!(evaluate_rule(&rule, &stats_match));
         assert!(!evaluate_rule(&rule, &stats_mismatch));
+    }
+
+    #[test]
+    fn test_normalize_sorting_rule_payload_trims_and_clamps_priority() {
+        let normalized = normalize_sorting_rule_payload(CreateRulePayload {
+            name: "  Prefer 1080p  ".to_string(),
+            priority: -5,
+            property: "height".to_string(),
+            operator: ">=".to_string(),
+            value: " 1080 ".to_string(),
+            score_modifier: 25,
+        })
+        .expect("valid payload should normalize");
+
+        assert_eq!(normalized.name, "Prefer 1080p");
+        assert_eq!(normalized.priority, 0);
+        assert_eq!(normalized.value, "1080");
+    }
+
+    #[test]
+    fn test_normalize_sorting_rule_payload_rejects_invalid_values() {
+        let invalid_property = normalize_sorting_rule_payload(CreateRulePayload {
+            name: "Bad property".to_string(),
+            priority: 0,
+            property: "unknown".to_string(),
+            operator: "==".to_string(),
+            value: "online".to_string(),
+            score_modifier: 10,
+        });
+        assert!(invalid_property.is_err());
+
+        let invalid_numeric_target = normalize_sorting_rule_payload(CreateRulePayload {
+            name: "Bad numeric".to_string(),
+            priority: 0,
+            property: "height".to_string(),
+            operator: ">=".to_string(),
+            value: "HD".to_string(),
+            score_modifier: 10,
+        });
+        assert!(invalid_numeric_target.is_err());
     }
 }

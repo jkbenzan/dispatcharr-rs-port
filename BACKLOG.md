@@ -91,6 +91,7 @@ Items queued for future implementation and audit phases.
   Sorting Rules management UI added to `/stream-checker` (Sorting Rules tab). ChannelsPane now shows stream health via row shading (red for offline, gray dot for untested) and condensed/expanded performance stats. Kebab menu includes "Sort by Health" action. Frontend API extended with full CRUD for sorting rules and bulk sort trigger.
   - [x] Align Stream Checker channel tree loading with Channel Manager so streams enumerate under expanded channels from the same `getChannels({ page_size: 5000 })` payload and order.
   - [x] Show one-based stream order numbers in Stream Checker rows so the visible ordering matches Channel Manager.
+  - [x] Restore predefined value pickers for most Sorting Rules fields and harden save handling for validation/sequence-permission failures.
 
 ---
 
