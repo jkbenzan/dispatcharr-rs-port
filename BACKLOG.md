@@ -89,6 +89,7 @@ Items queued for future implementation and audit phases.
   Implemented as a Dashboard tab ("Active Connections") with connection cards, live polling (configurable interval), stop channel/client controls, and a sidebar shortcut icon. Phase 2 (bitrate graphs, EPG overlay, VOD cards) deferred.
 - [x] **Stream Checker ↔ Channel Manager Integration**
   Sorting Rules management UI added to `/stream-checker` (Sorting Rules tab). ChannelsPane now shows stream health via row shading (red for offline, gray dot for untested) and condensed/expanded performance stats. Kebab menu includes "Sort by Health" action. Frontend API extended with full CRUD for sorting rules and bulk sort trigger.
+  - [x] Align Stream Checker channel tree loading with Channel Manager so streams enumerate under expanded channels from the same `getChannels({ page_size: 5000 })` payload and order.
 
 ---
 

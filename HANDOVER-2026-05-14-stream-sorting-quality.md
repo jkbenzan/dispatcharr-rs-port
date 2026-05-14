@@ -14,6 +14,7 @@ Video streaming had been stabilized, and the active troubleshooting focus moved 
 - Kept legacy `resolution_height` and `resolution_width` rule properties working by mapping them to saved `height` and `width` stats with fallback to the old property names.
 - Added focused Rust tests for built-in sorting priorities and rule alias behavior.
 - Follow-up fix: sorting-rule reads now degrade gracefully if `stream_sorting_rule` is unreadable. The rules endpoint returns an empty list and bulk sort continues with built-in quality/reliability scoring instead of returning HTTP 500.
+- Follow-up fix: Stream Checker now builds its group/channel/stream tree from the same `getChannels({ page_size: 5000 })` response as Channel Manager, preserving assigned streams under each expanded channel and reflecting post-sort order immediately.
 
 ## Scoring Behavior
 
@@ -31,6 +32,7 @@ Untested streams sort behind confirmed-good streams but ahead of known-dead stre
 
 - `cargo test stream_checker::checker::tests` passed with 8 tests.
 - `cargo check` passed after the permission fallback patch.
+- Run `npm run check` after the Stream Checker tree alignment; remaining diagnostics were existing accessibility and unused CSS warnings in `stream-checker/+page.svelte`.
 - The `.env` database URL currently connects as `gemini`; a direct privilege probe showed SELECT/INSERT/UPDATE/DELETE privileges on `stream_sorting_rule`, and the table was readable but empty at the time of follow-up.
 
 ## Follow-Up

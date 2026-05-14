@@ -159,15 +159,51 @@
 	async function loadGroups() {
 		loadingGroups = true;
 		try {
-			const groupsRes = await api.getChannelGroups();
+			// Match Channel Manager's data source: one channel payload already
+			// includes the assigned streams in channel-stream order. Building
+			// the tree client-side keeps Stream Checker expansion behavior
+			// consistent with Channel Manager and avoids a second, divergent
+			// per-group channel loading path.
+			const [groupsRes, channelsRes] = await Promise.all([
+				api.getChannelGroups(),
+				api.getChannels({ page_size: 5000 })
+			]);
 			const rawGroups = Array.isArray(groupsRes) ? groupsRes : groupsRes.results || [];
-			channelGroups = rawGroups.filter((g: any) => g.is_custom === true);
-			channelGroups.push({ id: -1, name: 'Ungrouped' });
+			const rawChannels = Array.isArray(channelsRes) ? channelsRes : channelsRes.results || [];
+			buildChannelTree(rawGroups, rawChannels);
 		} catch (err) {
 			console.error('Failed to load channel groups', err);
+			toast.error('Failed to load channel tree');
 		} finally {
 			loadingGroups = false;
 		}
+	}
+
+	function buildChannelTree(groups: any[], channels: any[]) {
+		const nextChannelsByGroup: Record<number, any[]> = {};
+		const sortedChannels = [...channels].sort((a: any, b: any) => (a.channel_number || 0) - (b.channel_number || 0));
+
+		for (const channel of sortedChannels) {
+			const groupId = Number(channel.channel_group_id ?? channel.channel_group ?? -1);
+			if (!nextChannelsByGroup[groupId]) nextChannelsByGroup[groupId] = [];
+			nextChannelsByGroup[groupId].push({ ...channel, streams: channel.streams || [] });
+		}
+
+		const visibleGroups = groups
+			.filter((group: any) => (nextChannelsByGroup[Number(group.id)] || []).length > 0)
+			.map((group: any) => ({ ...group, id: Number(group.id) }));
+
+		if ((nextChannelsByGroup[-1] || []).length > 0) {
+			visibleGroups.push({ id: -1, name: 'Ungrouped' });
+		}
+
+		channelGroups = visibleGroups;
+		channelsByGroup = nextChannelsByGroup;
+
+		// The full channel tree is loaded in one request, so there is no
+		// group-level pagination once the Channel Manager-style payload lands.
+		channelsPage = Object.fromEntries(visibleGroups.map((group: any) => [group.id, 1]));
+		channelsHasNext = Object.fromEntries(visibleGroups.map((group: any) => [group.id, false]));
 	}
 
 	async function toggleGroup(groupId: number) {
@@ -187,20 +223,7 @@
 		loadingChannels[groupId] = true;
 		loadingChannels = { ...loadingChannels };
 		try {
-			const res = await api.getChannels({ channel_group: groupId === -1 ? '' : groupId, page, page_size: 50 });
-			const newChannels = Array.isArray(res) ? res : res.results || [];
-			
-			if (page === 1) {
-				channelsByGroup[groupId] = newChannels;
-			} else {
-				channelsByGroup[groupId] = [...(channelsByGroup[groupId] || []), ...newChannels];
-			}
-			channelsPage[groupId] = page;
-			channelsHasNext[groupId] = !!res.next;
-			
-			channelsByGroup = { ...channelsByGroup };
-			channelsPage = { ...channelsPage };
-			channelsHasNext = { ...channelsHasNext };
+			await loadGroups();
 		} catch (err) {
 			console.error('Failed to load channels for group', groupId, err);
 		} finally {
@@ -338,19 +361,9 @@
 			toast.info(`Sorting streams in ${channelIdsToSort.size} channels...`);
 			await api.bulkSortStreams(Array.from(channelIdsToSort));
 			
-			// Refresh those groups so the UI reflects the new sort order
-			const affectedGroups = new Set<number>();
-			for (const groupChannels of Object.values(channelsByGroup)) {
-				for (const channel of groupChannels) {
-					if (channelIdsToSort.has(channel.id)) {
-						const groupId = channel.channel_group || -1;
-						affectedGroups.add(groupId);
-					}
-				}
-			}
-			for (const groupId of affectedGroups) {
-				await loadChannelsForGroup(groupId, 1);
-			}
+			// Refresh the Channel Manager-style tree so the newly persisted
+			// channel-stream order is reflected immediately under each channel.
+			await loadGroups();
 			toast.success('Sorting complete!');
 		} catch (err: any) {
 			toast.error(err.message || 'Failed to sort channels');
