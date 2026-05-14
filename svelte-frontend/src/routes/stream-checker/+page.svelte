@@ -7,6 +7,15 @@
 	// =================== TAB STATE ===================
 	// Controls which view is shown: 'testing' (bulk stream checker) or 'rules' (sorting rules CRUD)
 	let activeTab: 'testing' | 'rules' = $state('testing');
+	
+	/** Helper to handle keyboard interaction for accessibility */
+	function handleKeydown(e: KeyboardEvent, callback: () => void) {
+		if (e.key === 'Enter' || e.key === ' ') {
+			e.preventDefault();
+			callback();
+		}
+	}
+
 
 	// State
 	let channelGroups: any[] = $state([]);
@@ -106,7 +115,6 @@
 			{ label: '25', value: '25' },
 			{ label: '24', value: '24' }
 		] },
-		{ key: 'bitrate', label: 'Bitrate', operators: NUMERIC_OPERATORS, inputType: 'number', placeholder: 'e.g. 5000' },
 		{ key: 'video_codec', label: 'Video codec', operators: TEXT_OPERATORS, values: [
 			{ label: 'H.264 / AVC', value: 'h264' },
 			{ label: 'H.265 / HEVC', value: 'hevc' },
@@ -118,10 +126,14 @@
 			{ label: 'E-AC-3', value: 'eac3' },
 			{ label: 'MP2', value: 'mp2' }
 		] },
-		{ key: 'audio_channels', label: 'Audio channels', operators: NUMERIC_OPERATORS, inputType: 'number', values: [
-			{ label: 'Stereo / 2', value: '2' },
-			{ label: '5.1 / 6', value: '6' }
+		{ key: 'audio_channels', label: 'Audio channels', operators: TEXT_OPERATORS, values: [
+			{ label: 'Mono', value: 'mono' },
+			{ label: 'Stereo', value: 'stereo' },
+			{ label: '5.1', value: '5.1' },
+			{ label: '7.1', value: '7.1' }
 		] },
+		{ key: 'audio_channel_count', label: 'Audio channel count', operators: NUMERIC_OPERATORS, inputType: 'number' },
+		{ key: 'bitrate', label: 'Video bitrate (bps)', operators: NUMERIC_OPERATORS, inputType: 'number' },
 		{ key: 'consecutive_failures', label: 'Consecutive failures', operators: NUMERIC_OPERATORS, inputType: 'number', values: [
 			{ label: '0', value: '0' },
 			{ label: '1', value: '1' },
@@ -632,7 +644,14 @@
 							{@const groupState = getGroupSelectionState(group.id)}
 							<div class="tree-group">
 								<!-- Group Header -->
-								<div class="tree-row group-row" onclick={() => toggleGroup(group.id)}>
+								<div 
+									class="tree-row group-row" 
+									onclick={() => toggleGroup(group.id)}
+									onkeydown={(e) => handleKeydown(e, () => toggleGroup(group.id))}
+									role="button"
+									tabindex="0"
+								>
+
 									<button class="expand-btn">
 										{#if expandedGroups.has(group.id)}
 											<ChevronDown size={16} />
@@ -660,7 +679,14 @@
 												{@const channelState = getChannelSelectionState(channel)}
 												<div class="tree-channel">
 													<!-- Channel Header -->
-													<div class="tree-row channel-row" onclick={() => toggleChannelExpansion(channel.id)}>
+													<div 
+														class="tree-row channel-row" 
+														onclick={() => toggleChannelExpansion(channel.id)}
+														onkeydown={(e) => handleKeydown(e, () => toggleChannelExpansion(channel.id))}
+														role="button"
+														tabindex="0"
+													>
+
 														<button class="expand-btn">
 															{#if expandedChannels.has(channel.id)}
 																<ChevronDown size={14} />
@@ -686,7 +712,14 @@
 																	{@const isTesting = status?.workers?.some((w: any) => w.current_stream_id === stream.id)}
 																	<!-- Match Channel Manager by showing the channel stream order before each assigned stream. -->
 																	{@const streamOrder = Number.isFinite(Number(stream.order)) ? Number(stream.order) + 1 : idx + 1}
-																	<div class="tree-row stream-row" class:selected={isSelected} onclick={(e) => !status?.is_running && toggleStreamSelection(stream.id, e)}>
+																	<div 
+																		class="tree-row stream-row" 
+																		class:selected={isSelected} 
+																		onclick={(e) => !status?.is_running && toggleStreamSelection(stream.id, e)}
+																		onkeydown={(e) => !status?.is_running && handleKeydown(e, () => toggleStreamSelection(stream.id, e))}
+																		role="button"
+																		tabindex="0"
+																	>
 																		<span class="stream-order">{streamOrder}.</span>
 																		<div class="checkbox-wrapper">
 																			<input type="checkbox" checked={isSelected} onchange={(e) => toggleStreamSelection(stream.id, e)} disabled={status?.is_running} />

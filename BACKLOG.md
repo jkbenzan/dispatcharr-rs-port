@@ -43,6 +43,8 @@ Items queued for future implementation and audit phases.
   Implement logic to automatically delete or disable streams that consistently fail health checks or are flagged as fake.
 - [ ] **Channel Manager UX Refinement**
   Verify drag-and-drop assignments between the Stream Pane and Channel Pane. Ensure smooth performance with large lists.
+- [ ] **Fix Channel Category/Group Modal Search Persistence**
+  Search strings in the Channel Manager modals (Create Channel and M3U Provider) are persisting after closing and reopening. Reset all search and filter state on modal open/close.
 - [ ] **Group & Bulk Operations**
   Audit group management logic and bulk stream assignments to channels.
 - [ ] **Logo & Metadata Resolution**

@@ -219,6 +219,7 @@
 				enableVod = provider.enable_vod === true;
 				countrySearch = '';
 				countryFilter = '';
+				searchQuery = '';
 
 				// Initialize mappings from provider data
 				const gSettings: Record<number, any> = {};
@@ -255,6 +256,7 @@
 				categorySettings = {};
 				countrySearch = '';
 				countryFilter = '';
+				searchQuery = '';
 				activeTab = 'general';
 			}
 			error = '';

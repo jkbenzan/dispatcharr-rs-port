@@ -208,6 +208,9 @@
 		selectedStation = null;
 		selectedEpgSourceId = null;
 		epgSearch = '';
+		groupSearch = '';
+		channelSearch = '';
+		epgFilter = '';
 		dbSearchResults = [];
 		suggestions = [];
 	}

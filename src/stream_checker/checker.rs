@@ -345,6 +345,8 @@ pub async fn check_single_stream(
     let mut fps = None;
     let mut audio_codec = None;
     let mut channels = None;
+    let mut audio_channel_count = None;
+
 
     for s in &streams {
         if let Some(codec_type) = s.get("codec_type").and_then(|t| t.as_str()) {
@@ -389,13 +391,15 @@ pub async fn check_single_stream(
                     .get("codec_name")
                     .and_then(|c| c.as_str())
                     .map(|c| c.to_uppercase());
-                let channel_count = s.get("channels").and_then(|c| c.as_i64()).unwrap_or(0);
-                channels = Some(match channel_count {
+                let count = s.get("channels").and_then(|c| c.as_i64()).unwrap_or(0);
+                audio_channel_count = Some(count);
+
+                channels = Some(match count {
                     1 => "mono".to_string(),
                     2 => "stereo".to_string(),
                     6 => "5.1".to_string(),
                     8 => "7.1".to_string(),
-                    _ => format!("{} channels", channel_count),
+                    _ => format!("{} channels", count),
                 });
             }
         }
@@ -499,6 +503,8 @@ pub async fn check_single_stream(
         "fps": fps,
         "audio_codec": audio_codec,
         "audio_channels": channels,
+        "audio_channel_count": audio_channel_count,
+
         "bitrate": bitrate,
         "status": status,
         "issues": {
