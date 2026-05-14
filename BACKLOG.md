@@ -29,6 +29,7 @@ Items queued for future implementation and audit phases.
   - [x] Default new M3U/XC provider priority to `0` so built-in stream health drives ordering unless explicitly overridden.
   - [x] Add built-in sorting score for reachable/online status, resolution height, FPS, bitrate, codecs, failure count, frozen video, and black-screen detection.
   - [x] Keep custom sorting rules additive for special-case tuning and map legacy `resolution_height` / `resolution_width` rules to saved `height` / `width` stats.
+  - [x] Treat the sorting-rule table as optional at runtime so permission drift falls back to built-in scoring instead of breaking channel views or bulk sort requests.
 
 ---
 

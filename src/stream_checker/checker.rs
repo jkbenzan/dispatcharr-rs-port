@@ -12,7 +12,7 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::process::Command;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use crate::entities::channel_stream;
 use crate::entities::stream;
@@ -920,8 +920,11 @@ pub async fn list_sorting_rules(State(state): State<Arc<AppState>>) -> impl Into
     match stream_sorting_rule::Entity::find().all(&state.db).await {
         Ok(rules) => (StatusCode::OK, Json(rules)),
         Err(e) => {
-            error!("Failed to fetch sorting rules: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(vec![]))
+            warn!(
+                "Sorting rules are unavailable; returning an empty rule list so built-in stream scoring can continue: {}",
+                e
+            );
+            (StatusCode::OK, Json(vec![]))
         }
     }
 }
@@ -1263,10 +1266,20 @@ pub async fn internal_bulk_sort_streams(
     state: &Arc<AppState>,
     payload: BulkSortRequest,
 ) -> Result<i32, Box<dyn std::error::Error + Send + Sync>> {
-    let rules = stream_sorting_rule::Entity::find()
+    let rules = match stream_sorting_rule::Entity::find()
         .order_by_asc(stream_sorting_rule::Column::Priority)
         .all(&state.db)
-        .await?;
+        .await
+    {
+        Ok(rules) => rules,
+        Err(e) => {
+            warn!(
+                "Sorting rules are unavailable; using built-in reliability and quality scoring only: {}",
+                e
+            );
+            Vec::new()
+        }
+    };
 
     let mut sorted_channels = 0;
 
