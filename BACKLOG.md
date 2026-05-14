@@ -24,8 +24,11 @@ Items queued for future implementation and audit phases.
   - [x] Surface failed provider counts in dashboard stats.
   - [x] Add visual health alerts and "Refresh All" troubleshooting buttons.
 - [x] **Intelligent Scoring Engine**:
-  - [x] Integrate `m3u_account.priority` as the base score for stream sorting.
-  - [x] Refactor `bulk_sort_streams` logic to support priority-first selection.
+  - [x] Integrate `m3u_account.priority` as an optional manual bias for stream sorting.
+  - [x] Refactor `bulk_sort_streams` logic to prioritize reliability and quality before provider priority.
+  - [x] Default new M3U/XC provider priority to `0` so built-in stream health drives ordering unless explicitly overridden.
+  - [x] Add built-in sorting score for reachable/online status, resolution height, FPS, bitrate, codecs, failure count, frozen video, and black-screen detection.
+  - [x] Keep custom sorting rules additive for special-case tuning and map legacy `resolution_height` / `resolution_width` rules to saved `height` / `width` stats.
 
 ---
 
@@ -110,4 +113,3 @@ Items queued for future implementation and audit phases.
 
 - [ ] **Trakt.tv Integration**
   Explore and implement integration with Trakt.tv for scrobbling live TV/VOD playback, syncing watch history, and importing user lists/collections into the VOD dashboard.
-

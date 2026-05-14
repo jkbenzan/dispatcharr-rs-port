@@ -42,8 +42,23 @@
 		score_modifier: number;
 	}
 
-	// Known stream stat properties for the property dropdown
-	const RULE_PROPERTIES = ['resolution', 'video_codec', 'audio_codec', 'fps', 'bitrate', 'status', 'reachable'];
+	// Known stream stat properties saved by the backend stream checker.
+	// Keep the legacy resolution aliases available so older rules remain easy to edit.
+	const RULE_PROPERTIES = [
+		'status',
+		'reachable',
+		'height',
+		'width',
+		'resolution',
+		'resolution_height',
+		'resolution_width',
+		'fps',
+		'bitrate',
+		'video_codec',
+		'audio_codec',
+		'audio_channels',
+		'consecutive_failures'
+	];
 	const RULE_OPERATORS = ['==', '!=', '>=', '<=', 'contains'];
 
 	let rules: SortingRule[] = $state([]);

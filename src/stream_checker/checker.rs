@@ -1076,7 +1076,7 @@ pub struct BulkSortRequest {
 }
 
 fn evaluate_rule(rule: &stream_sorting_rule::Model, stream_stats: &Value) -> bool {
-    let val = stream_stats.get(&rule.property);
+    let val = stream_stat_value(stream_stats, &rule.property);
     let target = &rule.value;
 
     match rule.operator.as_str() {
@@ -1164,6 +1164,101 @@ fn evaluate_rule(rule: &stream_sorting_rule::Model, stream_stats: &Value) -> boo
     }
 }
 
+fn stream_stat_value<'a>(stream_stats: &'a Value, property: &str) -> Option<&'a Value> {
+    match property {
+        // Backward-compatible aliases for rules created before ffprobe stats
+        // stored width and height as first-class numeric fields.
+        "resolution_width" => stream_stats.get("width").or_else(|| stream_stats.get(property)),
+        "resolution_height" => stream_stats.get("height").or_else(|| stream_stats.get(property)),
+        _ => stream_stats.get(property),
+    }
+}
+
+fn stream_stat_f64(stream_stats: &Value, property: &str) -> Option<f64> {
+    stream_stat_value(stream_stats, property)
+        .and_then(|v| v.as_f64()
+            .or_else(|| v.as_i64().map(|i| i as f64))
+            .or_else(|| v.as_str().and_then(|s| s.parse::<f64>().ok())))
+}
+
+fn stream_stat_i64(stream_stats: &Value, property: &str) -> Option<i64> {
+    stream_stat_value(stream_stats, property)
+        .and_then(|v| v.as_i64()
+            .or_else(|| v.as_u64().and_then(|u| i64::try_from(u).ok()))
+            .or_else(|| v.as_f64().map(|f| f.round() as i64))
+            .or_else(|| v.as_str().and_then(|s| s.parse::<i64>().ok())))
+}
+
+fn stream_stat_bool(stream_stats: &Value, property: &str) -> Option<bool> {
+    stream_stat_value(stream_stats, property)
+        .and_then(|v| v.as_bool()
+            .or_else(|| v.as_str().and_then(|s| s.parse::<bool>().ok())))
+}
+
+fn stream_stat_str<'a>(stream_stats: &'a Value, property: &str) -> Option<&'a str> {
+    stream_stat_value(stream_stats, property).and_then(|v| v.as_str())
+}
+
+fn built_in_stream_score(stream_stats: Option<&Value>) -> i32 {
+    let Some(stats) = stream_stats else {
+        // Untested streams should sort behind confirmed-good streams, but
+        // ahead of known-dead streams so new imports still get a fair chance.
+        return -10_000;
+    };
+
+    let mut score = 0;
+    let reachable = stream_stat_bool(stats, "reachable").unwrap_or(false);
+    let status = stream_stat_str(stats, "status")
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+
+    if reachable && status == "online" {
+        score += 100_000;
+    } else if reachable {
+        score += 60_000;
+    } else {
+        score -= 100_000;
+    }
+
+    let failures = stream_stat_i64(stats, "consecutive_failures").unwrap_or(0).clamp(0, 20);
+    score -= (failures as i32) * 5_000;
+
+    if stream_stat_bool(&stats["issues"], "frozen").unwrap_or(false) {
+        score -= 30_000;
+    }
+    if stream_stat_bool(&stats["issues"], "black_screen").unwrap_or(false) {
+        score -= 30_000;
+    }
+
+    // Quality: height is the most useful signal, followed by FPS and bitrate.
+    // These weights intentionally stay below the online/offline boundary.
+    let height = stream_stat_i64(stats, "height")
+        .or_else(|| stream_stat_i64(stats, "resolution_height"))
+        .unwrap_or(0)
+        .clamp(0, 4320);
+    score += (height as i32) * 20;
+
+    let fps = stream_stat_f64(stats, "fps").unwrap_or(0.0).clamp(0.0, 240.0);
+    score += (fps * 100.0).round() as i32;
+
+    let bitrate = stream_stat_f64(stats, "bitrate").unwrap_or(0.0).clamp(0.0, 200_000.0);
+    if bitrate > 0.0 {
+        score += (bitrate / 10.0).round() as i32;
+    }
+
+    match stream_stat_str(stats, "video_codec")
+        .unwrap_or_default()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "hevc" | "h265" | "h.265" => score += 750,
+        "h264" | "h.264" | "avc" => score += 500,
+        _ => {}
+    }
+
+    score
+}
+
 pub async fn internal_bulk_sort_streams(
     state: &Arc<AppState>,
     payload: BulkSortRequest,
@@ -1179,6 +1274,8 @@ pub async fn internal_bulk_sort_streams(
         // Find all channel streams
         let channel_streams = channel_stream::Entity::find()
             .filter(channel_stream::Column::ChannelId.eq(channel_id))
+            .order_by_asc(channel_stream::Column::Order)
+            .order_by_asc(channel_stream::Column::Id)
             .all(&state.db)
             .await?;
 
@@ -1193,17 +1290,23 @@ pub async fn internal_bulk_sort_streams(
                 .one(&state.db)
                 .await
             {
-                // Start with account priority as base score
+                // Provider priority stays as a manual bias, but the built-in
+                // health/quality score is deliberately much larger so
+                // reliability and stream quality win by default.
                 if let Some(account) = account_opt {
                     score += account.priority;
                 }
 
-                if let Some(props) = stream.custom_properties {
-                    if let Some(stats) = props.get("stream_stats") {
-                        for rule in &rules {
-                            if evaluate_rule(rule, stats) {
-                                score += rule.score_modifier;
-                            }
+                let stream_stats = stream
+                    .custom_properties
+                    .as_ref()
+                    .and_then(|props| props.get("stream_stats"));
+                score += built_in_stream_score(stream_stats);
+
+                if let Some(stats) = stream_stats {
+                    for rule in &rules {
+                        if evaluate_rule(rule, stats) {
+                            score += rule.score_modifier;
                         }
                     }
                 }
@@ -1211,8 +1314,13 @@ pub async fn internal_bulk_sort_streams(
             scored_streams.push((cs, score));
         }
 
-        // Sort descending by score
-        scored_streams.sort_by(|a, b| b.1.cmp(&a.1));
+        // Sort descending by score, then preserve existing order for exact
+        // ties so repeated sort runs are stable and easy to reason about.
+        scored_streams.sort_by(|a, b| {
+            b.1.cmp(&a.1)
+                .then_with(|| a.0.order.cmp(&b.0.order))
+                .then_with(|| a.0.id.cmp(&b.0.id))
+        });
 
         // Update the database with new ordering
         for (index, (cs, _score)) in scored_streams.into_iter().enumerate() {
@@ -1407,6 +1515,93 @@ mod tests {
 
         assert!(evaluate_rule(&rule, &stats_match));
         assert!(!evaluate_rule(&rule, &stats_mismatch));
+    }
+
+    #[test]
+    fn test_evaluate_rule_uses_resolution_height_alias() {
+        let rule = stream_sorting_rule::Model {
+            id: 1,
+            name: "Height rule".to_string(),
+            priority: 1,
+            property: "resolution_height".to_string(),
+            operator: ">=".to_string(),
+            value: "1080".to_string(),
+            score_modifier: 10,
+        };
+
+        let stats_match = json!({"height": 1080, "resolution": "1920x1080"});
+        let stats_mismatch = json!({"height": 720, "resolution": "1280x720"});
+
+        assert!(evaluate_rule(&rule, &stats_match));
+        assert!(!evaluate_rule(&rule, &stats_mismatch));
+    }
+
+    #[test]
+    fn test_built_in_score_prioritizes_reliable_stream_over_quality() {
+        let online_720 = json!({
+            "reachable": true,
+            "status": "online",
+            "height": 720,
+            "fps": "59.94",
+            "bitrate": 0.0,
+            "consecutive_failures": 0
+        });
+        let offline_4k = json!({
+            "reachable": false,
+            "status": "offline",
+            "height": 2160,
+            "fps": "60.00",
+            "bitrate": 25000.0,
+            "consecutive_failures": 1
+        });
+
+        assert!(built_in_stream_score(Some(&online_720)) > built_in_stream_score(Some(&offline_4k)));
+    }
+
+    #[test]
+    fn test_built_in_score_prefers_higher_resolution_and_fps_when_reliable() {
+        let online_720 = json!({
+            "reachable": true,
+            "status": "online",
+            "height": 720,
+            "fps": "29.97",
+            "bitrate": 3500.0,
+            "consecutive_failures": 0
+        });
+        let online_1080 = json!({
+            "reachable": true,
+            "status": "online",
+            "height": 1080,
+            "fps": "59.94",
+            "bitrate": 8000.0,
+            "consecutive_failures": 0
+        });
+
+        assert!(built_in_stream_score(Some(&online_1080)) > built_in_stream_score(Some(&online_720)));
+    }
+
+    #[test]
+    fn test_built_in_score_penalizes_failures_and_bad_video_issues() {
+        let clean = json!({
+            "reachable": true,
+            "status": "online",
+            "height": 1080,
+            "fps": "59.94",
+            "bitrate": 8000.0,
+            "consecutive_failures": 0,
+            "issues": { "frozen": false, "black_screen": false }
+        });
+        let bad = json!({
+            "reachable": true,
+            "status": "online",
+            "height": 1080,
+            "fps": "59.94",
+            "bitrate": 8000.0,
+            "consecutive_failures": 3,
+            "issues": { "frozen": true, "black_screen": false }
+        });
+
+        assert!(built_in_stream_score(Some(&clean)) > built_in_stream_score(Some(&bad)));
     }
 
     #[test]

@@ -45,7 +45,7 @@
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           loading = false;
           if (autoplay) videoElement.play().catch(() => {
-            playing = false;
+            paused = true;
           });
         });
         hls.on(Hls.Events.ERROR, (_, data) => {
