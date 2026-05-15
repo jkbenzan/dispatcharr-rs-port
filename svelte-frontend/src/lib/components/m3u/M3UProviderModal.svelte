@@ -126,11 +126,18 @@
 		return groupSettings[groupId]?.enabled === true;
 	}
 
-	function setVisibleGroups(enabled: boolean) {
+	function setVisibleSelections(enabled: boolean) {
 		// Bulk actions only touch currently visible rows, preserving hidden/filter-excluded selections.
-		for (const group of filteredGroups) {
-			const current = groupSettings[group.id] || { enabled: false, auto_channel_sync: false };
-			groupSettings[group.id] = { ...current, enabled };
+		if (activeTab === 'categories') {
+			for (const group of filteredGroups) {
+				const current = groupSettings[group.id] || { enabled: false, auto_channel_sync: false };
+				groupSettings[group.id] = { ...current, enabled };
+			}
+		} else {
+			const currentList = activeTab === 'movies' ? filteredMovies : filteredSeries;
+			for (const cat of currentList) {
+				categorySettings[cat.id] = { enabled };
+			}
 		}
 	}
 
@@ -156,22 +163,26 @@
 		)
 	);
 
-	const detectedCountryOptions = $derived.by(() => {
-		const countryMap = new Map<string, CountryOption>();
-		for (const group of allChannelGroups) {
-			if (!belongsToCurrentProvider(group) || !matchesSearch(group)) continue;
-			const country = detectCountry(group.name);
-			if (country) countryMap.set(country.code, country);
+	const detectedCategoryOptions = $derived.by(() => {
+		const items = activeTab === 'categories' 
+			? allChannelGroups 
+			: allVodCategories.filter(c => c.category_type === (activeTab === 'movies' ? 'movie' : 'series'));
+			
+		const categoryMap = new Map<string, CategoryClassification>();
+		for (const item of items) {
+			if (!belongsToCurrentProvider(item) || !matchesSearch(item)) continue;
+			const meta = detectCategory(item.name);
+			if (meta.kind !== 'unknown') categoryMap.set(meta.code, meta);
 		}
-		return Array.from(countryMap.values())
+		return Array.from(categoryMap.values())
 			.sort((a, b) => a.name.localeCompare(b.name));
 	});
 
 	const filteredCountryOptions = $derived.by(() => {
-		const selectedCountry = detectedCountryOptions.find((country) => country.code === countryFilter);
-		const filtered = detectedCountryOptions.filter(filteredByCountrySearch);
-		if (selectedCountry && !filtered.some((country) => country.code === selectedCountry.code)) {
-			return [selectedCountry, ...filtered];
+		const selectedCategory = detectedCategoryOptions.find((c) => c.code === countryFilter);
+		const filtered = detectedCategoryOptions.filter(filteredByCountrySearch);
+		if (selectedCategory && !filtered.some((c) => c.code === selectedCategory.code)) {
+			return [selectedCategory, ...filtered];
 		}
 		return filtered;
 	});
@@ -183,23 +194,26 @@
 		return detected / providerGroups.length;
 	});
 
-	const shouldShowCountryFilter = $derived(
-		activeTab === 'categories' && allChannelGroups.some((group) => belongsToCurrentProvider(group))
+	const shouldShowCategoryToolbar = $derived(
+		(activeTab === 'categories' || activeTab === 'movies' || activeTab === 'series') && 
+		(activeTab === 'categories' ? allChannelGroups : allVodCategories).some((item) => belongsToCurrentProvider(item))
 	);
 
 	const filteredMovies = $derived(
 		allVodCategories.filter(c => 
 			c.category_type === 'movie' && 
-			c.m3u_accounts?.some((acc: any) => Number(acc.m3u_account) === Number(provider?.id)) &&
-			c.name.toLowerCase().includes(searchQuery.toLowerCase())
+			belongsToCurrentProvider(c) &&
+			matchesSearch(c) &&
+			matchesCountry(c)
 		)
 	);
 
 	const filteredSeries = $derived(
 		allVodCategories.filter(c => 
 			c.category_type === 'series' && 
-			c.m3u_accounts?.some((acc: any) => Number(acc.m3u_account) === Number(provider?.id)) &&
-			c.name.toLowerCase().includes(searchQuery.toLowerCase())
+			belongsToCurrentProvider(c) &&
+			matchesSearch(c) &&
+			matchesCountry(c)
 		)
 	);
 
@@ -386,6 +400,13 @@
 		categorySettings[catId] = { ...current, enabled: !current.enabled };
 	}
 
+	function handleCategoryKeydown(e: KeyboardEvent, catId: number) {
+		if (e.key === 'Enter' || e.key === ' ') {
+			e.preventDefault();
+			toggleCategory(catId);
+		}
+	}
+
 	async function saveImportSelections() {
 		if (!provider?.id || savingSelections) return;
 
@@ -555,28 +576,26 @@
 							<Search size={16} />
 							<input type="text" placeholder="Search categories..." bind:value={searchQuery} />
 						</div>
-						{#if activeTab === 'categories'}
+						{#if shouldShowCategoryToolbar}
 							<div class="category-toolbar">
-								{#if shouldShowCountryFilter}
-									<div class="category-filter-panel">
-										<div class="filter-field">
-											<label for="countrySearch">Category search</label>
-											<input id="countrySearch" type="search" placeholder="Type to narrow categories..." bind:value={countrySearch} />
-										</div>
-										<div class="filter-field">
-											<label for="countryFilter">Detected category</label>
-											<select id="countryFilter" bind:value={countryFilter} aria-label="Filter categories by detected classification">
-												<option value="">{countryFilterPlaceholder()}</option>
-												{#each filteredCountryOptions as country}
-													<option value={country.code}>{country.flag} {country.name}</option>
-												{/each}
-											</select>
-										</div>
+								<div class="category-filter-panel">
+									<div class="filter-field">
+										<label for="countrySearch">Category search</label>
+										<input id="countrySearch" type="search" placeholder="Type to narrow categories..." bind:value={countrySearch} />
 									</div>
-								{/if}
+									<div class="filter-field">
+										<label for="countryFilter">Detected category</label>
+										<select id="countryFilter" bind:value={countryFilter} aria-label="Filter categories by detected classification">
+											<option value="">{countryFilterPlaceholder()}</option>
+											{#each filteredCountryOptions as category}
+												<option value={category.code}>{category.flag} {category.name}</option>
+											{/each}
+										</select>
+									</div>
+								</div>
 								<div class="bulk-actions">
-									<button type="button" onclick={() => setVisibleGroups(true)}>Select visible</button>
-									<button type="button" onclick={() => setVisibleGroups(false)}>Deselect visible</button>
+									<button type="button" onclick={() => setVisibleSelections(true)}>Select visible</button>
+									<button type="button" onclick={() => setVisibleSelections(false)}>Deselect visible</button>
 								</div>
 							</div>
 						{/if}
@@ -634,44 +653,80 @@
 							{/if}
 						{:else if activeTab === 'movies'}
 							{#each filteredMovies as cat}
-								<div class="setting-item">
+								{@const meta = detectCategory(cat.name)}
+								<div 
+									class="setting-item selectable"
+									class:selected={categorySettings[cat.id]?.enabled}
+									onclick={() => toggleCategory(cat.id)}
+									onkeydown={(e) => handleCategoryKeydown(e, cat.id)}
+									role="button"
+									tabindex="0"
+									aria-pressed={categorySettings[cat.id]?.enabled}
+								>
 									<div class="setting-info">
-										<span class="setting-name">{cat.name}</span>
+										<span class="setting-name">
+											{#if meta.kind !== 'unknown'}
+												<span class="flag" title={meta.name}>{meta.flag}</span>
+											{/if}
+											{cat.name}
+										</span>
 										<span class="setting-sub">
 											{(cat.m3u_accounts?.find((a: ProviderAccountSummary) => Number(a.m3u_account) === Number(provider?.id))?.stream_count || 0)} streams found
+											{#if meta.kind !== 'unknown'}
+												- {meta.name}
+											{/if}
 										</span>
 									</div>
 									<div class="setting-controls">
-										<button 
-											class="toggle-btn" 
-											class:active={categorySettings[cat.id]?.enabled}
-											onclick={() => toggleCategory(cat.id)}
-										>
-											{categorySettings[cat.id]?.enabled ? 'Enabled' : 'Disabled'}
-										</button>
+										<span class="selection-pill" class:active={categorySettings[cat.id]?.enabled}>
+											{categorySettings[cat.id]?.enabled ? 'Selected' : 'Not selected'}
+										</span>
 									</div>
 								</div>
 							{/each}
+							{#if filteredMovies.length === 0}
+								<div class="empty-settings">
+									No movie categories match the current filters.
+								</div>
+							{/if}
 						{:else if activeTab === 'series'}
 							{#each filteredSeries as cat}
-								<div class="setting-item">
+								{@const meta = detectCategory(cat.name)}
+								<div 
+									class="setting-item selectable"
+									class:selected={categorySettings[cat.id]?.enabled}
+									onclick={() => toggleCategory(cat.id)}
+									onkeydown={(e) => handleCategoryKeydown(e, cat.id)}
+									role="button"
+									tabindex="0"
+									aria-pressed={categorySettings[cat.id]?.enabled}
+								>
 									<div class="setting-info">
-										<span class="setting-name">{cat.name}</span>
+										<span class="setting-name">
+											{#if meta.kind !== 'unknown'}
+												<span class="flag" title={meta.name}>{meta.flag}</span>
+											{/if}
+											{cat.name}
+										</span>
 										<span class="setting-sub">
 											{(cat.m3u_accounts?.find((a: ProviderAccountSummary) => Number(a.m3u_account) === Number(provider?.id))?.stream_count || 0)} streams found
+											{#if meta.kind !== 'unknown'}
+												- {meta.name}
+											{/if}
 										</span>
 									</div>
 									<div class="setting-controls">
-										<button 
-											class="toggle-btn" 
-											class:active={categorySettings[cat.id]?.enabled}
-											onclick={() => toggleCategory(cat.id)}
-										>
-											{categorySettings[cat.id]?.enabled ? 'Enabled' : 'Disabled'}
-										</button>
+										<span class="selection-pill" class:active={categorySettings[cat.id]?.enabled}>
+											{categorySettings[cat.id]?.enabled ? 'Selected' : 'Not selected'}
+										</span>
 									</div>
 								</div>
 							{/each}
+							{#if filteredSeries.length === 0}
+								<div class="empty-settings">
+									No series categories match the current filters.
+								</div>
+							{/if}
 						{/if}
 					</div>
 				</div>

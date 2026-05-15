@@ -324,7 +324,11 @@ const CONTENT_TABLE: ContentEntry[] = [
 		name: 'Movies',
 		kind: 'movies',
 		flag: '🎬',
-		keywords: ['movies', 'films', 'cinema', 'movie channel', 'film channel', 'vod', 'hbo', 'starz', 'showtime', 'cinemax'],
+		keywords: [
+			'movies', 'films', 'cinema', 'movie channel', 'film channel', 'vod',
+			'hbo', 'starz', 'showtime', 'cinemax', 'netflix', 'disney', 'hulu',
+			'paramount', 'peacock', 'apple tv', 'apple+', 'prime video', 'amazon prime'
+		],
 	},
 	{
 		code: 'KIDS',
