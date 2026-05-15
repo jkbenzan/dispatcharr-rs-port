@@ -16,6 +16,17 @@ svelte-frontend/.svelte-kit/
 .git/
 .github/
 
+# Large local directories not needed in build
+data/
+Dispatcharr/
+enhancedchannelmanager-main/
+channelidentifiarr/
+Antigravity/
+scratch/
+
+# Temp scripts
+check_sizes.ps1
+*.ps1
 
 # Files
 channels.json

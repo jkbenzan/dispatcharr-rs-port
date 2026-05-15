@@ -1,6 +1,6 @@
 <script>
     import { createEventDispatcher, onMount } from 'svelte';
-    import { X, Play, Clock, Star, Tv, Film, Server, ChevronDown, Calendar, Youtube, Layers } from 'lucide-svelte';
+    import { X, Play, Clock, Star, Tv, Film, Server, ChevronDown, Calendar, ExternalLink, Layers } from 'lucide-svelte';
 
     export let show = false;
     export let vod = null;
@@ -155,7 +155,7 @@
                         
                         {#if customProps.trailer_url || customProps.youtube_trailer}
                             <a href={customProps.trailer_url || `https://youtube.com/watch?v=${customProps.youtube_trailer}`} target="_blank" class="btn-secondary trailer-btn">
-                                <Youtube size={20} />
+                                <ExternalLink size={20} />
                                 <span>Trailer</span>
                             </a>
                         {/if}
