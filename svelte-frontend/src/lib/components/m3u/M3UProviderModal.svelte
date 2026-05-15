@@ -359,10 +359,11 @@
 			}
 
 			// Save basic info
+			const isNewProvider = !activeProvider?.id;
 			const result = await onSave(payload, activeProvider?.id);
 
 			// If it was a new provider, we need to wait for the initial sync to discover groups
-			if (!activeProvider?.id && result?.id) {
+			if (isNewProvider && result?.id) {
 				providerProp = result; // Update the bound prop to sync with parent
 				activeProvider = result; // Update local state for subsequent tabs
 				syncing = true;
