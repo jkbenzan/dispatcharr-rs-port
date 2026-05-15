@@ -362,6 +362,7 @@
 		} else {
 			result = await api.addM3UAccount(payload);
 		}
+		selectedM3uProvider = result;
 		await loadM3uProviders();
 		return result;
 	}
@@ -750,7 +751,7 @@
 
 <M3UProviderModal
 	bind:show={showM3uModal}
-	provider={selectedM3uProvider}
+	bind:provider={selectedM3uProvider}
 	onSave={handleSaveM3u}
 	onRefreshQueued={() => {
 		loadM3uProviders({ silent: true });

@@ -13,7 +13,7 @@
 
 	let {
 		show = $bindable(false),
-		provider: providerProp = null,
+		provider: providerProp = $bindable(null),
 		onSave = () => {},
 		onRefreshQueued = () => {}
 	} = $props();
@@ -363,6 +363,7 @@
 
 			// If it was a new provider, we need to wait for the initial sync to discover groups
 			if (!activeProvider?.id && result?.id) {
+				providerProp = result; // Update the bound prop to sync with parent
 				activeProvider = result; // Update local state for subsequent tabs
 				syncing = true;
 				syncStatus = 'Synchronizing with provider...';
