@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { Settings, Server, Globe, HardDrive, Shield, Users, Database, MonitorPlay, Save, CheckCircle2, Activity } from 'lucide-svelte';
+	import { Settings, Server, Globe, HardDrive, Shield, Users, Database, MonitorPlay, Save, CheckCircle2, Activity, Film } from 'lucide-svelte';
 
 	import { api } from '$lib/api';
 	import { toast } from '$lib/toast.svelte';
@@ -21,6 +21,7 @@
 		{ id: 'network_access', label: 'Network Access', icon: Globe },
 		{ id: 'user_limit_settings', label: 'User Limits', icon: Users },
 		{ id: 'channel_db_settings', label: 'Channel DB', icon: Database },
+		{ id: 'tmdb_settings', label: 'VOD & TMDB', icon: Film },
 	];
 
 	let formData: Record<string, any> = $state({});
@@ -433,6 +434,28 @@
 							<div class="form-group full-width mt">
 								<label for="channel-db-download-url">Download URL</label>
 								<input id="channel-db-download-url" type="text" bind:value={formData['channel_db_settings'].download_url} />
+							</div>
+						</div>
+
+					<!-- TMDB SETTINGS -->
+					{:else if activeTab === 'tmdb_settings' && formData['tmdb_settings']}
+						<div class="form-header">
+							<h2>VOD & TMDB Settings</h2>
+							<p>Configure The Movie Database (TMDB) integration for VOD metadata and posters.</p>
+						</div>
+						<div class="form-grid">
+							<div class="form-group switch-group full-width">
+								<label>
+									<span>Enable TMDB Enrichment</span>
+									<input type="checkbox" bind:checked={formData['tmdb_settings'].enabled} />
+									<div class="switch"></div>
+								</label>
+								<span class="help-text">Automatically fetch posters, backdrops, and metadata for VOD content.</span>
+							</div>
+							<div class="form-group full-width mt">
+								<label for="tmdb-api-key">TMDB API Key (v3)</label>
+								<input id="tmdb-api-key" type="password" bind:value={formData['tmdb_settings'].api_key} placeholder="Enter your TMDB API Key" />
+								<span class="help-text">Obtain a free API key from <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener noreferrer">themoviedb.org</a>.</span>
 							</div>
 						</div>
 					{/if}

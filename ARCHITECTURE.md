@@ -60,6 +60,14 @@ Dispatcharr is a high-performance M3U/XC/EPG proxy and management system built w
     - A background worker syncs external logo repositories into `data/logo-libraries` on startup and every 24 hours.
     - Default repositories are `tv-logo/tv-logos` and `iptv-org/logos`; local logo-library search is exposed through `/api/channels/logos/search-libraries/`.
 
+- **VOD Metadata Enrichment**:
+    - **Background Worker**: `background_vod_enrich.rs` runs a continuous loop (respecting rate limits) to fetch metadata and download posters from TMDB for Movies and Series.
+    - **Asset Storage**: Posters are downloaded to `VOD_IMAGE_DIR` (default: `data/vod_images/`) and served via a dedicated Axum static route.
+    - **Progress Tracking**: `GET /api/vod/enrich_progress/` provides real-time counts of remaining items to be processed.
+    - **Rate Limiting**: The worker includes static sleep intervals (2s between items, 30s when idle) to ensure compliance with TMDB API guidelines.
+    - **TMDB API Key**: Configured via the `tmdb_settings` core setting in the global settings UI.
+    - **Graceful Fallback**: The UI prioritizes locally cached posters but falls back to TMDB CDN URLs or generic placeholders if local assets are missing or the worker is disabled.
+
 ## Frontend (Svelte)
 - **State Management**: Svelte 5 Runes ($state, $derived, $effect).
 - **M3U Provider Management**:

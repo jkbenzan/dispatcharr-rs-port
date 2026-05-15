@@ -656,4 +656,52 @@
     color: var(--text-dim);
     font-size: 13px;
   }
+
+  /* Enrichment Banner */
+  .enrichment-banner {
+    margin: 0 24px 16px;
+    background: rgba(59, 130, 246, 0.1);
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    animation: slideDown 0.3s ease-out;
+  }
+
+  .enrichment-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: #60a5fa;
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  .pulse-dot {
+    width: 8px;
+    height: 8px;
+    background: #60a5fa;
+    border-radius: 50%;
+    position: relative;
+    
+    &::after {
+      content: '';
+      position: absolute;
+      inset: -4px;
+      border-radius: 50%;
+      background: #60a5fa;
+      opacity: 0.4;
+      animation: pulse 2s infinite;
+    }
+  }
+
+  @keyframes pulse {
+    0% { transform: scale(1); opacity: 0.4; }
+    70% { transform: scale(2.5); opacity: 0; }
+    100% { transform: scale(1); opacity: 0; }
+  }
+
+  @keyframes slideDown {
+    from { transform: translateY(-10px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
 </style>

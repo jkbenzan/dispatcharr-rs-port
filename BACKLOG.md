@@ -62,8 +62,8 @@ Items queued for future implementation and audit phases.
   Complete the remaining UI skeletons for DVR scheduling and the Plugin management interface.
 - [x] **EPG Timeline Accuracy**
   Audit vertical scrolling synchronization and the "Jump to Now" behavior in the TV Guide.
-- [ ] **TMDB VOD Integration**
-  Verify metadata retrieval for VOD posters and descriptions using TMDB IDs.
+- [x] **TMDB VOD Integration**
+  Implemented a non-blocking background worker for metadata enrichment and poster caching, with real-time progress tracking in the VOD dashboard.
 - [ ] **Multi-Browser Playback Stress Test**
   Conduct a final stress test of the Hybrid Video Player across Safari, Chrome, and Firefox to resolve any remaining "Format Unsupported" issues.
 - [x] **HLS Streaming Endpoint**
