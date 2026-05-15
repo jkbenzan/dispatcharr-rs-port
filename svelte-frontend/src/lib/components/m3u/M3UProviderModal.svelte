@@ -125,7 +125,7 @@
 
 	function countryFilterPlaceholder() {
 		if (countryDetectionCoverage < 0.35) return 'No strong classification pattern detected';
-		if (detectedCountryOptions.length === 0) return 'No detected categories match search';
+		if (filteredCountryOptions.length === 0) return 'No detected categories match search';
 		return 'All detected categories';
 	}
 
