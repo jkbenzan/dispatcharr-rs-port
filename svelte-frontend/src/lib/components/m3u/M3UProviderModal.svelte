@@ -13,10 +13,17 @@
 
 	let {
 		show = $bindable(false),
-		provider = null,
+		provider: providerProp = null,
 		onSave = () => {},
 		onRefreshQueued = () => {}
 	} = $props();
+
+	let activeProvider = $state(providerProp);
+
+	// Sync internal provider state when prop changes
+	$effect(() => {
+		activeProvider = providerProp;
+	});
 
 	let loading = $state(false);
 	let syncing = $state(false);
@@ -87,7 +94,7 @@
 
 	function getAccountSummary(item: CategoryItem) {
 		return item.m3u_accounts?.find((acc: ProviderAccountSummary) =>
-			Number(acc.id ?? acc.m3u_account) === Number(provider?.id)
+			Number(acc.id ?? acc.m3u_account) === Number(activeProvider?.id)
 		);
 	}
 
@@ -97,7 +104,7 @@
 
 	function belongsToCurrentProvider(item: CategoryItem) {
 		return item.m3u_accounts?.some((acc: ProviderAccountSummary) =>
-			Number(acc.id ?? acc.m3u_account) === Number(provider?.id)
+			Number(acc.id ?? acc.m3u_account) === Number(activeProvider?.id)
 		);
 	}
 
@@ -228,25 +235,25 @@
 	// Effect to populate form when provider changes or modal opens
 	$effect(() => {
 		if (show) {
-			if (provider) {
-				name = provider.name || '';
-				accountType = normalizeAccountType(provider.account_type) || 'm3u';
-				m3uUrl = provider.server_url || '';
-				serverUrl = provider.server_url || '';
+			if (activeProvider) {
+				name = activeProvider.name || '';
+				accountType = normalizeAccountType(activeProvider.account_type) || 'm3u';
+				m3uUrl = activeProvider.server_url || '';
+				serverUrl = activeProvider.server_url || '';
 				username = '';
 				password = '';
-				maxStreams = provider.max_streams || 1;
-				refreshInterval = provider.refresh_interval || 24;
-				staleStreamDays = provider.stale_stream_days || 7;
-				enableVod = provider.enable_vod === true;
+				maxStreams = activeProvider.max_streams || 1;
+				refreshInterval = activeProvider.refresh_interval || 24;
+				staleStreamDays = activeProvider.stale_stream_days || 7;
+				enableVod = activeProvider.enable_vod === true;
 				countrySearch = '';
 				countryFilter = '';
 				searchQuery = '';
 
 				// Initialize mappings from provider data
 				const gSettings: Record<number, any> = {};
-				if (provider.channel_groups) {
-					provider.channel_groups.forEach((g: any) => {
+				if (activeProvider.channel_groups) {
+					activeProvider.channel_groups.forEach((g: any) => {
 						gSettings[g.channel_group] = {
 							enabled: g.enabled,
 							auto_channel_sync: g.auto_channel_sync
@@ -256,14 +263,14 @@
 				groupSettings = gSettings;
 
 				const cSettings: Record<number, any> = {};
-				if (provider.vod_categories) {
-					provider.vod_categories.forEach((c: any) => {
+				if (activeProvider.vod_categories) {
+					activeProvider.vod_categories.forEach((c: any) => {
 						cSettings[c.id] = { enabled: c.enabled };
 					});
 				}
 				categorySettings = cSettings;
 			} else {
-				// Reset form
+				// Reset form for NEW provider
 				name = '';
 				accountType = '';
 				m3uUrl = '';
@@ -279,7 +286,11 @@
 				countrySearch = '';
 				countryFilter = '';
 				searchQuery = '';
-				activeTab = 'general';
+				
+				// Only reset tab to general if we are actually starting a new creation
+				if (activeTab !== 'general') {
+					activeTab = 'general';
+				}
 			}
 			error = '';
 			loadSystemData();
@@ -324,7 +335,7 @@
 			return;
 		}
 
-		if (isXcAccountType(accountType) && !provider?.id && (!username || !password)) {
+		if (isXcAccountType(accountType) && !activeProvider?.id && (!username || !password)) {
 			error = 'Username and password are required for new XTREAM Codes providers';
 			loading = false;
 			return;
@@ -348,11 +359,11 @@
 			}
 
 			// Save basic info
-			const result = await onSave(payload, provider?.id);
+			const result = await onSave(payload, activeProvider?.id);
 
 			// If it was a new provider, we need to wait for the initial sync to discover groups
-			if (!provider?.id && result?.id) {
-				provider = result; // Update local reference for subsequent tabs
+			if (!activeProvider?.id && result?.id) {
+				activeProvider = result; // Update local state for subsequent tabs
 				syncing = true;
 				syncStatus = 'Synchronizing with provider...';
 				
@@ -416,14 +427,14 @@
 	}
 
 	async function saveImportSelections() {
-		if (!provider?.id || savingSelections) return;
+		if (!activeProvider?.id || savingSelections) return;
 
 		error = '';
 		savingSelections = true;
 		try {
 			// Mapping changes affect local stream inventory, so persist them before queueing a refresh.
-			await api.updateM3UGroupSettings(provider.id, buildGroupSettingsPayload());
-			await api.refreshM3UAccount(provider.id);
+			await api.updateM3UGroupSettings(activeProvider.id, buildGroupSettingsPayload());
+			await api.refreshM3UAccount(activeProvider.id);
 			onRefreshQueued();
 			await loadSystemData();
 			toast.success('Import selections saved. Provider refresh queued.');
@@ -436,7 +447,7 @@
 	}
 </script>
 
-<Modal bind:show title={provider ? `Edit Provider: ${name}` : 'Add Provider'} width="800px">
+<Modal bind:show title={activeProvider ? `Edit Provider: ${name}` : 'Add Provider'} width="800px">
 	<div class="modal-layout">
 		<aside class="modal-sidebar">
 			<button 
@@ -453,7 +464,7 @@
 				class="sidebar-item" 
 				class:active={activeTab === 'categories'} 
 				onclick={() => activeTab = 'categories'}
-				disabled={!provider}
+				disabled={!activeProvider}
 			>
 				<Tv size={18} />
 				<span>Channel Categories</span>
@@ -463,7 +474,7 @@
 				class="sidebar-item" 
 				class:active={activeTab === 'movies'} 
 				onclick={() => activeTab = 'movies'}
-				disabled={!provider}
+				disabled={!activeProvider}
 			>
 				<Film size={18} />
 				<span>VOD Movies</span>
@@ -473,13 +484,13 @@
 				class="sidebar-item" 
 				class:active={activeTab === 'series'} 
 				onclick={() => activeTab = 'series'}
-				disabled={!provider}
+				disabled={!activeProvider}
 			>
 				<Clapperboard size={18} />
 				<span>VOD Series</span>
 			</button>
 
-			{#if !provider}
+			{#if !activeProvider}
 				<div class="sidebar-hint">
 					<AlertCircle size={14} />
 					<p>Groups can be configured after initial sync.</p>
@@ -536,10 +547,10 @@
 									type="text"
 									id="username"
 									bind:value={username}
-									required={!provider}
-									placeholder={provider?.has_username ? 'Saved - leave blank to keep' : 'Username'}
+									required={!activeProvider}
+									placeholder={activeProvider?.has_username ? 'Saved - leave blank to keep' : 'Username'}
 								/>
-								{#if provider?.has_username}
+								{#if activeProvider?.has_username}
 									<span class="helper-text">A username is saved. Enter a new one only to replace it.</span>
 								{/if}
 							</div>
@@ -549,11 +560,11 @@
 									type="password"
 									id="password"
 									bind:value={password}
-									required={!provider}
-									placeholder={provider?.has_password ? 'Saved - leave blank to keep' : 'Password'}
+									required={!activeProvider}
+									placeholder={activeProvider?.has_password ? 'Saved - leave blank to keep' : 'Password'}
 									autocomplete="new-password"
 								/>
-								{#if provider?.has_password}
+								{#if activeProvider?.has_password}
 									<span class="helper-text">A password is saved. Enter a new one only to replace it.</span>
 								{/if}
 							</div>
@@ -683,7 +694,7 @@
 											{cat.name}
 										</span>
 										<span class="setting-sub">
-											{(cat.m3u_accounts?.find((a: ProviderAccountSummary) => Number(a.m3u_account) === Number(provider?.id))?.stream_count || 0)} streams found
+											{(cat.m3u_accounts?.find((a: ProviderAccountSummary) => Number(a.m3u_account) === Number(activeProvider?.id))?.stream_count || 0)} streams found
 											{#if meta.kind !== 'unknown'}
 												- {meta.name}
 											{/if}
@@ -721,7 +732,7 @@
 											{cat.name}
 										</span>
 										<span class="setting-sub">
-											{(cat.m3u_accounts?.find((a: ProviderAccountSummary) => Number(a.m3u_account) === Number(provider?.id))?.stream_count || 0)} streams found
+											{(cat.m3u_accounts?.find((a: ProviderAccountSummary) => Number(a.m3u_account) === Number(activeProvider?.id))?.stream_count || 0)} streams found
 											{#if meta.kind !== 'unknown'}
 												- {meta.name}
 											{/if}
@@ -760,7 +771,7 @@
 							<span>{loading ? 'Saving...' : syncing ? 'Syncing...' : 'Save Provider'}</span>
 						</button>
 					{:else}
-						<button type="button" class="btn-submit" onclick={saveImportSelections} disabled={savingSelections || syncing || !provider?.id}>
+						<button type="button" class="btn-submit" onclick={saveImportSelections} disabled={savingSelections || syncing || !activeProvider?.id}>
 							<Save size={18} />
 							<span>{savingSelections ? 'Saving...' : configSaveLabel()}</span>
 						</button>
