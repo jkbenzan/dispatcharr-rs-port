@@ -163,6 +163,24 @@
 		)
 	);
 
+	const filteredMovies = $derived(
+		allVodCategories.filter(c => 
+			c.category_type === 'movie' &&
+			belongsToCurrentProvider(c) &&
+			matchesSearch(c) &&
+			matchesCountry(c)
+		)
+	);
+
+	const filteredSeries = $derived(
+		allVodCategories.filter(c => 
+			c.category_type === 'series' &&
+			belongsToCurrentProvider(c) &&
+			matchesSearch(c) &&
+			matchesCountry(c)
+		)
+	);
+
 	const detectedCategoryOptions = $derived.by(() => {
 		const items = activeTab === 'categories' 
 			? allChannelGroups 
@@ -199,23 +217,13 @@
 		(activeTab === 'categories' ? allChannelGroups : allVodCategories).some((item) => belongsToCurrentProvider(item))
 	);
 
-	const filteredMovies = $derived(
-		allVodCategories.filter(c => 
-			c.category_type === 'movie' && 
-			belongsToCurrentProvider(c) &&
-			matchesSearch(c) &&
-			matchesCountry(c)
-		)
-	);
-
-	const filteredSeries = $derived(
-		allVodCategories.filter(c => 
-			c.category_type === 'series' && 
-			belongsToCurrentProvider(c) &&
-			matchesSearch(c) &&
-			matchesCountry(c)
-		)
-	);
+	// Clear search when switching tabs to avoid confusion
+	$effect(() => {
+		if (activeTab) {
+			searchQuery = '';
+			countryFilter = '';
+		}
+	});
 
 	// Effect to populate form when provider changes or modal opens
 	$effect(() => {
@@ -432,6 +440,7 @@
 	<div class="modal-layout">
 		<aside class="modal-sidebar">
 			<button 
+				type="button"
 				class="sidebar-item" 
 				class:active={activeTab === 'general'} 
 				onclick={() => activeTab = 'general'}
@@ -440,6 +449,7 @@
 				<span>General</span>
 			</button>
 			<button 
+				type="button"
 				class="sidebar-item" 
 				class:active={activeTab === 'categories'} 
 				onclick={() => activeTab = 'categories'}
@@ -449,6 +459,7 @@
 				<span>Channel Categories</span>
 			</button>
 			<button 
+				type="button"
 				class="sidebar-item" 
 				class:active={activeTab === 'movies'} 
 				onclick={() => activeTab = 'movies'}
@@ -458,6 +469,7 @@
 				<span>VOD Movies</span>
 			</button>
 			<button 
+				type="button"
 				class="sidebar-item" 
 				class:active={activeTab === 'series'} 
 				onclick={() => activeTab = 'series'}
@@ -1221,6 +1233,7 @@
 				&:hover:not(:disabled) {
 					background: var(--accent-dim);
 					border-color: var(--accent-dim);
+					color: white;
 				}
 			}
 		}

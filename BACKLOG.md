@@ -65,7 +65,7 @@ Items queued for future implementation and audit phases.
 - [x] **TMDB VOD Integration**
   Implemented a non-blocking background worker for metadata enrichment and poster caching, with real-time progress tracking in the VOD dashboard.
 - [x] **VOD Category Selection UI**
-  Added granular category selection for VOD Movies and Series in the M3U provider modal, including advanced metadata detection for country and streaming services (Netflix, Disney+, etc.), bulk selection actions, and unified filtering.
+  Restored full functionality to the M3U provider modal VOD tabs. Implemented `$derived` reactivity for real-time filtering, search-reset effects on tab switch, and verified backend parity for `id` and `enabled` mapping fields. Includes advanced metadata detection for country and streaming services (Netflix, Disney+, etc.), bulk selection actions, and unified filtering.
 - [ ] **Multi-Browser Playback Stress Test**
   Conduct a final stress test of the Hybrid Video Player across Safari, Chrome, and Firefox to resolve any remaining "Format Unsupported" issues.
 - [x] **HLS Streaming Endpoint**

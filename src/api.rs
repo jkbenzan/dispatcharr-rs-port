@@ -1484,6 +1484,7 @@ pub async fn get_channel_groups(State(state): State<Arc<AppState>>) -> Json<Valu
             .push(json!({
                 "id": m.m3u_account_id,
                 "name": name,
+                "enabled": m.enabled,
                 "stream_count": m.custom_properties.as_ref()
                     .and_then(|cp| cp.get("stream_count"))
                     .and_then(|v| v.as_i64())

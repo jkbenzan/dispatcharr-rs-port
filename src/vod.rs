@@ -147,6 +147,7 @@ pub async fn get_vod_categories(
         let entry = rel_map.entry(r.category_id).or_default();
         entry.push(json!({
             "m3u_account": r.m3u_account_id,
+            "id": r.m3u_account_id,
             "enabled": r.enabled,
             "stream_count": r.custom_properties.as_ref()
                 .and_then(|cp| cp.get("stream_count"))
