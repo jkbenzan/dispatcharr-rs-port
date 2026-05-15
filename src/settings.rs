@@ -307,6 +307,14 @@ pub async fn initialize_core_settings(db: &sea_orm::DatabaseConnection) {
                 "auto_check": false
             }),
         ),
+        (
+            "tmdb_settings",
+            "TMDB Settings",
+            serde_json::json!({
+                "api_key": "",
+                "enabled": true
+            }),
+        ),
     ];
 
     tracing::info!("🔍 Checking core settings defaults...");

@@ -483,3 +483,27 @@ pub async fn get_vod_episodes(
         "results": results
     })))
 }
+
+pub async fn get_enrich_progress(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<Value>, StatusCode> {
+    let movies_remaining = vod_movie::Entity::find()
+        .filter(vod_movie::Column::TmdbId.is_null())
+        .count(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let series_remaining = vod_series::Entity::find()
+        .filter(vod_series::Column::TmdbId.is_null())
+        .count(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let total_remaining = movies_remaining + series_remaining;
+
+    Ok(Json(json!({
+        "movies_remaining": movies_remaining,
+        "series_remaining": series_remaining,
+        "total_remaining": total_remaining
+    })))
+}

@@ -15,6 +15,8 @@ mod accounts;
 mod api;
 mod auth;
 mod background;
+pub mod tmdb;
+mod background_vod_enrich;
 mod channel_db;
 mod channel_match;
 mod channel_db_api;
@@ -293,6 +295,8 @@ async fn main() {
     // SPA Routing: Serve index.html if the user hits a route like /channels directly
     let spa_service = ServeDir::new("dist").fallback(ServeFile::new("dist/index.html"));
     let logos_service = ServeDir::new("data/logos");
+    let vod_image_dir = std::env::var("VOD_IMAGE_DIR").unwrap_or_else(|_| "data/vod_images/".to_string());
+    let vod_images_service = ServeDir::new(&vod_image_dir);
 
     let accounts_routes = Router::new()
         .route(
@@ -338,7 +342,9 @@ async fn main() {
         .route("/movies/", get(vod::get_vod_movies))
         .route("/series/", get(vod::get_vod_series))
         .route("/series/:series_id/episodes", get(vod::get_vod_episodes))
-        .route("/series/:series_id/episodes/", get(vod::get_vod_episodes));
+        .route("/series/:series_id/episodes/", get(vod::get_vod_episodes))
+        .route("/enrich_progress/", get(vod::get_enrich_progress))
+        .route("/enrich_progress", get(vod::get_enrich_progress));
 
     let app = Router::new()
         // --- AUTH ---
@@ -654,6 +660,7 @@ async fn main() {
         .nest("/api/accounts", accounts_routes)
         .nest("/api/vod", vod_routes)
         .nest_service("/logos", logos_service)
+        .nest_service("/api/vod/images", vod_images_service)
         .fallback_service(spa_service)
         .layer(CorsLayer::permissive())
         .layer(tower_http::trace::TraceLayer::new_for_http())
@@ -932,6 +939,12 @@ async fn main() {
             }
             tokio::time::sleep(tokio::time::Duration::from_secs(6 * 3600)).await;
         }
+    });
+
+    // Spawn VOD Metadata Enrichment worker
+    let state_vod_enrich = state.clone();
+    tokio::spawn(async move {
+        crate::background_vod_enrich::run_vod_enrichment_worker(state_vod_enrich).await;
     });
 
     // Spawn a secondary listener on port 8001 specifically for WebSockets

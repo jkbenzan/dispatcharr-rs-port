@@ -112,10 +112,31 @@
     }, { rootMargin: '200px' });
     
     if (sentinel) observer.observe(sentinel);
+
+    fetchEnrichProgress();
+    enrichInterval = setInterval(fetchEnrichProgress, 5000);
   });
+
+  let enrichStats = { movies_remaining: 0, series_remaining: 0, total_remaining: 0 };
+  let enrichInterval: any;
+
+  async function fetchEnrichProgress() {
+      try {
+          const res = await fetch('/api/vod/enrich_progress/');
+          if (res.ok) {
+              enrichStats = await res.json();
+              if (enrichStats.total_remaining === 0 && enrichInterval) {
+                  clearInterval(enrichInterval);
+              }
+          }
+      } catch (err) {
+          console.error("Failed to fetch enrich progress", err);
+      }
+  }
 
   onDestroy(() => {
     if (observer) observer.disconnect();
+    if (enrichInterval) clearInterval(enrichInterval);
   });
 
   function normalizePosterUrl(value: any) {
@@ -128,6 +149,16 @@
 
   // Helper to get a real poster URL from provider or metadata fields.
   function getImageUrl(item: any) {
+    if (item.custom_properties) {
+      let props;
+      try {
+        props = typeof item.custom_properties === 'string' ? JSON.parse(item.custom_properties) : item.custom_properties;
+        if (props.local_poster) {
+          return `/api/vod/images/${props.local_poster}`;
+        }
+      } catch (e) {}
+    }
+
     const directPoster = normalizePosterUrl(item.poster_url || item.poster_path || item.cover || item.stream_icon);
     if (directPoster) return directPoster;
 
@@ -180,6 +211,16 @@
 	</header>
 
 	<main class="content-area">
+    <!-- Enrichment Progress -->
+    {#if enrichStats.total_remaining > 0}
+      <div class="enrichment-banner">
+        <div class="enrichment-info">
+          <span class="pulse-dot"></span>
+          <span>Background Enrichment: {enrichStats.total_remaining} items remaining (Downloading Posters & Metadata)</span>
+        </div>
+      </div>
+    {/if}
+
     <!-- Tabs -->
     <div class="tabs-container">
       <button class="tab" class:active={activeTab === 'movies'} onclick={() => handleTabChange('movies')}>

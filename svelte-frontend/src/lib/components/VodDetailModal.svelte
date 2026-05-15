@@ -19,7 +19,7 @@
         setTimeout(() => isVisible = true, 50);
         if (vod) {
             try {
-                customProps = vod.custom_properties ? JSON.parse(vod.custom_properties) : {};
+                customProps = typeof vod.custom_properties === 'string' ? JSON.parse(vod.custom_properties) : (vod.custom_properties || {});
             } catch (e) {
                 customProps = {};
             }
@@ -101,12 +101,14 @@
         </button>
 
         <!-- Header / Hero Section -->
-        <div class="hero-section" style="background-image: url('{vod?.poster_url || ''}');">
+        <div class="hero-section" style="background-image: url('{customProps.local_poster ? `/api/vod/images/${customProps.local_poster}` : (vod?.poster_url || '')}');">
             <div class="hero-overlay"></div>
             
             <div class="hero-content">
                 <div class="poster-container">
-                    {#if vod?.poster_url}
+                    {#if customProps.local_poster}
+                        <img src={`/api/vod/images/${customProps.local_poster}`} alt={vod?.name} class="poster" />
+                    {:else if vod?.poster_url}
                         <img src={vod.poster_url} alt={vod.name} class="poster" />
                     {:else}
                         <div class="poster-placeholder">
